@@ -108,7 +108,13 @@ def test_locked_dependencies_have_reviewed_commercial_licenses():
     assert violations == []
     notices = (ROOT / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
     assert "uv run pip-licenses --format=markdown --with-urls --with-license-file" in notices
+    assert not re.search(r"^\|\s*research-workspace\s*\|", notices, re.IGNORECASE | re.MULTILINE)
+    assert str(ROOT).casefold() not in notices.casefold()
+    assert ".venv" not in notices.casefold()
     notices_casefolded = notices.casefold()
     for name, package in locked_distributions.items():
         assert name in canonicalize_name(notices_casefolded)
         assert package["version"] in notices
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "Only Overview is backed by the application query and seeded local data." in readme
+    assert "Papers, Ideas, and Submissions are foundation placeholders." in readme

@@ -71,8 +71,8 @@ supplementary table in `THIRD_PARTY_NOTICES.md`.
 
 - Seven reachable desktop destinations: Overview, Papers, Ideas, Submissions,
   Conferences, Grants, and Settings.
-- Overview values loaded through the application query layer.
-- Papers, Ideas, and Submissions foundation views backed by seeded local data.
+- Only Overview is backed by the application query and seeded local data.
+- Papers, Ideas, and Submissions are foundation placeholders.
 - Conference and Grant pages shown as noninteractive coming-soon views.
 - Workspace initialization, repeatable migrations, idempotent seed data, and a
   restart-safe data-directory preference.
