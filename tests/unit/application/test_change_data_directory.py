@@ -81,3 +81,44 @@ def test_first_run_recovery_choice_becomes_active_immediately(tmp_path):
     assert result.ok is True
     assert result.value == _config(selected)
     assert store.save_calls == [_config(selected)]
+
+
+def test_probe_cleanup_failure_does_not_replace_validation_error(tmp_path, monkeypatch):
+    selected = tmp_path / "selected"
+
+    def fail_validation(_):
+        raise OSError("intended write failure")
+
+    def fail_cleanup(self, *, missing_ok=False):
+        raise OSError("cleanup failure")
+
+    monkeypatch.setattr(
+        "research_workspace.application.services.change_data_directory.os.fsync",
+        fail_validation,
+    )
+    monkeypatch.setattr(Path, "unlink", fail_cleanup)
+
+    result = ChangeDataDirectory(
+        MemoryConfigStore(_config(tmp_path / "old"))
+    ).execute(selected)
+
+    assert result.ok is False
+    assert result.error.code == "CONFIG_DIRECTORY_UNWRITABLE"
+    assert result.error.details == {"exception_type": "OSError"}
+
+
+def test_probe_cleanup_failure_after_write_returns_structured_error(tmp_path, monkeypatch):
+    selected = tmp_path / "selected"
+
+    def fail_cleanup(self, *, missing_ok=False):
+        raise PermissionError("cleanup denied")
+
+    monkeypatch.setattr(Path, "unlink", fail_cleanup)
+
+    result = ChangeDataDirectory(
+        MemoryConfigStore(_config(tmp_path / "old"))
+    ).execute(selected)
+
+    assert result.ok is False
+    assert result.error.code == "CONFIG_DIRECTORY_UNWRITABLE"
+    assert result.error.details == {"exception_type": "PermissionError"}

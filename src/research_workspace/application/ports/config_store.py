@@ -20,6 +20,16 @@ class AppConfig:
             raise ValueError("Unsupported configuration schema version")
         if self.log_level not in LOG_LEVELS:
             raise ValueError("Unsupported logging level")
+        if not isinstance(self.active_data_directory, Path) or not self.active_data_directory.is_absolute():
+            raise ValueError("active_data_directory must be a non-empty absolute path")
+        if (
+            self.pending_data_directory is not None
+            and (
+                not isinstance(self.pending_data_directory, Path)
+                or not self.pending_data_directory.is_absolute()
+            )
+        ):
+            raise ValueError("pending_data_directory must be null or a non-empty absolute path")
         active = self.active_data_directory.expanduser().resolve()
         pending = (
             self.pending_data_directory.expanduser().resolve()

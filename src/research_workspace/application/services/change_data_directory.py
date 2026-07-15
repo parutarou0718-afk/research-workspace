@@ -16,6 +16,8 @@ DirectoryValidator = Callable[[Path], Result[Path]]
 def validate_data_directory(selected: Path) -> Result[Path]:
     resolved = selected.expanduser().resolve()
     probe: Path | None = None
+    validation_error: AppError | None = None
+    cleanup_error: OSError | None = None
     try:
         resolved.mkdir(parents=True, exist_ok=True)
         descriptor, name = tempfile.mkstemp(prefix=".research-workspace-write-probe-", dir=resolved)
@@ -24,18 +26,27 @@ def validate_data_directory(selected: Path) -> Result[Path]:
             stream.write(b"ok")
             stream.flush()
             os.fsync(stream.fileno())
-        return Result.success(resolved)
     except (OSError, ValueError) as exc:
-        return Result.failure(
-            AppError(
-                "CONFIG_DIRECTORY_UNWRITABLE",
-                "The selected data directory cannot be created or written.",
-                details={"exception_type": type(exc).__name__},
-            )
-        )
+        validation_error = _directory_error(exc)
     finally:
         if probe is not None:
-            probe.unlink(missing_ok=True)
+            try:
+                probe.unlink(missing_ok=True)
+            except OSError as exc:
+                cleanup_error = exc
+    if validation_error is not None:
+        return Result.failure(validation_error)
+    if cleanup_error is not None:
+        return Result.failure(_directory_error(cleanup_error))
+    return Result.success(resolved)
+
+
+def _directory_error(exc: Exception) -> AppError:
+    return AppError(
+        "CONFIG_DIRECTORY_UNWRITABLE",
+        "The selected data directory cannot be created or written.",
+        details={"exception_type": type(exc).__name__},
+    )
 
 
 class ChangeDataDirectory:

@@ -15,6 +15,15 @@ CONFIG_FIELDS = frozenset(
 )
 
 
+def _strict_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"Duplicate configuration member: {key}")
+        result[key] = value
+    return result
+
+
 def default_config_path() -> Path:
     return Path(user_config_dir("ResearchWorkspace", "ResearchWorkspace")) / "config.json"
 
@@ -26,7 +35,9 @@ class JsonConfigStore:
     def load(self) -> AppConfig | None:
         if not self.path.exists():
             return None
-        payload = json.loads(self.path.read_text(encoding="utf-8"))
+        payload = json.loads(
+            self.path.read_text(encoding="utf-8"), object_pairs_hook=_strict_object
+        )
         if not isinstance(payload, dict) or set(payload) != CONFIG_FIELDS:
             raise ValueError("Configuration must contain exactly the v0.1 fields")
         if not all(isinstance(payload[key], str) for key in ("schema_version", "active_data_directory", "log_level")):

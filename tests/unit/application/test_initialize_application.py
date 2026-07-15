@@ -103,3 +103,71 @@ def test_atomic_save_failure_preserves_previous_config(tmp_path, monkeypatch):
 
     assert store.load() == original
     assert list(tmp_path.glob(".config.json.*.tmp")) == []
+
+
+def test_config_rejects_relative_and_empty_active_or_pending_paths(tmp_path):
+    for active, pending in (
+        ("relative-data", None),
+        ("", None),
+        (str((tmp_path / "active").resolve()), "relative-pending"),
+        (str((tmp_path / "active").resolve()), ""),
+    ):
+        path = tmp_path / "config.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "schema_version": "1.0",
+                    "active_data_directory": active,
+                    "pending_data_directory": pending,
+                    "log_level": "INFO",
+                }
+            ),
+            encoding="utf-8",
+        )
+        store = JsonConfigStore(path)
+        try:
+            store.load()
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"invalid paths were accepted: {active!r}, {pending!r}")
+
+
+def test_config_rejects_duplicate_json_members(tmp_path):
+    path = tmp_path / "config.json"
+    active = str((tmp_path / "active").resolve()).replace("\\", "\\\\")
+    path.write_text(
+        '{"schema_version":"1.0",'
+        f'"active_data_directory":"{active}",'
+        f'"active_data_directory":"{active}",'
+        '"pending_data_directory":null,"log_level":"INFO"}',
+        encoding="utf-8",
+    )
+
+    try:
+        JsonConfigStore(path).load()
+    except ValueError as exc:
+        assert "duplicate" in str(exc).lower()
+    else:
+        raise AssertionError("duplicate configuration member was accepted")
+
+
+def test_corrupt_config_returns_structured_startup_failure_without_cwd_reinterpretation(tmp_path):
+    path = tmp_path / "config.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "active_data_directory": "",
+                "pending_data_directory": None,
+                "log_level": "INFO",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = InitializeApplication(JsonConfigStore(path)).execute()
+
+    assert result.ok is False
+    assert result.error.code == "CONFIG_LOAD_FAILED"
+    assert result.error.details == {"exception_type": "ValueError"}
