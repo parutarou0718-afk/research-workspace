@@ -60,7 +60,6 @@ _TABLE_DDL = (
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT, CONSTRAINT pk_submissions PRIMARY KEY (id),
         CONSTRAINT ck_submissions_venue_nonempty CHECK (length(trim(venue)) > 0),
         CONSTRAINT ck_submissions_status_enum CHECK (status IN ('preparing','ready','submitted','editorial_review','external_review','revision','accepted','rejected','withdrawn','no_response')),
-        CONSTRAINT ck_submissions_updated_after_created CHECK (updated_at >= created_at),
         CONSTRAINT fk_submissions_paper_id_papers FOREIGN KEY(paper_id) REFERENCES papers(id) ON DELETE RESTRICT,
         CONSTRAINT fk_submissions_active_version_id_paper_versions FOREIGN KEY(active_version_id) REFERENCES paper_versions(id) ON DELETE RESTRICT)""",
     """CREATE TABLE conferences (
@@ -68,14 +67,12 @@ _TABLE_DDL = (
         status VARCHAR(64) DEFAULT 'planned' NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT,
         CONSTRAINT pk_conferences PRIMARY KEY (id), CONSTRAINT ck_conferences_name_nonempty CHECK (length(trim(name)) > 0),
         CONSTRAINT ck_conferences_status_enum CHECK (status IN ('planned','registered','attending','completed','cancelled')),
-        CONSTRAINT ck_conferences_ends_after_starts CHECK (ends_at IS NULL OR starts_at IS NULL OR ends_at >= starts_at),
-        CONSTRAINT ck_conferences_updated_after_created CHECK (updated_at >= created_at))""",
+        CONSTRAINT ck_conferences_ends_after_starts CHECK (ends_at IS NULL OR starts_at IS NULL OR ends_at >= starts_at))""",
     """CREATE TABLE grants (
         id CHAR(36) NOT NULL, name VARCHAR(500) NOT NULL, status VARCHAR(64) DEFAULT 'watching' NOT NULL,
         deadline_at TEXT, source_url TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT,
         CONSTRAINT pk_grants PRIMARY KEY (id), CONSTRAINT ck_grants_name_nonempty CHECK (length(trim(name)) > 0),
-        CONSTRAINT ck_grants_status_enum CHECK (status IN ('watching','preparing','submitted','awarded','rejected','archived')),
-        CONSTRAINT ck_grants_updated_after_created CHECK (updated_at >= created_at))""",
+        CONSTRAINT ck_grants_status_enum CHECK (status IN ('watching','preparing','submitted','awarded','rejected','archived')))""",
     """CREATE TABLE tasks (
         id CHAR(36) NOT NULL, task_type VARCHAR(64) NOT NULL, status VARCHAR(64) DEFAULT 'pending' NOT NULL,
         idempotency_key VARCHAR(255) NOT NULL, request_fingerprint CHAR(64) NOT NULL, payload_json TEXT NOT NULL,
@@ -116,8 +113,7 @@ _TABLE_DDL = (
         CONSTRAINT ck_entity_relations_relation_type_enum CHECK (relation_type IN ('belongs_to','derived_from','version_of','used_in','deleted_from','supports','contradicts','extends','related_to','presented_at','submitted_as','reviewed_by','suggested_for','split_from','merged_from')),
         CONSTRAINT ck_entity_relations_confidence_range CHECK (confidence IS NULL OR (confidence >= 0 AND confidence <= 1)),
         CONSTRAINT ck_entity_relations_confirmation_state_enum CHECK (confirmation_state IN ('candidate','confirmed','rejected')),
-        CONSTRAINT ck_entity_relations_actor_type_enum CHECK (created_by_actor_type IN ('user','system','task_executor','agent')),
-        CONSTRAINT ck_entity_relations_updated_after_created CHECK (updated_at >= created_at))""",
+        CONSTRAINT ck_entity_relations_actor_type_enum CHECK (created_by_actor_type IN ('user','system','task_executor','agent')))""",
     """CREATE TABLE relation_observations (
         id CHAR(36) NOT NULL, relation_id CHAR(36) NOT NULL, observed_by_actor_type VARCHAR(64) NOT NULL,
         observed_by_actor_id VARCHAR(255), provenance_type VARCHAR(64) NOT NULL, confidence NUMERIC(6,5),

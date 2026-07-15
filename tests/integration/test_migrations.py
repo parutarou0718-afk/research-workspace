@@ -1,7 +1,7 @@
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.engine import Connection
 
 from test_schema_contract import _assert_exact_constraints, _assert_exact_schema
 
@@ -38,23 +38,28 @@ def test_upgrade_head_is_repeatable(database_path):
     assert after == before
 
 
-def test_failed_migrated_database_fixture_rolls_back(database_path):
-    command.upgrade(_config(database_path), "head")
-    engine = create_engine(f"sqlite:///{database_path.as_posix()}")
+def test_failed_migration_rolls_back_all_domain_ddl_and_clean_retry_succeeds(database_path, monkeypatch):
+    original_execute = Connection.execute
+
+    def fail_at_ideas(connection, statement, *args, **kwargs):
+        if "CREATE TABLE ideas" in str(statement):
+            raise RuntimeError("injected 0001 failure")
+        return original_execute(connection, statement, *args, **kwargs)
+
+    monkeypatch.setattr(Connection, "execute", fail_at_ideas)
     try:
-        try:
-            with engine.begin() as connection:
-                values = {"id": "00000000-0000-0000-0000-000000000001", "path": "C:/same.pdf"}
-                statement = text("""INSERT INTO source_documents
-                    (id,path,sha256,mime_type,size_bytes,modified_at,imported_at,read_only)
-                    VALUES (:id,:path,:sha,'application/pdf',1,'2026-06-01T00:00:00Z','2026-06-01T00:00:00Z',1)""")
-                connection.execute(statement, values | {"sha": "a" * 64})
-                connection.execute(statement, (values | {"id": "00000000-0000-0000-0000-000000000002", "sha": "b" * 64}))
-        except IntegrityError:
-            pass
-        else:
-            raise AssertionError("fixture was expected to violate the NOCASE path uniqueness rule")
-        with engine.connect() as connection:
-            assert connection.scalar(text("SELECT count(*) FROM source_documents")) == 0
-    finally:
-        engine.dispose()
+        command.upgrade(_config(database_path), "head")
+    except RuntimeError as exc:
+        assert str(exc) == "injected 0001 failure"
+    else:
+        raise AssertionError("migration failure was not injected")
+
+    engine = create_engine(f"sqlite:///{database_path.as_posix()}")
+    assert set(inspect(engine).get_table_names()) - {"alembic_version"} == set()
+    engine.dispose()
+
+    monkeypatch.setattr(Connection, "execute", original_execute)
+    command.upgrade(_config(database_path), "head")
+    retry_engine = create_engine(f"sqlite:///{database_path.as_posix()}")
+    _assert_exact_schema(inspect(retry_engine))
+    retry_engine.dispose()

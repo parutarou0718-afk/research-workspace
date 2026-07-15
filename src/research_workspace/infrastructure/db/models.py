@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import (
@@ -111,7 +112,6 @@ class SubmissionModel(Base):
     __table_args__ = (
         CheckConstraint("length(trim(venue)) > 0", name="venue_nonempty"),
         CheckConstraint("status IN ('preparing','ready','submitted','editorial_review','external_review','revision','accepted','rejected','withdrawn','no_response')", name="status_enum"),
-        CheckConstraint("updated_at >= created_at", name="updated_after_created"),
     )
     id: Mapped[UUID] = _uuid(primary_key=True)
     paper_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("papers.id", ondelete="RESTRICT"), nullable=False)
@@ -131,7 +131,6 @@ class ConferenceModel(Base):
         CheckConstraint("length(trim(name)) > 0", name="name_nonempty"),
         CheckConstraint("status IN ('planned','registered','attending','completed','cancelled')", name="status_enum"),
         CheckConstraint("ends_at IS NULL OR starts_at IS NULL OR ends_at >= starts_at", name="ends_after_starts"),
-        CheckConstraint("updated_at >= created_at", name="updated_after_created"),
     )
     id: Mapped[UUID] = _uuid(primary_key=True)
     name: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -149,7 +148,6 @@ class GrantModel(Base):
     __table_args__ = (
         CheckConstraint("length(trim(name)) > 0", name="name_nonempty"),
         CheckConstraint("status IN ('watching','preparing','submitted','awarded','rejected','archived')", name="status_enum"),
-        CheckConstraint("updated_at >= created_at", name="updated_after_created"),
     )
     id: Mapped[UUID] = _uuid(primary_key=True)
     name: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -198,7 +196,6 @@ class EntityRelationModel(Base):
         CheckConstraint("confidence IS NULL OR (confidence >= 0 AND confidence <= 1)", name="confidence_range"),
         CheckConstraint("confirmation_state IN ('candidate','confirmed','rejected')", name="confirmation_state_enum"),
         CheckConstraint("created_by_actor_type IN ('user','system','task_executor','agent')", name="actor_type_enum"),
-        CheckConstraint("updated_at >= created_at", name="updated_after_created"),
     )
     id: Mapped[UUID] = _uuid(primary_key=True)
     source_type: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -206,7 +203,7 @@ class EntityRelationModel(Base):
     relation_type: Mapped[str] = mapped_column(String(64), nullable=False)
     target_type: Mapped[str] = mapped_column(String(64), nullable=False)
     target_id: Mapped[UUID] = mapped_column(UUIDText(), nullable=False)
-    confidence: Mapped[float | None] = mapped_column(Numeric(6, 5), nullable=True)
+    confidence: Mapped[Decimal | None] = mapped_column(Numeric(6, 5), nullable=True)
     confirmation_state: Mapped[str] = mapped_column(String(64), nullable=False, server_default=text("'candidate'"))
     created_by_actor_type: Mapped[str] = mapped_column(String(64), nullable=False)
     created_by_actor_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -231,7 +228,7 @@ class RelationObservationModel(Base):
     observed_by_actor_type: Mapped[str] = mapped_column(String(64), nullable=False)
     observed_by_actor_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     provenance_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    confidence: Mapped[float | None] = mapped_column(Numeric(6, 5), nullable=True)
+    confidence: Mapped[Decimal | None] = mapped_column(Numeric(6, 5), nullable=True)
     origin_task_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("tasks.id", ondelete="RESTRICT"), nullable=True)
     evidence_ref_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("evidence_refs.id", ondelete="RESTRICT"), nullable=True)
     provider_id: Mapped[str | None] = mapped_column(String(255), nullable=True)

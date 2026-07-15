@@ -1,7 +1,15 @@
-from sqlalchemy import inspect
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+from typing import get_type_hints
 
-from research_workspace.infrastructure.db.base import Base
+import pytest
+from sqlalchemy import inspect
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Mapped
+
+from research_workspace.infrastructure.db.base import Base, UTCDateTime
 import research_workspace.infrastructure.db.models  # noqa: F401
+from research_workspace.infrastructure.db.models import EntityRelationModel, RelationObservationModel, SourceDocumentModel
 
 
 EXPECTED_SCHEMA = {
@@ -138,54 +146,70 @@ EXPECTED_DEFAULTS = {
     "task_attempts": {"status": "'running'"}, "task_effects": {}, "domain_events": {},
 }
 
-EXPECTED_CHECKS = {
-    "source_documents": {"original_read_only", "sha256_lower_hex", "size_bytes_nonnegative"},
-    "papers": {"deleted_after_created", "status_enum", "title_length", "updated_after_created"},
-    "paper_versions": {"parent_not_self"},
-    "ideas": {"content_nonempty", "origin_enum", "status_enum", "title_length", "updated_after_created"},
-    "notes": {"content_nonempty", "title_length", "updated_after_created"},
-    "submissions": {"status_enum", "updated_after_created", "venue_nonempty"},
-    "conferences": {"ends_after_starts", "name_nonempty", "status_enum", "updated_after_created"},
-    "grants": {"name_nonempty", "status_enum", "updated_after_created"},
-    "evidence_refs": {"char_range", "char_start_nonnegative", "entity_type_enum", "page_positive", "paragraph_id_lower_hex", "quote_hash_lower_hex", "slide_positive"},
-    "entity_relations": {"actor_type_enum", "confidence_range", "confirmation_state_enum", "relation_type_enum", "source_type_enum", "target_type_enum", "updated_after_created"},
-    "relation_observations": {"actor_type_enum", "ai_provider_model", "confidence_provenance", "confidence_range", "evidence_provenance", "provenance_type_enum", "task_actor_origin"},
-    "audit_logs": {"actor_type_enum", "before_or_after", "target_type_enum"},
-    "tasks": {"attempt_count_nonnegative", "lease_expiry_with_owner", "lease_generation_nonnegative", "max_attempts_range", "request_fingerprint_lower_hex", "status_enum", "task_type_enum"},
-    "task_attempts": {"attempt_number_positive", "closed_attempt_result", "lease_generation_nonnegative", "status_enum"},
-    "task_effects": {"committed_timestamp", "operation_key_lower_hex", "status_enum"},
-    "domain_events": {"aggregate_type_enum", "event_type_enum"},
+EXPECTED_PRIMARY_KEYS = {
+    "source_documents": ("pk_source_documents", ("id",)), "papers": ("pk_papers", ("id",)),
+    "paper_versions": ("pk_paper_versions", ("id",)), "ideas": ("pk_ideas", ("id",)),
+    "notes": ("pk_notes", ("id",)), "submissions": ("pk_submissions", ("id",)),
+    "conferences": ("pk_conferences", ("id",)), "grants": ("pk_grants", ("id",)),
+    "evidence_refs": ("pk_evidence_refs", ("id",)), "entity_relations": ("pk_entity_relations", ("id",)),
+    "relation_observations": ("pk_relation_observations", ("id",)), "audit_logs": ("pk_audit_logs", ("id",)),
+    "tasks": ("pk_tasks", ("id",)), "task_attempts": ("pk_task_attempts", ("id",)),
+    "task_effects": ("pk_task_effects", ("id",)), "domain_events": ("pk_domain_events", ("id",)),
 }
 
-EXPECTED_FOREIGN_KEYS = {
-    "source_documents": set(), "papers": {("current_version_id", "paper_versions", "SET NULL")},
-    "paper_versions": {("paper_id", "papers", "RESTRICT"), ("source_document_id", "source_documents", "RESTRICT"), ("parent_version_id", "paper_versions", "RESTRICT")},
-    "ideas": set(), "notes": {("source_document_id", "source_documents", "RESTRICT")},
-    "submissions": {("paper_id", "papers", "RESTRICT"), ("active_version_id", "paper_versions", "RESTRICT")},
-    "conferences": set(), "grants": set(),
-    "evidence_refs": {("document_id", "source_documents", "RESTRICT"), ("version_id", "paper_versions", "RESTRICT")},
-    "entity_relations": set(),
-    "relation_observations": {("relation_id", "entity_relations", "RESTRICT"), ("origin_task_id", "tasks", "RESTRICT"), ("evidence_ref_id", "evidence_refs", "RESTRICT")},
-    "audit_logs": {("task_id", "tasks", "RESTRICT"), ("undo_of_audit_id", "audit_logs", "RESTRICT")},
-    "tasks": set(), "task_attempts": {("task_id", "tasks", "RESTRICT")},
-    "task_effects": {("task_id", "tasks", "RESTRICT"), ("attempt_id", "task_attempts", "RESTRICT")},
-    "domain_events": set(),
+EXPECTED_FOREIGN_KEY_DETAILS = {
+    "source_documents": set(), "ideas": set(), "conferences": set(), "grants": set(),
+    "entity_relations": set(), "tasks": set(), "domain_events": set(),
+    "papers": {("fk_papers_current_version_id_paper_versions", ("current_version_id",), "paper_versions", ("id",), "SET NULL")},
+    "paper_versions": {("fk_paper_versions_paper_id_papers", ("paper_id",), "papers", ("id",), "RESTRICT"), ("fk_paper_versions_source_document_id_source_documents", ("source_document_id",), "source_documents", ("id",), "RESTRICT"), ("fk_paper_versions_parent_version_id_paper_versions", ("parent_version_id",), "paper_versions", ("id",), "RESTRICT")},
+    "notes": {("fk_notes_source_document_id_source_documents", ("source_document_id",), "source_documents", ("id",), "RESTRICT")},
+    "submissions": {("fk_submissions_paper_id_papers", ("paper_id",), "papers", ("id",), "RESTRICT"), ("fk_submissions_active_version_id_paper_versions", ("active_version_id",), "paper_versions", ("id",), "RESTRICT")},
+    "evidence_refs": {("fk_evidence_refs_document_id_source_documents", ("document_id",), "source_documents", ("id",), "RESTRICT"), ("fk_evidence_refs_version_id_paper_versions", ("version_id",), "paper_versions", ("id",), "RESTRICT")},
+    "relation_observations": {("fk_relation_observations_relation_id_entity_relations", ("relation_id",), "entity_relations", ("id",), "RESTRICT"), ("fk_relation_observations_origin_task_id_tasks", ("origin_task_id",), "tasks", ("id",), "RESTRICT"), ("fk_relation_observations_evidence_ref_id_evidence_refs", ("evidence_ref_id",), "evidence_refs", ("id",), "RESTRICT")},
+    "audit_logs": {("fk_audit_logs_task_id_tasks", ("task_id",), "tasks", ("id",), "RESTRICT"), ("fk_audit_logs_undo_of_audit_id_audit_logs", ("undo_of_audit_id",), "audit_logs", ("id",), "RESTRICT")},
+    "task_attempts": {("fk_task_attempts_task_id_tasks", ("task_id",), "tasks", ("id",), "RESTRICT")},
+    "task_effects": {("fk_task_effects_task_id_tasks", ("task_id",), "tasks", ("id",), "RESTRICT"), ("fk_task_effects_attempt_id_task_attempts", ("attempt_id",), "task_attempts", ("id",), "RESTRICT")},
 }
 
-EXPECTED_UNIQUES = {
-    "source_documents": set(), "papers": set(), "paper_versions": {("paper_id", "version_label")},
-    "ideas": set(), "notes": set(), "submissions": set(), "conferences": set(), "grants": set(),
-    "evidence_refs": set(),
-    "entity_relations": {("relation_type", "source_type", "source_id", "target_type", "target_id")},
-    "relation_observations": {("observation_key",)},
-    "audit_logs": {("undo_token",), ("undo_of_audit_id",)},
-    "tasks": {("idempotency_key",)}, "task_attempts": {("task_id", "attempt_number")},
-    "task_effects": {("operation_key",)}, "domain_events": {("deduplication_key",)},
+EXPECTED_UNIQUE_DETAILS = {
+    "source_documents": set(), "papers": set(), "ideas": set(), "notes": set(),
+    "submissions": set(), "conferences": set(), "grants": set(), "evidence_refs": set(),
+    "paper_versions": {("uq_paper_versions_paper_label", ("paper_id", "version_label"))},
+    "entity_relations": {("uq_entity_relations_assertion", ("relation_type", "source_type", "source_id", "target_type", "target_id"))},
+    "relation_observations": {("uq_relation_observations_observation_key", ("observation_key",))},
+    "audit_logs": {("uq_audit_logs_undo_token", ("undo_token",)), ("uq_audit_logs_undo_of_audit_id", ("undo_of_audit_id",))},
+    "tasks": {("uq_tasks_idempotency_key", ("idempotency_key",))},
+    "task_attempts": {("uq_task_attempts_task_attempt", ("task_id", "attempt_number"))},
+    "task_effects": {("uq_task_effects_operation_key", ("operation_key",))},
+    "domain_events": {("uq_domain_events_deduplication_key", ("deduplication_key",))},
 }
 
-EXPECTED_INDEXES = {
-    "source_documents": {("ix_source_documents_sha256", ("sha256",), False), ("ux_source_documents_path_nocase", ("path",), True)},
-    "paper_versions": {("ux_paper_versions_one_current", ("paper_id",), True)},
+EXPECTED_INDEX_DETAILS = {
+    "papers": set(), "ideas": set(), "notes": set(), "submissions": set(),
+    "conferences": set(), "grants": set(), "evidence_refs": set(), "entity_relations": set(),
+    "relation_observations": set(), "audit_logs": set(), "tasks": set(),
+    "task_attempts": set(), "task_effects": set(), "domain_events": set(),
+    "source_documents": {("ix_source_documents_sha256", ("sha256",), False, None), ("ux_source_documents_path_nocase", ("path",), True, None)},
+    "paper_versions": {("ux_paper_versions_one_current", ("paper_id",), True, "is_current=1")},
+}
+
+EXPECTED_CHECK_SQL = {
+    "source_documents": {"original_read_only": "read_only=1", "sha256_lower_hex": "length(sha256)=64ANDsha256NOTGLOB'*[^0-9a-f]*'", "size_bytes_nonnegative": "size_bytes>=0"},
+    "papers": {"deleted_after_created": "deleted_atISNULLORdeleted_at>=created_at", "status_enum": "statusIN('active','paused','revision','submitted','completed','archived')", "title_length": "length(trim(title))BETWEEN1AND500", "updated_after_created": "updated_at>=created_at"},
+    "paper_versions": {"parent_not_self": "parent_version_idISNULLORparent_version_id<>id"},
+    "ideas": {"content_nonempty": "length(content)>0", "origin_enum": "origin_typeIN('manual','document','note','meeting','chat','book','paper','ai_candidate')", "status_enum": "statusIN('unused','used','parked','archived')", "title_length": "length(trim(title))BETWEEN1AND500", "updated_after_created": "updated_at>=created_at"},
+    "notes": {"content_nonempty": "length(content)>0", "title_length": "length(trim(title))BETWEEN1AND500", "updated_after_created": "updated_at>=created_at"},
+    "submissions": {"status_enum": "statusIN('preparing','ready','submitted','editorial_review','external_review','revision','accepted','rejected','withdrawn','no_response')", "venue_nonempty": "length(trim(venue))>0"},
+    "conferences": {"ends_after_starts": "ends_atISNULLORstarts_atISNULLORends_at>=starts_at", "name_nonempty": "length(trim(name))>0", "status_enum": "statusIN('planned','registered','attending','completed','cancelled')"},
+    "grants": {"name_nonempty": "length(trim(name))>0", "status_enum": "statusIN('watching','preparing','submitted','awarded','rejected','archived')"},
+    "evidence_refs": {"char_range": "char_endISNULLOR(char_startISNOTNULLANDchar_end>=char_start)", "char_start_nonnegative": "char_startISNULLORchar_start>=0", "entity_type_enum": "entity_typeIN('Paper','PaperVersion','Idea','Note','SourceDocument','Submission','Conference','Grant','EntityRelation')", "page_positive": "pageISNULLORpage>=1", "paragraph_id_lower_hex": "paragraph_idISNULLOR(length(paragraph_id)=64ANDparagraph_idNOTGLOB'*[^0-9a-f]*')", "quote_hash_lower_hex": "length(quote_hash)=64ANDquote_hashNOTGLOB'*[^0-9a-f]*'", "slide_positive": "slideISNULLORslide>=1"},
+    "entity_relations": {"actor_type_enum": "created_by_actor_typeIN('user','system','task_executor','agent')", "confidence_range": "confidenceISNULLOR(confidence>=0ANDconfidence<=1)", "confirmation_state_enum": "confirmation_stateIN('candidate','confirmed','rejected')", "relation_type_enum": "relation_typeIN('belongs_to','derived_from','version_of','used_in','deleted_from','supports','contradicts','extends','related_to','presented_at','submitted_as','reviewed_by','suggested_for','split_from','merged_from')", "source_type_enum": "source_typeIN('Paper','PaperVersion','Idea','Note','SourceDocument','Submission','Conference','Grant','EvidenceRef')", "target_type_enum": "target_typeIN('Paper','PaperVersion','Idea','Note','SourceDocument','Submission','Conference','Grant','EvidenceRef')"},
+    "relation_observations": {"actor_type_enum": "observed_by_actor_typeIN('user','system','task_executor','agent')", "ai_provider_model": "provenance_type<>'ai'OR(provider_idISNOTNULLANDmodel_idISNOTNULL)", "confidence_provenance": "provenance_typeNOTIN('import','ai')ORconfidenceISNOTNULL", "confidence_range": "confidenceISNULLOR(confidence>=0ANDconfidence<=1)", "evidence_provenance": "provenance_typeNOTIN('import','ai')ORevidence_ref_idISNOTNULL", "provenance_type_enum": "provenance_typeIN('manual','rule','import','ai')", "task_actor_origin": "observed_by_actor_typeNOTIN('task_executor','agent')ORorigin_task_idISNOTNULL"},
+    "audit_logs": {"actor_type_enum": "actor_typeIN('user','system','task_executor','agent')", "before_or_after": "before_jsonISNOTNULLORafter_jsonISNOTNULL", "target_type_enum": "target_typeIN('Paper','PaperVersion','Idea','Note','SourceDocument','Submission','Conference','Grant','EvidenceRef','EntityRelation','RelationObservation','Task')"},
+    "tasks": {"attempt_count_nonnegative": "attempt_count>=0", "lease_expiry_with_owner": "lease_ownerISNULLORlease_expires_atISNOTNULL", "lease_generation_nonnegative": "lease_generation>=0", "max_attempts_range": "max_attemptsBETWEEN1AND10", "request_fingerprint_lower_hex": "length(request_fingerprint)=64ANDrequest_fingerprintNOTGLOB'*[^0-9a-f]*'", "status_enum": "statusIN('pending','running','needs_confirmation','succeeded','failed','cancelled')", "task_type_enum": "task_typeIN('import_document','compare_versions','extract_idea_candidates','recover_paper_context','refresh_submission_overview','scheduled_incremental_organize','export_data')"},
+    "task_attempts": {"attempt_number_positive": "attempt_number>=1", "closed_attempt_result": "(status='running'ANDfinished_atISNULLANDresult_jsonISNULL)OR(status<>'running'ANDfinished_atISNOTNULLANDresult_jsonISNOTNULL)", "lease_generation_nonnegative": "lease_generation>=0", "status_enum": "statusIN('running','retry_scheduled','succeeded','failed','cancelled','needs_confirmation')"},
+    "task_effects": {"committed_timestamp": "status<>'committed'ORcommitted_atISNOTNULL", "operation_key_lower_hex": "length(operation_key)=64ANDoperation_keyNOTGLOB'*[^0-9a-f]*'", "status_enum": "statusIN('prepared','committed','manual_reconciliation')"},
+    "domain_events": {"aggregate_type_enum": "aggregate_typeIN('Paper','PaperVersion','Idea','SourceDocument','Submission','Conference','Grant','Task','AuditLog')", "event_type_enum": "event_typeIN('document.imported','paper.created','paper.version_added','paper.version_relation_corrected','idea.created','idea.candidate_extracted','idea.linked','submission.created','submission.status_changed','context.recovered','task.failed','audit.undo_applied')"},
 }
 
 
@@ -240,14 +264,41 @@ def _assert_exact_constraints(inspector):
     for table in EXPECTED_SCHEMA:
         defaults = {col["name"]: str(col["default"]) for col in inspector.get_columns(table) if col["default"] is not None}
         assert defaults == EXPECTED_DEFAULTS[table]
-        check_names = {item["name"].removeprefix(f"ck_{table}_") for item in inspector.get_check_constraints(table)}
-        assert check_names == EXPECTED_CHECKS[table]
-        foreign_keys = {(fk["constrained_columns"][0], fk["referred_table"], fk["options"].get("ondelete")) for fk in inspector.get_foreign_keys(table)}
-        assert foreign_keys == EXPECTED_FOREIGN_KEYS[table]
-        uniques = {tuple(item["column_names"]) for item in inspector.get_unique_constraints(table)}
-        assert uniques == EXPECTED_UNIQUES[table]
-        indexes = {(item["name"], tuple(item["column_names"]), bool(item["unique"])) for item in inspector.get_indexes(table)}
-        assert indexes == EXPECTED_INDEXES.get(table, set())
+        primary_key = inspector.get_pk_constraint(table)
+        assert (primary_key["name"], tuple(primary_key["constrained_columns"])) == EXPECTED_PRIMARY_KEYS[table]
+        checks = {item["name"].removeprefix(f"ck_{table}_"): "".join(item["sqltext"].split()) for item in inspector.get_check_constraints(table)}
+        assert checks == EXPECTED_CHECK_SQL[table]
+        foreign_keys = {(fk["name"], tuple(fk["constrained_columns"]), fk["referred_table"], tuple(fk["referred_columns"]), fk["options"].get("ondelete")) for fk in inspector.get_foreign_keys(table)}
+        assert foreign_keys == EXPECTED_FOREIGN_KEY_DETAILS[table]
+        uniques = {(item["name"], tuple(item["column_names"])) for item in inspector.get_unique_constraints(table)}
+        assert uniques == EXPECTED_UNIQUE_DETAILS[table]
+        indexes = {(item["name"], tuple(item["column_names"]), bool(item["unique"]), "".join(str(item.get("dialect_options", {}).get("sqlite_where")).split()) if item.get("dialect_options", {}).get("sqlite_where") is not None else None) for item in inspector.get_indexes(table)}
+        assert indexes == EXPECTED_INDEX_DETAILS[table]
 
-    current_index = next(item for item in inspector.get_indexes("paper_versions") if item["name"] == "ux_paper_versions_one_current")
-    assert str(current_index["dialect_options"]["sqlite_where"]) == "is_current = 1"
+
+def test_source_document_path_uniqueness_is_nocase(engine, session):
+    Base.metadata.create_all(engine)
+    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    common = dict(sha256="a" * 64, mime_type="application/pdf", size_bytes=1,
+        modified_at=now, imported_at=now, read_only=True, missing_at=None)
+    session.add(SourceDocumentModel(id="00000000-0000-0000-0000-000000000001", path="C:/Research/Paper.PDF", **common))
+    session.flush()
+    session.add(SourceDocumentModel(id="00000000-0000-0000-0000-000000000002", path="c:/research/paper.pdf", **common))
+    with pytest.raises(IntegrityError):
+        session.flush()
+
+
+def test_utc_datetime_rejects_noncanonical_values():
+    storage = UTCDateTime()
+    with pytest.raises(ValueError):
+        storage.process_bind_param("2026-06-01T00:00:00+00:00", None)
+    with pytest.raises(ValueError):
+        storage.process_bind_param("not-a-timestamp", None)
+    with pytest.raises(ValueError):
+        storage.process_bind_param(datetime(2026, 6, 1, tzinfo=timezone(timedelta(hours=9))), None)
+    assert storage.process_bind_param("2026-06-01T00:00:00Z", None) == "2026-06-01T00:00:00Z"
+
+
+def test_confidence_mappings_use_decimal_annotations():
+    assert get_type_hints(EntityRelationModel, include_extras=True)["confidence"] == Mapped[Decimal | None]
+    assert get_type_hints(RelationObservationModel, include_extras=True)["confidence"] == Mapped[Decimal | None]

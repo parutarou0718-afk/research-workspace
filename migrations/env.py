@@ -23,9 +23,14 @@ def run_migrations_online() -> None:
     with connectable.connect() as connection:
         connection.exec_driver_sql("PRAGMA foreign_keys=ON")
         connection.commit()
-        context.configure(connection=connection, target_metadata=target_metadata, render_as_batch=True)
-        with context.begin_transaction():
+        connection.exec_driver_sql("BEGIN IMMEDIATE")
+        try:
+            context.configure(connection=connection, target_metadata=target_metadata, render_as_batch=True, transactional_ddl=True)
             context.run_migrations()
+            connection.commit()
+        except BaseException:
+            connection.rollback()
+            raise
 
 
 run_migrations_offline() if context.is_offline_mode() else run_migrations_online()
