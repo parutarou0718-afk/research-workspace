@@ -28,8 +28,16 @@ from research_workspace.domain.tasks import Capability, permission_for
             "aggregate.read_approved",
             {"aggregate_approved": True},
         ),
-        (Capability.CONTEXT_RECOVERY, "candidate_snapshot.write", {}),
-        (Capability.CONTEXT_RECOVERY, "evidence.write", {}),
+        (
+            Capability.CONTEXT_RECOVERY,
+            "candidate_snapshot.write",
+            {"aggregate_approved": True},
+        ),
+        (
+            Capability.CONTEXT_RECOVERY,
+            "evidence.write",
+            {"aggregate_approved": True},
+        ),
         (Capability.EXPORT, "entities.read_selected", {"entities_selected": True}),
         (
             Capability.EXPORT,
@@ -49,6 +57,8 @@ def test_capability_matrix_allows_only_approved_scoped_actions(capability, actio
         (Capability.DOCUMENT_PARSER, "source.read_declared"),
         (Capability.DOCUMENT_PARSER, "derived.write_selected_data_directory"),
         (Capability.CONTEXT_RECOVERY, "aggregate.read_approved"),
+        (Capability.CONTEXT_RECOVERY, "candidate_snapshot.write"),
+        (Capability.CONTEXT_RECOVERY, "evidence.write"),
         (Capability.EXPORT, "entities.read_selected"),
         (Capability.EXPORT, "export.write_user_approved_target"),
     ],
@@ -123,6 +133,51 @@ def test_network_access_requires_all_consent_gates():
         user_consented=True,
         data_range_disclosed=True,
     ).allowed is True
+
+
+@pytest.mark.parametrize(
+    ("provider_selected", "user_consented", "data_range_disclosed"),
+    [
+        (False, True, True),
+        (True, False, True),
+        (True, True, False),
+    ],
+)
+def test_network_consent_overlays_real_capability_operations(
+    provider_selected, user_consented, data_range_disclosed
+):
+    decision = permission_for(
+        Capability.EXPORT,
+        "export.write_user_approved_target",
+        export_target_approved=True,
+        local_only=False,
+        provider_selected=provider_selected,
+        user_consented=user_consented,
+        data_range_disclosed=data_range_disclosed,
+    )
+
+    assert decision.allowed is False
+
+
+def test_network_operation_requires_normal_scope_and_all_consent_gates():
+    assert permission_for(
+        Capability.EXPORT,
+        "export.write_user_approved_target",
+        export_target_approved=True,
+        local_only=False,
+        provider_selected=True,
+        user_consented=True,
+        data_range_disclosed=True,
+    ).allowed is True
+    assert permission_for(
+        Capability.EXPORT,
+        "export.write_user_approved_target",
+        export_target_approved=False,
+        local_only=False,
+        provider_selected=True,
+        user_consented=True,
+        data_range_disclosed=True,
+    ).allowed is False
 
 
 @pytest.mark.parametrize(

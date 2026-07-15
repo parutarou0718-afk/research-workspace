@@ -122,6 +122,8 @@ def eligible_for_lease(
 ) -> bool:
     """Evaluate the acquisition predicate without acquiring a lease."""
 
+    if not _attempt_counts_valid(attempt_count, max_attempts, allow_zero=True):
+        return False
     return (
         status is TaskStatus.PENDING
         and (next_attempt_at is None or next_attempt_at <= now)
@@ -305,6 +307,8 @@ def permission_for(
         "source.read_declared": source_declared,
         "derived.write_selected_data_directory": selected_data_directory,
         "aggregate.read_approved": aggregate_approved,
+        "candidate_snapshot.write": aggregate_approved,
+        "evidence.write": aggregate_approved,
         "entities.read_selected": entities_selected,
         "export.write_user_approved_target": export_target_approved,
     }.get(action, True)
@@ -316,13 +320,24 @@ def permission_for(
             False, "submission transitions require a user request and audit"
         )
 
+    if not local_only and not (
+        provider_selected and user_consented and data_range_disclosed
+    ):
+        return PermissionDecision(False, "network access denied")
+
     return PermissionDecision(True, "allowed by scoped capability")
 
 
 def _validate_attempts(attempt: int, max_attempts: int, *, allow_zero: bool) -> None:
-    minimum = 0 if allow_zero else 1
-    if max_attempts < 1 or attempt < minimum:
+    if not _attempt_counts_valid(attempt, max_attempts, allow_zero=allow_zero):
         raise ValueError("attempt counts are outside the approved range")
+
+
+def _attempt_counts_valid(attempt: int, max_attempts: int, *, allow_zero: bool) -> bool:
+    if type(attempt) is not int or type(max_attempts) is not int:
+        return False
+    minimum = 0 if allow_zero else 1
+    return 1 <= max_attempts <= 10 and minimum <= attempt <= max_attempts
 
 
 def _immutable_error_details(

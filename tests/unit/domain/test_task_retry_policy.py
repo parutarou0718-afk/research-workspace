@@ -42,6 +42,27 @@ def test_only_due_pending_tasks_with_attempts_remaining_are_lease_eligible(
     ) is expected
 
 
+@pytest.mark.parametrize(
+    ("attempt_count", "max_attempts"),
+    [
+        (-1, 3),
+        (0, 0),
+        (0, 11),
+        (4, 3),
+        (0.5, 3),
+        (False, True),
+    ],
+)
+def test_invalid_attempt_counts_are_never_lease_eligible(attempt_count, max_attempts):
+    assert eligible_for_lease(
+        status=TaskStatus.PENDING,
+        next_attempt_at=None,
+        attempt_count=attempt_count,
+        max_attempts=max_attempts,
+        now=NOW,
+    ) is False
+
+
 def test_expired_lease_with_attempts_remaining_is_due_for_retry():
     decision = expired_lease_decision(attempt_count=2, max_attempts=3, now=NOW)
 
@@ -65,6 +86,28 @@ def test_expired_final_lease_is_terminalized():
     assert decision.error_code == "TASK_LEASE_EXHAUSTED"
     assert decision.retryable is False
     assert decision.retry_at is None
+
+
+@pytest.mark.parametrize(
+    ("attempt_count", "max_attempts"),
+    [
+        (-1, 3),
+        (1, 0),
+        (1, 11),
+        (4, 3),
+        (1.5, 3),
+        (False, True),
+    ],
+)
+def test_expired_lease_decision_rejects_invalid_attempt_counts(
+    attempt_count, max_attempts
+):
+    with pytest.raises(ValueError, match="attempt"):
+        expired_lease_decision(
+            attempt_count=attempt_count,
+            max_attempts=max_attempts,
+            now=NOW,
+        )
 
 
 def test_retryable_error_schedules_first_retry_with_base_delay():
@@ -149,6 +192,27 @@ def test_non_retryable_error_is_terminal_immediately():
     assert decision.retries_exhausted is False
     assert decision.error_code == "TASK_PERMISSION_DENIED"
     assert decision.error_details == {"action": "relation.confirm"}
+
+
+@pytest.mark.parametrize(
+    ("attempt", "max_attempts"),
+    [
+        (0, 3),
+        (1, 0),
+        (1, 11),
+        (4, 3),
+        (1.5, 3),
+        (False, True),
+    ],
+)
+def test_attempt_outcome_rejects_invalid_attempt_counts(attempt, max_attempts):
+    with pytest.raises(ValueError, match="attempt"):
+        decide_attempt_outcome(
+            attempt=attempt,
+            max_attempts=max_attempts,
+            retryable=False,
+            now=NOW,
+        )
 
 
 def test_retry_decisions_are_immutable():
