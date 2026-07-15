@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
+from types import MappingProxyType
 
 from research_workspace.domain.enums import (
     ActorType,
@@ -25,6 +26,21 @@ from research_workspace.domain.enums import (
     TaskType,
 )
 from research_workspace.domain.tasks import AttemptStatus, TaskStatus
+
+
+def _freeze_json(value: object) -> object:
+    if isinstance(value, Mapping):
+        return MappingProxyType({key: _freeze_json(item) for key, item in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_json(item) for item in value)
+    return value
+
+
+def _freeze_mapping_fields(instance: object, *field_names: str) -> None:
+    for field_name in field_names:
+        value = getattr(instance, field_name)
+        if value is not None:
+            object.__setattr__(instance, field_name, _freeze_json(value))
 
 
 @dataclass(frozen=True)
@@ -141,6 +157,9 @@ class EvidenceRef:
     quote_hash: str
     created_at: datetime
 
+    def __post_init__(self) -> None:
+        _freeze_mapping_fields(self, "locator_json")
+
 
 @dataclass(frozen=True)
 class EntityRelation:
@@ -190,6 +209,9 @@ class AuditLog:
     undo_of_audit_id: str | None
     created_at: datetime
 
+    def __post_init__(self) -> None:
+        _freeze_mapping_fields(self, "before_json", "after_json")
+
 
 @dataclass(frozen=True)
 class Task:
@@ -210,6 +232,9 @@ class Task:
     started_at: datetime | None
     finished_at: datetime | None
 
+    def __post_init__(self) -> None:
+        _freeze_mapping_fields(self, "payload_json", "result_json")
+
 
 @dataclass(frozen=True)
 class TaskAttempt:
@@ -222,6 +247,9 @@ class TaskAttempt:
     result_json: Mapping[str, object] | None
     started_at: datetime
     finished_at: datetime | None
+
+    def __post_init__(self) -> None:
+        _freeze_mapping_fields(self, "result_json")
 
 
 @dataclass(frozen=True)
@@ -239,6 +267,9 @@ class TaskEffect:
     created_at: datetime
     committed_at: datetime | None
 
+    def __post_init__(self) -> None:
+        _freeze_mapping_fields(self, "output_ref_json", "recovery_json")
+
 
 @dataclass(frozen=True)
 class DomainEvent:
@@ -252,3 +283,6 @@ class DomainEvent:
     correlation_id: str | None
     created_at: datetime
     processed_at: datetime | None
+
+    def __post_init__(self) -> None:
+        _freeze_mapping_fields(self, "payload_json")

@@ -71,9 +71,49 @@ def test_each_relation_rejects_an_unapproved_endpoint_pair(relation_type):
         pair for pair in itertools.product(all_types, repeat=2)
         if pair not in ALLOWED[relation_type]
     )
+    expected = (
+        ("unknown relation entity type: Task",)
+        if relation_type == "related_to"
+        else (f"{invalid[0]} -> {invalid[1]} is not allowed for {relation_type}",)
+    )
     assert validate_relation_endpoints(
         relation_type, invalid[0], "source", invalid[1], "target"
-    ) == (f"{invalid[0]} -> {invalid[1]} is not allowed for {relation_type}",)
+    ) == expected
+
+
+@pytest.mark.parametrize("relation_type", sorted(ALLOWED))
+def test_complete_endpoint_matrix_accepts_if_and_only_if_approved(relation_type):
+    all_types = tuple(item.value for item in RelationEntityType)
+    for source_type, target_type in itertools.product(all_types, repeat=2):
+        errors = validate_relation_endpoints(
+            relation_type, source_type, "source-id", target_type, "target-id"
+        )
+        assert (errors == ()) is ((source_type, target_type) in ALLOWED[relation_type])
+
+
+@pytest.mark.parametrize(
+    ("relation_type", "source_type", "target_type", "expected"),
+    [
+        ("invented", "Idea", "Paper", ("unknown relation type: invented",)),
+        ("supports", "Task", "Paper", ("unknown relation entity type: Task",)),
+        ("supports", "Idea", "AuditLog", ("unknown relation entity type: AuditLog",)),
+    ],
+)
+def test_unknown_relation_and_entity_types_fail_closed(
+    relation_type, source_type, target_type, expected
+):
+    assert validate_relation_endpoints(
+        relation_type, source_type, "source", target_type, "target"
+    ) == expected
+
+
+def test_key_and_normalization_reject_unknown_raw_types():
+    with pytest.raises(ValueError, match="unknown relation type"):
+        relation_key("invented", "Idea", "a", "Paper", "b")
+    with pytest.raises(ValueError, match="unknown relation entity type"):
+        normalize_relation_endpoints("supports", "Task", "a", "Paper", "b")
+    with pytest.raises(ValueError, match="unknown relation type"):
+        would_create_relation_cycle([], ("invented", "Paper", "a", "Paper", "b"))
 
 
 def test_symmetric_relation_has_one_canonical_key():
@@ -118,6 +158,56 @@ def test_confirmation_transitions_are_user_only_and_rejected_requires_explicit_r
     ) == ()
 
 
+@pytest.mark.parametrize(
+    ("actor", "provenance", "new_state", "allowed"),
+    [
+        (actor, provenance, state,
+         state == "candidate" or (actor == "user" and provenance == "manual" and state == "confirmed"))
+        for actor, provenance, state in itertools.product(
+            ("user", "system", "task_executor", "agent"),
+            ("manual", "rule", "import", "ai"),
+            ("candidate", "confirmed", "rejected"),
+        )
+    ],
+)
+def test_initial_confirmation_state_matrix(actor, provenance, new_state, allowed):
+    assert (validate_confirmation_transition(
+        actor, None, new_state, provenance_type=provenance
+    ) == ()) is allowed
+
+
+def test_confirmation_state_machine_rejects_shortcuts_and_allows_user_retraction():
+    assert validate_confirmation_transition("user", "confirmed", "rejected") == ()
+    assert validate_confirmation_transition("agent", "confirmed", "rejected") == (
+        "only a user may retract a confirmed relation",
+    )
+    assert validate_confirmation_transition("user", "confirmed", "candidate") == (
+        "confirmed relation cannot return to candidate",
+    )
+    assert validate_confirmation_transition(
+        "user", "rejected", "confirmed", reconsider=True
+    ) == ("rejected relation cannot transition directly to confirmed",)
+    for state in ("candidate", "confirmed", "rejected"):
+        assert validate_confirmation_transition("system", state, state) == ()
+
+
+@pytest.mark.parametrize(
+    ("actor", "old_state", "new_state", "provenance", "expected"),
+    [
+        ("robot", None, "candidate", "manual", ("unknown actor type: robot",)),
+        ("user", None, "maybe", "manual", ("unknown confirmation state: maybe",)),
+        ("user", "maybe", "candidate", "manual", ("unknown confirmation state: maybe",)),
+        ("user", None, "candidate", "guess", ("unknown provenance type: guess",)),
+    ],
+)
+def test_confirmation_unknown_values_fail_closed(
+    actor, old_state, new_state, provenance, expected
+):
+    assert validate_confirmation_transition(
+        actor, old_state, new_state, provenance_type=provenance
+    ) == expected
+
+
 def test_non_manual_first_observations_start_as_candidates():
     for provenance in ("rule", "import", "ai"):
         assert validate_confirmation_transition(
@@ -153,6 +243,15 @@ def test_task_and_agent_observations_always_require_origin_task():
     assert validate_relation_provenance(
         "manual", actor_type="task_executor", origin_task_id="task"
     ) == ()
+
+
+def test_provenance_unknown_actor_and_type_fail_closed():
+    assert validate_relation_provenance("guess") == (
+        "unknown provenance type: guess",
+    )
+    assert validate_relation_provenance("manual", actor_type="robot") == (
+        "unknown actor type: robot",
+    )
 
 
 def test_split_and_merged_from_share_one_union_cycle_graph():

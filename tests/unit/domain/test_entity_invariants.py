@@ -1,10 +1,13 @@
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, fields
 from datetime import UTC, datetime
+import json
+from pathlib import Path
 
 import pytest
 
 from research_workspace.domain.entities import (
     DomainEvent,
+    EvidenceRef,
     PaperVersion,
     Submission,
     Task,
@@ -12,12 +15,14 @@ from research_workspace.domain.entities import (
     TaskEffect,
 )
 from research_workspace.domain.enums import (
+    EvidenceTargetType,
     EventType,
     PaperStatus,
     SubmissionStatus,
     TaskEffectStatus,
     TaskType,
 )
+from research_workspace.domain.tasks import TaskStatus
 from research_workspace.domain.relations import (
     cached_relation_confidence,
     validate_current_version_ownership,
@@ -30,6 +35,17 @@ from research_workspace.domain.relations import (
 
 
 NOW = datetime(2026, 7, 16, tzinfo=UTC)
+
+
+def test_domain_model_entity_fields_match_every_frozen_dataclass_exactly():
+    contract_path = Path(__file__).parents[3] / "contracts" / "domain_model.json"
+    contract = json.loads(contract_path.read_text(encoding="utf-8"))
+    from research_workspace.domain import entities
+
+    assert {
+        name: [field.name for field in fields(getattr(entities, name))]
+        for name in contract["entities"]
+    } == contract["entities"]
 
 
 def test_closed_status_enums_match_the_approved_values():
@@ -58,6 +74,36 @@ def test_operational_records_are_dormant_frozen_entity_snapshots():
     assert len(EventType) == 12
 
 
+def test_mapping_fields_are_detached_and_recursively_immutable():
+    locator = {"heading_path": ["Intro"], "metadata": {"rank": 1}}
+    evidence = EvidenceRef(
+        "evidence", EvidenceTargetType.PAPER, "paper", "document", None,
+        None, None, None, None, None, None, locator, "hash", NOW,
+    )
+    locator["heading_path"].append("Mutated")
+    locator["metadata"]["rank"] = 2
+    assert evidence.locator_json == {
+        "heading_path": ("Intro",), "metadata": {"rank": 1}
+    }
+    with pytest.raises(TypeError):
+        evidence.locator_json["new"] = "value"
+    with pytest.raises(TypeError):
+        evidence.locator_json["metadata"]["rank"] = 3
+
+
+def test_all_json_snapshot_fields_detach_nested_caller_values():
+    payload = {"nested": [{"value": 1}]}
+    task = Task(
+        "task", TaskType.IMPORT_DOCUMENT, TaskStatus.PENDING, "key", "f" * 64,
+        payload, payload, 0, 3, None, None, None, 0, NOW, None, None,
+    )
+    payload["nested"][0]["value"] = 9
+    assert task.payload_json["nested"][0]["value"] == 1
+    assert task.result_json["nested"][0]["value"] == 1
+    with pytest.raises(TypeError):
+        task.payload_json["nested"][0]["value"] = 2
+
+
 @pytest.mark.parametrize(
     ("status", "requires_timestamp"),
     [(status, status in {"submitted", "editorial_review", "external_review", "revision",
@@ -70,6 +116,12 @@ def test_submission_timestamp_requirement_matches_each_state(status, requires_ti
     assert validate_submission_timing(status, NOW) == ()
 
 
+def test_unknown_submission_status_fails_closed():
+    assert validate_submission_timing("invented", None) == (
+        "unknown submission status: invented",
+    )
+
+
 def test_submission_requires_timestamp_for_review_state():
     assert validate_submission_timing("external_review", None) == (
         "submitted_at is required for external_review",
@@ -77,24 +129,69 @@ def test_submission_requires_timestamp_for_review_state():
 
 
 def test_current_version_must_belong_to_paper_and_be_current():
-    assert validate_current_version_ownership("paper-a", "paper-a", True) == ()
-    assert validate_current_version_ownership("paper-a", "paper-b", True) == (
+    assert validate_current_version_ownership("paper-a", None) == ()
+    assert validate_current_version_ownership(
+        "paper-a", "version-a", version_resolved=False
+    ) == ("current version could not be resolved",)
+    assert validate_current_version_ownership(
+        "paper-a", "version-a", version_resolved=True, version_id="version-b",
+        version_paper_id="paper-a", version_is_current=True,
+    ) == ("resolved current version does not match current_version_id",)
+    assert validate_current_version_ownership(
+        "paper-a", "version-a", version_resolved=True, version_id="version-a",
+        version_paper_id="paper-b", version_is_current=True,
+    ) == (
         "current version must belong to the paper",
     )
-    assert validate_current_version_ownership("paper-a", "paper-a", False) == (
+    assert validate_current_version_ownership(
+        "paper-a", "version-a", version_resolved=True, version_id="version-a",
+        version_paper_id="paper-a", version_is_current=False,
+    ) == (
         "current version must have is_current=true",
     )
+    assert validate_current_version_ownership(
+        "paper-a", "version-a", version_resolved=True, version_id="version-a",
+        version_paper_id="paper-a", version_is_current=True,
+    ) == ()
 
 
 def test_parent_and_submission_versions_must_belong_to_their_paper():
-    assert validate_parent_version_ownership("paper-a", "paper-a") == ()
-    assert validate_parent_version_ownership("paper-a", "paper-b") == (
+    assert validate_parent_version_ownership("paper-a", None) == ()
+    assert validate_parent_version_ownership(
+        "paper-a", "parent-a", parent_resolved=False
+    ) == ("parent version could not be resolved",)
+    assert validate_parent_version_ownership(
+        "paper-a", "parent-a", parent_resolved=True,
+        parent_id="parent-b", parent_paper_id="paper-a",
+    ) == ("resolved parent version does not match parent_version_id",)
+    assert validate_parent_version_ownership(
+        "paper-a", "parent-a", parent_resolved=True,
+        parent_id="parent-a", parent_paper_id="paper-b",
+    ) == (
         "parent version must belong to the same paper",
     )
-    assert validate_submission_version_ownership("paper-a", "paper-a") == ()
-    assert validate_submission_version_ownership("paper-a", "paper-b") == (
+    assert validate_parent_version_ownership(
+        "paper-a", "parent-a", parent_resolved=True,
+        parent_id="parent-a", parent_paper_id="paper-a",
+    ) == ()
+    assert validate_submission_version_ownership("paper-a", None) == ()
+    assert validate_submission_version_ownership(
+        "paper-a", "version-a", version_resolved=False
+    ) == ("active submission version could not be resolved",)
+    assert validate_submission_version_ownership(
+        "paper-a", "version-a", version_resolved=True,
+        version_id="version-b", version_paper_id="paper-a",
+    ) == ("resolved active version does not match active_version_id",)
+    assert validate_submission_version_ownership(
+        "paper-a", "version-a", version_resolved=True,
+        version_id="version-a", version_paper_id="paper-b",
+    ) == (
         "active submission version must belong to the submission paper",
     )
+    assert validate_submission_version_ownership(
+        "paper-a", "version-a", version_resolved=True,
+        version_id="version-a", version_paper_id="paper-a",
+    ) == ()
 
 
 def test_observation_keys_are_append_only_idempotency_keys():
