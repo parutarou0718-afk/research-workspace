@@ -1,7 +1,7 @@
 # Research Workspace v0.1 Foundation Design
 
 **Date:** 2026-07-16
-**Status:** Revised after written-spec review; implementation remains blocked pending approval
+**Status:** Approved for v0.1-foundation implementation on 2026-07-16
 **Target:** Windows 10/11 local desktop application with a future closed-source commercial distribution path
 
 ## 1. Objective
