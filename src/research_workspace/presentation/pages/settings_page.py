@@ -14,7 +14,10 @@ from PySide6.QtWidgets import (
 from research_workspace.presentation import load_ui_resource, require_child
 
 
+# Caller/packager contract: this process code requests a fresh application launch.
 RESTART_EXIT_CODE = 100
+
+RESTART_CODE_PROPERTY = "researchWorkspaceRestartExitCode"
 
 
 class SettingsPage:
@@ -67,13 +70,22 @@ class SettingsPage:
         resolved = selected.expanduser().resolve()
         self._selected_directory = resolved
         self.resolved_path_line_edit.setText(str(resolved))
-        self.workspace_status_label.setText(
-            "现有 Research Workspace 工作台"
-            if (resolved / "research_workspace.db").is_file()
-            else "新的 Research Workspace 工作台（验证后初始化）"
+        inspection_method = getattr(
+            self.services.change_data_directory, "inspect", None
         )
+        inspection = inspection_method(resolved) if inspection_method is not None else None
+        kind = inspection.kind if inspection is not None else (
+            "existing" if (resolved / "research_workspace.db").is_file() else "new"
+        )
+        if kind == "existing":
+            status = "现有 Research Workspace 工作台"
+        elif kind == "new":
+            status = "新的 Research Workspace 工作台（验证后初始化）"
+        else:
+            status = f"无效的 Research Workspace 工作台：{inspection.reason}"
+        self.workspace_status_label.setText(status)
         self.error_label.clear()
-        self.confirm_button.setEnabled(True)
+        self.confirm_button.setEnabled(kind != "invalid")
         self.pending_status_label.clear()
         self.restart_now_button.setEnabled(False)
         self.later_button.setEnabled(False)
@@ -93,13 +105,16 @@ class SettingsPage:
             return
         self.error_label.clear()
         self.pending_status_label.setText(
-            "已验证。重启应用后切换，当前目录保持不变。"
+            "已验证。重启应用后切换；原目录保持不变。"
         )
         self.restart_now_button.setEnabled(True)
         self.later_button.setEnabled(True)
 
     def restart_now(self) -> None:
-        QApplication.exit(RESTART_EXIT_CODE)
+        application = QApplication.instance()
+        if application is not None:
+            application.setProperty(RESTART_CODE_PROPERTY, RESTART_EXIT_CODE)
+        QApplication.quit()
 
     def later(self) -> None:
         self.restart_now_button.setEnabled(False)

@@ -58,6 +58,12 @@ class MainWindow(QMainWindow):
             button.style().unpolish(button)
             button.style().polish(button)
 
+    def closeEvent(self, event) -> None:
+        close_services = getattr(self.services, "close", None)
+        if close_services is not None:
+            close_services()
+        super().closeEvent(event)
+
 
 def create_main_window(services) -> MainWindow:
     return MainWindow(services)

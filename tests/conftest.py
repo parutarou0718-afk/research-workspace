@@ -26,6 +26,26 @@ def isolated_app_dirs(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
     monkeypatch.setenv("XDG_DATA_HOME", str(data_home))
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from research_workspace import bootstrap
+    from research_workspace.application.services.initialize_application import (
+        InitializeApplication,
+    )
+    from research_workspace.infrastructure.config.json_config_store import JsonConfigStore
+
+    config_path = config_home / "config.json"
+    default_data_path = data_home / "ResearchWorkspace"
+    monkeypatch.setattr(
+        bootstrap,
+        "JsonConfigStore",
+        lambda path=None: JsonConfigStore(path or config_path),
+    )
+    monkeypatch.setattr(
+        bootstrap,
+        "InitializeApplication",
+        lambda store, **kwargs: InitializeApplication(
+            store, default_data_directory=lambda: default_data_path, **kwargs
+        ),
+    )
     return {"config": config_home, "data": data_home, "root": tmp_path}
 
 
