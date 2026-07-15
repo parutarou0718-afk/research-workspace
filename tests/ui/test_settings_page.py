@@ -1,4 +1,5 @@
 from pathlib import Path
+import sqlite3
 from types import SimpleNamespace
 
 from PySide6.QtCore import Qt
@@ -29,28 +30,17 @@ def _success(old: Path, selected: Path):
     return Result.success(AppConfig("1.0", old.resolve(), selected.resolve(), "INFO"))
 
 
-def test_selection_displays_resolved_path_and_existing_or_new_status(qtbot, tmp_path, monkeypatch):
+def test_selection_uses_production_inspection_for_existing_new_and_invalid(qtbot, tmp_path):
     selected = tmp_path / "selected" / ".." / "selected"
     resolved = selected.resolve()
     resolved.mkdir(parents=True)
     bootstrap._run_migrations(resolved / "research_workspace.db")
-    service = ChangeDirectoryStub(_success(tmp_path / "old", resolved))
-    controller = SettingsPage(SimpleNamespace(change_data_directory=service))
-    qtbot.addWidget(controller.widget)
-    monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *args, **kwargs: str(selected))
-
-    qtbot.mouseClick(controller.choose_button, Qt.MouseButton.LeftButton)
-
-    assert controller.resolved_path_line_edit.text() == str(resolved)
-    assert controller.workspace_status_label.text() == "现有 Research Workspace 工作台"
-    assert service.calls == []
-
-
-def test_selection_classifies_corrupt_database_as_invalid(qtbot, tmp_path):
-    selected = (tmp_path / "corrupt").resolve()
-    selected.mkdir()
-    (selected / "research_workspace.db").write_bytes(b"not sqlite")
-    assert hasattr(bootstrap, "WorkspaceDataDirectoryService")
+    new_directory = (tmp_path / "new").resolve()
+    invalid_directory = (tmp_path / "invalid").resolve()
+    invalid_directory.mkdir()
+    with sqlite3.connect(invalid_directory / "research_workspace.db") as connection:
+        connection.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        connection.execute("INSERT INTO alembic_version VALUES ('0001')")
     service = bootstrap.WorkspaceDataDirectoryService(
         bootstrap.JsonConfigStore(tmp_path / "config.json")
     )
@@ -59,6 +49,13 @@ def test_selection_classifies_corrupt_database_as_invalid(qtbot, tmp_path):
 
     controller.select_directory(selected)
 
+    assert controller.resolved_path_line_edit.text() == str(resolved)
+    assert controller.workspace_status_label.text() == "现有 Research Workspace 工作台"
+    assert controller.confirm_button.isEnabled()
+    controller.select_directory(new_directory)
+    assert controller.workspace_status_label.text().startswith("新的")
+    assert controller.confirm_button.isEnabled()
+    controller.select_directory(invalid_directory)
     assert controller.workspace_status_label.text().startswith("无效")
     assert not controller.confirm_button.isEnabled()
 

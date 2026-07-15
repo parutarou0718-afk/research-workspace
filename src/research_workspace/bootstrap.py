@@ -21,6 +21,8 @@ from research_workspace.application.services.change_data_directory import (
 )
 from research_workspace.application.services.initialize_application import InitializeApplication
 from research_workspace.infrastructure.config.json_config_store import JsonConfigStore
+from research_workspace.infrastructure.db.base import Base
+import research_workspace.infrastructure.db.models  # noqa: F401
 from research_workspace.infrastructure.db.repositories import SqlOverviewRepository
 from research_workspace.infrastructure.db.seed import seed_foundation_data
 from research_workspace.infrastructure.db.session import create_engine_for_path, session_factory
@@ -33,6 +35,7 @@ from research_workspace.shared.result import Result
 
 _ROOT = Path(__file__).resolve().parents[2]
 _DATA_SUBDIRECTORIES = ("logs", "derived", "exports", "backups")
+_EXPECTED_WORKSPACE_TABLES = frozenset((*Base.metadata.tables, "alembic_version"))
 
 
 @dataclass(slots=True)
@@ -78,7 +81,18 @@ class WorkspaceDataDirectoryService:
                 version = connection.execute(
                     "SELECT version_num FROM alembic_version"
                 ).fetchone()
-            if integrity == ("ok",) and version == ("0001",):
+                inventory = frozenset(
+                    row[0]
+                    for row in connection.execute(
+                        "SELECT name FROM sqlite_master "
+                        "WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+                    )
+                )
+            if (
+                integrity == ("ok",)
+                and version == ("0001",)
+                and inventory == _EXPECTED_WORKSPACE_TABLES
+            ):
                 return WorkspaceInspection("existing", resolved)
         except (OSError, sqlite3.Error, ValueError):
             pass
