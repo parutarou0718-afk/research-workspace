@@ -3,7 +3,11 @@ from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Connection
 
-from test_schema_contract import _assert_exact_constraints, _assert_exact_schema
+from test_schema_contract import (
+    _assert_exact_constraints,
+    _assert_exact_schema,
+    _assert_source_document_path_uniqueness_is_nocase,
+)
 
 
 def _config(database_path):
@@ -36,6 +40,15 @@ def test_upgrade_head_is_repeatable(database_path):
         after = connection.execute(text("SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY type, name")).all()
     engine.dispose()
     assert after == before
+
+
+def test_migrated_schema_path_uniqueness_is_nocase(database_path):
+    command.upgrade(_config(database_path), "head")
+    engine = create_engine(f"sqlite:///{database_path.as_posix()}")
+    try:
+        _assert_source_document_path_uniqueness_is_nocase(engine)
+    finally:
+        engine.dispose()
 
 
 def test_failed_migration_rolls_back_all_domain_ddl_and_clean_retry_succeeds(database_path, monkeypatch):

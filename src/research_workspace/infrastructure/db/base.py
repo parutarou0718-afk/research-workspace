@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import re
 from uuid import UUID
 
 from sqlalchemy import MetaData, Text
@@ -17,6 +18,10 @@ NAMING_CONVENTION = {
     "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
     "pk": "pk_%(table_name)s",
 }
+
+_UTC_RFC3339_PATTERN = re.compile(
+    r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z"
+)
 
 
 class UUIDText(TypeDecorator[UUID]):
@@ -40,8 +45,8 @@ class UTCDateTime(TypeDecorator[datetime]):
         if value is None:
             return value
         if isinstance(value, str):
-            if not value.endswith("Z"):
-                raise ValueError("timestamps must be canonical UTC values ending in Z")
+            if _UTC_RFC3339_PATTERN.fullmatch(value) is None:
+                raise ValueError("timestamps must use canonical RFC 3339 UTC syntax")
             try:
                 parsed = datetime.fromisoformat(value[:-1] + "+00:00")
             except ValueError as exc:

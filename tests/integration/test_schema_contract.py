@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped
+from sqlalchemy.orm import Session
 
 from research_workspace.infrastructure.db.base import Base, UTCDateTime
 import research_workspace.infrastructure.db.models  # noqa: F401
@@ -276,16 +277,21 @@ def _assert_exact_constraints(inspector):
         assert indexes == EXPECTED_INDEX_DETAILS[table]
 
 
-def test_source_document_path_uniqueness_is_nocase(engine, session):
+def test_source_document_path_uniqueness_is_nocase(engine):
     Base.metadata.create_all(engine)
+    _assert_source_document_path_uniqueness_is_nocase(engine)
+
+
+def _assert_source_document_path_uniqueness_is_nocase(engine):
     now = datetime(2026, 6, 1, tzinfo=timezone.utc)
     common = dict(sha256="a" * 64, mime_type="application/pdf", size_bytes=1,
         modified_at=now, imported_at=now, read_only=True, missing_at=None)
-    session.add(SourceDocumentModel(id="00000000-0000-0000-0000-000000000001", path="C:/Research/Paper.PDF", **common))
-    session.flush()
-    session.add(SourceDocumentModel(id="00000000-0000-0000-0000-000000000002", path="c:/research/paper.pdf", **common))
-    with pytest.raises(IntegrityError):
+    with Session(engine) as session:
+        session.add(SourceDocumentModel(id="00000000-0000-0000-0000-000000000001", path="C:/Research/Paper.PDF", **common))
         session.flush()
+        session.add(SourceDocumentModel(id="00000000-0000-0000-0000-000000000002", path="c:/research/paper.pdf", **common))
+        with pytest.raises(IntegrityError):
+            session.flush()
 
 
 def test_utc_datetime_rejects_noncanonical_values():
@@ -297,6 +303,21 @@ def test_utc_datetime_rejects_noncanonical_values():
     with pytest.raises(ValueError):
         storage.process_bind_param(datetime(2026, 6, 1, tzinfo=timezone(timedelta(hours=9))), None)
     assert storage.process_bind_param("2026-06-01T00:00:00Z", None) == "2026-06-01T00:00:00Z"
+
+
+@pytest.mark.parametrize("value", [
+    "2026-W23-1T00:00:00Z",
+    "2026-06-01T00:00Z",
+    "2026-06-01X00:00:00Z",
+])
+def test_utc_datetime_rejects_noncanonical_rfc3339_shapes(value):
+    with pytest.raises(ValueError):
+        UTCDateTime().process_bind_param(value, None)
+
+
+def test_utc_datetime_accepts_fractional_seconds():
+    value = "2026-06-01T00:00:00.123456Z"
+    assert UTCDateTime().process_bind_param(value, None) == value
 
 
 def test_confidence_mappings_use_decimal_annotations():
