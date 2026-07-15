@@ -16,6 +16,19 @@ ROOT = Path(__file__).resolve().parents[1]
 CONTRACTS = ROOT / "contracts"
 
 
+@pytest.fixture
+def isolated_app_dirs(tmp_path, monkeypatch):
+    """Keep application configuration and data out of real per-user locations."""
+    config_home = tmp_path / "config-home"
+    data_home = tmp_path / "data-home"
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local-app-data"))
+    monkeypatch.setenv("APPDATA", str(tmp_path / "roaming-app-data"))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
+    monkeypatch.setenv("XDG_DATA_HOME", str(data_home))
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    return {"config": config_home, "data": data_home, "root": tmp_path}
+
+
 def validate_contract(schema_name: str, value: object) -> None:
     schema = json.loads((CONTRACTS / schema_name).read_text(encoding="utf-8"))
     Draft202012Validator(schema, format_checker=FormatChecker()).validate(value)

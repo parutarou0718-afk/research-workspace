@@ -1,8 +1,20 @@
 """Settings page controller."""
 
-from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton, QScrollArea
+from pathlib import Path
+
+from PySide6.QtWidgets import (
+    QApplication,
+    QFileDialog,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QScrollArea,
+)
 
 from research_workspace.presentation import load_ui_resource, require_child
+
+
+RESTART_EXIT_CODE = 100
 
 
 class SettingsPage:
@@ -21,6 +33,9 @@ class SettingsPage:
         self.workspace_status_label = require_child(
             self.widget, QLabel, "workspaceStatusLabel"
         )
+        self.error_label = require_child(
+            self.widget, QLabel, "dataDirectoryErrorLabel"
+        )
         self.confirm_button = require_child(
             self.widget, QPushButton, "confirmDataDirectoryButton"
         )
@@ -31,3 +46,61 @@ class SettingsPage:
             self.widget, QPushButton, "restartNowButton"
         )
         self.later_button = require_child(self.widget, QPushButton, "laterButton")
+        self._selected_directory: Path | None = None
+        self.confirm_button.setEnabled(False)
+        self.pending_status_label.clear()
+        self.restart_now_button.setEnabled(False)
+        self.later_button.setEnabled(False)
+        self.choose_button.clicked.connect(self.choose_directory)
+        self.confirm_button.clicked.connect(self.confirm_directory)
+        self.restart_now_button.clicked.connect(self.restart_now)
+        self.later_button.clicked.connect(self.later)
+
+    def choose_directory(self) -> None:
+        selected = QFileDialog.getExistingDirectory(
+            self.widget, "选择数据目录", self.resolved_path_line_edit.text()
+        )
+        if selected:
+            self.select_directory(Path(selected))
+
+    def select_directory(self, selected: Path) -> None:
+        resolved = selected.expanduser().resolve()
+        self._selected_directory = resolved
+        self.resolved_path_line_edit.setText(str(resolved))
+        self.workspace_status_label.setText(
+            "现有 Research Workspace 工作台"
+            if (resolved / "research_workspace.db").is_file()
+            else "新的 Research Workspace 工作台（验证后初始化）"
+        )
+        self.error_label.clear()
+        self.confirm_button.setEnabled(True)
+        self.pending_status_label.clear()
+        self.restart_now_button.setEnabled(False)
+        self.later_button.setEnabled(False)
+
+    def confirm_directory(self) -> None:
+        if self._selected_directory is None:
+            return
+        service = getattr(self.services, "change_data_directory", None)
+        if service is None:
+            return
+        result = service.execute(self._selected_directory)
+        if not result.ok:
+            self.error_label.setText(result.error.message)
+            self.pending_status_label.clear()
+            self.restart_now_button.setEnabled(False)
+            self.later_button.setEnabled(False)
+            return
+        self.error_label.clear()
+        self.pending_status_label.setText(
+            "已验证。重启应用后切换，当前目录保持不变。"
+        )
+        self.restart_now_button.setEnabled(True)
+        self.later_button.setEnabled(True)
+
+    def restart_now(self) -> None:
+        QApplication.exit(RESTART_EXIT_CODE)
+
+    def later(self) -> None:
+        self.restart_now_button.setEnabled(False)
+        self.later_button.setEnabled(False)

@@ -26,6 +26,7 @@ PAGE_TYPES = {
 class MainWindow(QMainWindow):
     def __init__(self, services):
         super().__init__()
+        self.services = services
         shell = load_ui_resource("main_window.ui")
         if not isinstance(shell, QMainWindow):
             raise RuntimeError("main_window.ui root must be a QMainWindow")
@@ -56,3 +57,7 @@ class MainWindow(QMainWindow):
             button.setProperty("active", key == page_key)
             button.style().unpolish(button)
             button.style().polish(button)
+
+
+def create_main_window(services) -> MainWindow:
+    return MainWindow(services)
