@@ -168,3 +168,52 @@ def test_tuple_under_safe_context_key_is_normalized_to_json_array(tmp_path):
 
     text = (tmp_path / "research_workspace.log").read_text(encoding="utf-8")
     assert '"category": ["config", "save"]' in text
+
+
+def test_foundation_seed_template_maps_to_safe_category_without_rendering_argument(tmp_path):
+    logger = configure_logging(tmp_path, "INFO", logger_name="privacy-seed")
+    logger.info("Foundation seed manifest initialized: %s", "SECRET-SEED-ARGUMENT")
+
+    text = (tmp_path / "research_workspace.log").read_text(encoding="utf-8")
+    assert "foundation_seed_initialized" in text
+    assert "SECRET-SEED-ARGUMENT" not in text
+    assert "Foundation seed manifest initialized" not in text
+
+
+def test_self_referential_mapping_is_redacted_without_dropping_log(tmp_path):
+    context = {"operation": "save"}
+    context["technical_context"] = context
+    logger = configure_logging(tmp_path, "INFO", logger_name="privacy-map-cycle")
+
+    logger.error("failure", extra={"technical_context": context})
+
+    text = (tmp_path / "research_workspace.log").read_text(encoding="utf-8")
+    assert "failure" in text
+    assert "save" in text
+    assert "[REDACTED]" in text
+
+
+def test_self_referential_sequence_is_redacted_without_dropping_log(tmp_path):
+    context = ["config"]
+    context.append(context)
+    logger = configure_logging(tmp_path, "INFO", logger_name="privacy-sequence-cycle")
+
+    logger.error("failure", extra={"category": context})
+
+    text = (tmp_path / "research_workspace.log").read_text(encoding="utf-8")
+    assert "failure" in text
+    assert "config" in text
+    assert "[REDACTED]" in text
+
+
+def test_overly_deep_safe_context_is_redacted_without_dropping_log(tmp_path):
+    context = ["leaf"]
+    for _ in range(32):
+        context = [context]
+    logger = configure_logging(tmp_path, "INFO", logger_name="privacy-depth")
+
+    logger.error("failure", extra={"category": context})
+
+    text = (tmp_path / "research_workspace.log").read_text(encoding="utf-8")
+    assert "failure" in text
+    assert "[REDACTED]" in text

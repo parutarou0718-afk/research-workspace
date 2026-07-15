@@ -13,6 +13,9 @@ from research_workspace.application.ports.config_store import LOG_LEVELS
 _SAFE_MESSAGES = frozenset(
     {"configuration failed", "failure", "processing failed", "recorded"}
 )
+_SAFE_FORMATTED_MESSAGES = {
+    "Foundation seed manifest initialized: %s": "foundation_seed_initialized"
+}
 _SAFE_CONTEXT_KEYS = frozenset(
     {
         "attempt",
@@ -29,6 +32,7 @@ _SAFE_CONTEXT_KEYS = frozenset(
 )
 _SAFE_REGION_KEYS = frozenset({"name", "zone"})
 _SAFE_TOKEN = re.compile(r"[A-Za-z0-9_.:/-]{1,128}\Z")
+_MAX_CONTEXT_DEPTH = 8
 _STANDARD_RECORD_KEYS = frozenset(logging.makeLogRecord({}).__dict__) | {
     "message",
     "asctime",
@@ -37,13 +41,12 @@ _STANDARD_RECORD_KEYS = frozenset(logging.makeLogRecord({}).__dict__) | {
 
 class PrivacyFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
-        message = (
-            record.msg
-            if isinstance(record.msg, str)
-            and not record.args
-            and record.msg in _SAFE_MESSAGES
-            else "unexpected_error"
-        )
+        if isinstance(record.msg, str) and record.msg in _SAFE_FORMATTED_MESSAGES:
+            message = _SAFE_FORMATTED_MESSAGES[record.msg]
+        elif isinstance(record.msg, str) and not record.args and record.msg in _SAFE_MESSAGES:
+            message = record.msg
+        else:
+            message = "unexpected_error"
         redacted = False
         for key, value in tuple(record.__dict__.items()):
             if key not in _STANDARD_RECORD_KEYS:
@@ -51,7 +54,9 @@ class PrivacyFilter(logging.Filter):
                     del record.__dict__[key]
                     redacted = True
                 else:
-                    sanitized, item_redacted = _sanitize_context(key, value)
+                    sanitized, item_redacted = _sanitize_context(
+                        key, value, depth=0, seen=frozenset()
+                    )
                     setattr(record, key, sanitized)
                     redacted = redacted or item_redacted
         if redacted:
@@ -74,38 +79,52 @@ class PrivacyFilter(logging.Filter):
         return True
 
 
-def _sanitize_context(key: str, value):
+def _sanitize_context(key: str, value, *, depth: int, seen: frozenset[int]):
     if key == "technical_context":
         if not isinstance(value, Mapping):
             return "[REDACTED]", True
+        if depth >= _MAX_CONTEXT_DEPTH or id(value) in seen:
+            return "[REDACTED]", True
+        nested_seen = seen | {id(value)}
         sanitized = {}
         redacted = False
         for nested_key, nested in value.items():
-            nested_key = str(nested_key)
+            if not isinstance(nested_key, str):
+                redacted = True
+                continue
             if nested_key not in _SAFE_CONTEXT_KEYS:
                 redacted = True
                 continue
-            sanitized_value, item_redacted = _sanitize_context(nested_key, nested)
+            sanitized_value, item_redacted = _sanitize_context(
+                nested_key, nested, depth=depth + 1, seen=nested_seen
+            )
             sanitized[nested_key] = sanitized_value
             redacted = redacted or item_redacted
         return sanitized, redacted
     if key == "region":
         if isinstance(value, Mapping):
+            if depth >= _MAX_CONTEXT_DEPTH or id(value) in seen:
+                return "[REDACTED]", True
+            nested_seen = seen | {id(value)}
             sanitized = {}
             redacted = False
             for nested_key, nested in value.items():
-                nested_key = str(nested_key)
+                if not isinstance(nested_key, str):
+                    redacted = True
+                    continue
                 if nested_key not in _SAFE_REGION_KEYS:
                     redacted = True
                     continue
-                sanitized_value, item_redacted = _sanitize_safe_value(nested)
+                sanitized_value, item_redacted = _sanitize_safe_value(
+                    nested, depth=depth + 1, seen=nested_seen
+                )
                 sanitized[nested_key] = sanitized_value
                 redacted = redacted or item_redacted
             return sanitized, redacted
-    return _sanitize_safe_value(value)
+    return _sanitize_safe_value(value, depth=depth, seen=seen)
 
 
-def _sanitize_safe_value(value):
+def _sanitize_safe_value(value, *, depth: int, seen: frozenset[int]):
     if value is None or isinstance(value, (bool, int)):
         return value, False
     if isinstance(value, float):
@@ -115,10 +134,15 @@ def _sanitize_safe_value(value):
     if isinstance(value, str) and _SAFE_TOKEN.fullmatch(value):
         return value, False
     if isinstance(value, (list, tuple)):
+        if depth >= _MAX_CONTEXT_DEPTH or id(value) in seen:
+            return "[REDACTED]", True
+        nested_seen = seen | {id(value)}
         sanitized = []
         redacted = False
         for item in value:
-            sanitized_item, item_redacted = _sanitize_safe_value(item)
+            sanitized_item, item_redacted = _sanitize_safe_value(
+                item, depth=depth + 1, seen=nested_seen
+            )
             sanitized.append(sanitized_item)
             redacted = redacted or item_redacted
         return sanitized, redacted
