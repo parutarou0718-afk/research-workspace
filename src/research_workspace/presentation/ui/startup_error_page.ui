@@ -4,10 +4,16 @@
  <widget class="QWidget" name="startupErrorPage"><layout class="QVBoxLayout" name="startupErrorRootVerticalLayout">
   <property name="leftMargin"><number>0</number></property><property name="topMargin"><number>0</number></property><property name="rightMargin"><number>0</number></property><property name="bottomMargin"><number>0</number></property>
   <item><widget class="QScrollArea" name="startupErrorScrollArea"><property name="widgetResizable"><bool>true</bool></property><property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOff</enum></property><property name="verticalScrollBarPolicy"><enum>Qt::ScrollBarAsNeeded</enum></property><property name="frameShape"><enum>QFrame::NoFrame</enum></property>
-   <widget class="QWidget" name="startupErrorContentWidget"><property name="minimumSize"><size><width>0</width><height>700</height></size></property><layout class="QVBoxLayout" name="startupErrorContentVerticalLayout"><property name="leftMargin"><number>24</number></property><property name="topMargin"><number>24</number></property><property name="rightMargin"><number>24</number></property><property name="bottomMargin"><number>24</number></property>
+   <widget class="QWidget" name="startupErrorContentWidget"><property name="minimumSize"><size><width>0</width><height>780</height></size></property><layout class="QVBoxLayout" name="startupErrorContentVerticalLayout"><property name="leftMargin"><number>24</number></property><property name="topMargin"><number>24</number></property><property name="rightMargin"><number>24</number></property><property name="bottomMargin"><number>24</number></property><property name="spacing"><number>12</number></property>
     <item><widget class="QLabel" name="pageTitleLabel"><property name="font"><font><pointsize>18</pointsize><bold>true</bold></font></property><property name="text"><string>无法启动科研工作台</string></property></widget></item>
-    <item><widget class="QLabel" name="startupErrorLabel"><property name="text"><string>请选择一个可写的数据目录后重试。</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
-    <item><spacer name="startupErrorVerticalSpacer"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>560</height></size></property></spacer></item>
+    <item><widget class="QFrame" name="startupRecoveryCard"><layout class="QVBoxLayout" name="startupRecoveryVerticalLayout">
+     <item><widget class="QLabel" name="startupErrorLabel"><property name="text"><string>请选择一个可写的数据目录后重试。</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+     <item><widget class="QLabel" name="selectedPathTitleLabel"><property name="text"><string>选择的数据目录</string></property></widget></item>
+     <item><widget class="QLineEdit" name="selectedDataDirectoryLineEdit"><property name="readOnly"><bool>true</bool></property><property name="placeholderText"><string>尚未选择目录</string></property></widget></item>
+     <item><widget class="QLabel" name="dataDirectoryStatusLabel"><property name="text"><string>目录状态将在验证后显示。</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+     <item><widget class="QPushButton" name="chooseDataDirectoryButton"><property name="text"><string>选择数据目录</string></property><property name="minimumSize"><size><width>130</width><height>36</height></size></property></widget></item>
+    </layout></widget></item>
+    <item><spacer name="startupErrorVerticalSpacer"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>380</height></size></property></spacer></item>
    </layout></widget>
   </widget></item>
  </layout></widget>

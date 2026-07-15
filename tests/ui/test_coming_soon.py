@@ -1,5 +1,13 @@
 import pytest
-from PySide6.QtWidgets import QAbstractButton, QLabel
+from PySide6.QtWidgets import (
+    QAbstractButton,
+    QAbstractItemView,
+    QAbstractSpinBox,
+    QComboBox,
+    QLabel,
+    QLineEdit,
+    QSlider,
+)
 
 @pytest.mark.parametrize(
     "module_name,class_name,title",
@@ -20,4 +28,16 @@ def test_conference_and_grant_are_noninteractive_coming_soon_pages(
     labels = [label.text() for label in controller.widget.findChildren(QLabel)]
     assert title in labels
     assert "Coming Soon" in labels
-    assert not any(button.isEnabled() for button in controller.widget.findChildren(QAbstractButton))
+    interactive_types = (
+        QAbstractButton,
+        QAbstractItemView,
+        QAbstractSpinBox,
+        QComboBox,
+        QLineEdit,
+        QSlider,
+    )
+    assert not any(
+        control.isEnabled()
+        for control_type in interactive_types
+        for control in controller.widget.findChildren(control_type)
+    )
