@@ -1,4 +1,5 @@
 import re
+import json
 from pathlib import Path
 from xml.etree import ElementTree
 
@@ -139,7 +140,19 @@ def test_overview_exposes_every_view_model_binding_and_prototype_region():
         "submissionsCard",
         "activitiesCard",
         "focusCard",
+        "revisionHelpLabel",
+        "readyHelpLabel",
+        "conferenceHelpLabel",
+        "grantHelpLabel",
+        "viewAllSuggestionsButton",
+        "ideaArgumentCategoryButton",
+        "ideaMaterialCategoryButton",
+        "ideaQuestionCategoryButton",
     } <= names
+    assert widget_text(root, "viewAllSuggestionsButton") == "查看全部建议"
+    assert widget_text(root, "ideaArgumentCategoryButton") == "论点"
+    assert widget_text(root, "ideaMaterialCategoryButton") == "材料"
+    assert widget_text(root, "ideaQuestionCategoryButton") == "问题"
 
 
 def widget_text(root, object_name):
@@ -176,3 +189,45 @@ def test_settings_and_startup_error_expose_task9_designer_controls():
         "chooseDataDirectoryButton",
     } <= startup_names
     assert widget_text(startup, "chooseDataDirectoryButton") == "选择数据目录"
+
+
+@pytest.mark.parametrize("filename", ["conferences_page.ui", "grants_page.ui"])
+def test_coming_soon_designer_class_set_is_closed_and_passive(filename):
+    root = ElementTree.parse(UI_DIR / filename).getroot()
+    assert {node.attrib["class"] for node in root.iter("widget")} <= {
+        "QWidget",
+        "QScrollArea",
+        "QLabel",
+    }
+
+
+def test_runtime_tokens_drive_card_style_spacing_and_point_typography(qapp):
+    from research_workspace.presentation import load_ui_resource
+
+    tokens = json.loads((UI_DIR / "design_tokens.json").read_text(encoding="utf-8"))
+    widget = load_ui_resource("overview_page.ui")
+    stylesheet = widget.styleSheet()
+    assert tokens["colors"]["surface"] in stylesheet
+    assert tokens["colors"]["border"] in stylesheet
+    assert f'border-radius: {tokens["radius"]["card"]}px' in stylesheet
+    body_points = tokens["typography"]["body"] * tokens["typography"]["pointScale"]
+    title_points = tokens["typography"]["title"] * tokens["typography"]["pointScale"]
+    assert f"font-size: {body_points:g}pt" in stylesheet
+    assert f"font-size: {title_points:g}pt" in stylesheet
+
+    root = ElementTree.parse(UI_DIR / "overview_page.ui").getroot()
+    content_layout = next(
+        node
+        for node in root.iter("layout")
+        if node.attrib["name"] == "overviewContentVerticalLayout"
+    )
+    properties = {
+        prop.attrib["name"]: int(prop.find("number").text)
+        for prop in content_layout.findall("property")
+        if prop.find("number") is not None
+    }
+    assert properties["spacing"] == tokens["spacing"]["lg"]
+    assert all(
+        properties[name] == tokens["spacing"]["xl"]
+        for name in ("leftMargin", "topMargin", "rightMargin", "bottomMargin")
+    )

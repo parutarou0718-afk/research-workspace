@@ -6,7 +6,10 @@ from PySide6.QtWidgets import (
     QComboBox,
     QLabel,
     QLineEdit,
+    QScrollArea,
+    QScrollBar,
     QSlider,
+    QWidget,
 )
 
 @pytest.mark.parametrize(
@@ -40,4 +43,9 @@ def test_conference_and_grant_are_noninteractive_coming_soon_pages(
         control.isEnabled()
         for control_type in interactive_types
         for control in controller.widget.findChildren(control_type)
+    )
+    assert all(
+        isinstance(widget, (QLabel, QScrollArea, QScrollBar))
+        or type(widget) is QWidget
+        for widget in controller.widget.findChildren(QWidget)
     )

@@ -18,6 +18,7 @@
   "radius": {"small": 8, "card": 12, "large": 16, "pill": 999},
   "typography": {
     "fontFamily": "Microsoft YaHei UI, Noto Sans CJK SC, sans-serif",
+    "pointScale": 0.75,
     "title": 24,
     "heading": 18,
     "body": 14,
