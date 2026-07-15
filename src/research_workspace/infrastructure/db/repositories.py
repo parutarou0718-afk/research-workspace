@@ -74,8 +74,11 @@ class SqlOverviewRepository:
 
     def _submission_count(self, status: str) -> int:
         return self._session.scalar(
-            select(func.count(SubmissionModel.id)).where(
+            select(func.count(SubmissionModel.id))
+            .join(PaperModel, PaperModel.id == SubmissionModel.paper_id)
+            .where(
                 SubmissionModel.deleted_at.is_(None),
                 SubmissionModel.status == status,
+                PaperModel.deleted_at.is_(None),
             )
         ) or 0

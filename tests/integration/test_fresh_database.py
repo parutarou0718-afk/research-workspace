@@ -131,6 +131,65 @@ def test_seed_is_idempotent(migrated_session):
     assert migrated_session.scalar(select(func.count(GrantModel.id))) == 1
 
 
+def test_seed_completes_a_partially_preexisting_manifest(migrated_session):
+    migrated_session.add(
+        PaperModel(
+            id=_id("Paper", "multimodal-alignment"),
+            title="多模态对齐方法研究",
+            status="revision",
+            created_at=FIXED_TIME,
+            updated_at=FIXED_TIME,
+        )
+    )
+    migrated_session.commit()
+
+    seed_foundation_data(migrated_session)
+    seed_foundation_data(migrated_session)
+
+    assert migrated_session.scalar(select(func.count(PaperModel.id))) == 3
+    assert migrated_session.scalar(select(func.count(IdeaModel.id))) == 4
+    assert migrated_session.scalar(select(func.count(SubmissionModel.id))) == 3
+    assert migrated_session.scalar(select(func.count(ConferenceModel.id))) == 2
+    assert migrated_session.scalar(select(func.count(GrantModel.id))) == 1
+
+
+def test_seed_succeeds_inside_caller_owned_transaction(migrated_session):
+    with migrated_session.begin():
+        migrated_session.add(
+            NoteModel(
+                id=_id("Note", "caller-work"),
+                title="caller work",
+                content="must remain in the outer transaction",
+                created_at=FIXED_TIME,
+                updated_at=FIXED_TIME,
+            )
+        )
+
+        seed_foundation_data(migrated_session)
+
+        assert migrated_session.scalar(select(func.count(PaperModel.id))) == 3
+        assert migrated_session.scalar(select(func.count(NoteModel.id))) == 1
+
+
+def test_seed_does_not_commit_caller_owned_transaction(migrated_session):
+    outer = migrated_session.begin()
+    migrated_session.add(
+        NoteModel(
+            id=_id("Note", "caller-rollback"),
+            title="caller rollback",
+            content="the caller owns commit and rollback",
+            created_at=FIXED_TIME,
+            updated_at=FIXED_TIME,
+        )
+    )
+
+    seed_foundation_data(migrated_session)
+    outer.rollback()
+
+    assert migrated_session.scalar(select(func.count(NoteModel.id))) == 0
+    assert migrated_session.scalar(select(func.count(PaperModel.id))) == 0
+
+
 def test_failed_seed_rolls_back_without_partial_rows(migrated_session):
     engine = migrated_session.get_bind()
 
@@ -149,6 +208,40 @@ def test_failed_seed_rolls_back_without_partial_rows(migrated_session):
         assert migrated_session.scalar(select(func.count(model.id))) == 0
 
 
+def test_failed_seed_inside_outer_transaction_preserves_unrelated_caller_work(
+    migrated_session,
+):
+    engine = migrated_session.get_bind()
+    outer = migrated_session.begin()
+    migrated_session.add(
+        NoteModel(
+            id=_id("Note", "preserved-caller-work"),
+            title="preserved caller work",
+            content="must survive rollback to the seed savepoint",
+            created_at=FIXED_TIME,
+            updated_at=FIXED_TIME,
+        )
+    )
+
+    def fail_on_ideas(connection, cursor, statement, parameters, context, executemany):
+        if statement.startswith("INSERT INTO ideas"):
+            raise RuntimeError("injected nested seed failure")
+
+    event.listen(engine, "before_cursor_execute", fail_on_ideas)
+    try:
+        with pytest.raises(RuntimeError, match="injected nested seed failure"):
+            seed_foundation_data(migrated_session)
+    finally:
+        event.remove(engine, "before_cursor_execute", fail_on_ideas)
+
+    assert migrated_session.scalar(select(func.count(NoteModel.id))) == 1
+    for model in (PaperModel, IdeaModel, SubmissionModel, ConferenceModel, GrantModel):
+        assert migrated_session.scalar(select(func.count(model.id))) == 0
+
+    outer.rollback()
+    assert migrated_session.scalar(select(func.count(NoteModel.id))) == 0
+
+
 def test_sql_overview_uses_seeded_repository_data(migrated_session):
     seed_foundation_data(migrated_session)
 
@@ -163,3 +256,21 @@ def test_sql_overview_uses_seeded_repository_data(migrated_session):
     assert view_model.activities == ()
     assert view_model.focus_items == ()
     assert view_model.focus_progress == 0
+
+
+def test_sql_overview_counts_and_rows_exclude_soft_deleted_parent_papers(
+    migrated_session,
+):
+    seed_foundation_data(migrated_session)
+    deleted_at = datetime(2026, 7, 1, tzinfo=timezone.utc)
+    for stable_key in ("multimodal-alignment", "temporal-representation"):
+        paper = migrated_session.get(PaperModel, _id("Paper", stable_key))
+        paper.deleted_at = deleted_at
+    migrated_session.flush()
+
+    view_model = GetOverview(SqlOverviewRepository(migrated_session)).execute()
+
+    assert view_model.revision_count == 0
+    assert view_model.ready_count == 0
+    assert len(view_model.submission_rows) == 1
+    assert "ACM MM" in view_model.submission_rows[0]

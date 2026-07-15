@@ -92,7 +92,10 @@ def seed_foundation_data(session: Session) -> None:
         ),
     )
 
-    with session.begin():
+    transaction = (
+        session.begin_nested() if session.in_transaction() else session.begin()
+    )
+    with transaction:
         for model, records in (
             (PaperModel, papers),
             (IdeaModel, ideas),
