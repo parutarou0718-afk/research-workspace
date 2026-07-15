@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://research-workspace.local/schemas/domain-event.json",
+  "title": "DomainEvent",
+  "type": "object",
+  "required": ["event_id", "event_type", "occurred_at", "aggregate", "payload"],
+  "properties": {
+    "event_id": {"type": "string", "format": "uuid"},
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "document.imported",
+        "paper.created",
+        "paper.version_added",
+        "paper.version_relation_corrected",
+        "idea.created",
+        "idea.candidate_extracted",
+        "idea.linked",
+        "submission.created",
+        "submission.status_changed",
+        "context.recovered",
+        "task.failed",
+        "audit.undo_applied"
+      ]
+    },
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "aggregate": {
+      "type": "object",
+      "required": ["type", "id"],
+      "properties": {
+        "type": {"type": "string"},
+        "id": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "payload": {"type": "object"},
+    "causation_id": {"type": ["string", "null"]},
+    "correlation_id": {"type": ["string", "null"]}
+  },
+  "additionalProperties": false
+}

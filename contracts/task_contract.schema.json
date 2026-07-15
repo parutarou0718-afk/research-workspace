@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://research-workspace.local/schemas/task-contract.json",
+  "title": "TaskContract",
+  "type": "object",
+  "required": ["task_id", "task_type", "created_at", "input_refs", "options"],
+  "properties": {
+    "task_id": {"type": "string", "format": "uuid"},
+    "task_type": {
+      "type": "string",
+      "enum": [
+        "import_document",
+        "compare_versions",
+        "extract_idea_candidates",
+        "recover_paper_context",
+        "refresh_submission_overview",
+        "scheduled_incremental_organize",
+        "export_data"
+      ]
+    },
+    "created_at": {"type": "string", "format": "date-time"},
+    "target": {
+      "type": ["object", "null"],
+      "properties": {
+        "entity_type": {"type": "string"},
+        "entity_id": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "input_refs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ref_type", "ref_id"],
+        "properties": {
+          "ref_type": {"type": "string"},
+          "ref_id": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "options": {
+      "type": "object",
+      "properties": {
+        "local_only": {"type": "boolean", "default": true},
+        "provider_id": {"type": ["string", "null"]},
+        "dry_run": {"type": "boolean", "default": false},
+        "requires_confirmation": {"type": "boolean", "default": true}
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

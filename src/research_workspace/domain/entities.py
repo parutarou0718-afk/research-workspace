@@ -1,0 +1,1 @@
+"""Foundation entity boundary."""

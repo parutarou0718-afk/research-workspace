@@ -1,0 +1,38 @@
+{
+  "version": "0.1",
+  "entities": {
+    "Paper": ["id", "title", "status", "current_version_id", "created_at", "updated_at", "deleted_at"],
+    "PaperVersion": ["id", "paper_id", "source_document_id", "version_label", "parent_version_id", "is_current", "created_at"],
+    "Idea": ["id", "title", "content", "status", "origin_type", "created_at", "updated_at"],
+    "Note": ["id", "title", "content", "source_document_id", "created_at"],
+    "SourceDocument": ["id", "path", "sha256", "mime_type", "size_bytes", "modified_at", "imported_at", "read_only"],
+    "Submission": ["id", "paper_id", "venue", "status", "submitted_at", "deadline_at", "active_version_id"],
+    "Conference": ["id", "name", "starts_at", "ends_at", "location", "status"],
+    "Grant": ["id", "name", "status", "deadline_at", "source_url"],
+    "EvidenceRef": ["id", "entity_type", "entity_id", "document_id", "version_id", "section", "page", "paragraph_id", "quote_hash"],
+    "EntityRelation": ["id", "source_type", "source_id", "relation_type", "target_type", "target_id", "confidence", "confirmation_state", "created_by"],
+    "Task": ["id", "task_type", "status", "payload_json", "result_json", "created_at", "started_at", "finished_at"],
+    "AuditLog": ["id", "actor_type", "action", "target_type", "target_id", "before_json", "after_json", "undo_token", "created_at"],
+    "DomainEvent": ["id", "event_type", "aggregate_type", "aggregate_id", "payload_json", "created_at", "processed_at"]
+  },
+  "relation_types": [
+    "belongs_to",
+    "derived_from",
+    "version_of",
+    "used_in",
+    "deleted_from",
+    "supports",
+    "contradicts",
+    "extends",
+    "related_to",
+    "presented_at",
+    "submitted_as",
+    "reviewed_by",
+    "suggested_for",
+    "split_from",
+    "merged_from"
+  ],
+  "confirmation_states": ["candidate", "confirmed", "rejected"],
+  "idea_statuses": ["unused", "used", "parked", "archived"],
+  "submission_statuses": ["preparing", "ready", "submitted", "editorial_review", "external_review", "revision", "accepted", "rejected", "withdrawn", "no_response"]
+}
