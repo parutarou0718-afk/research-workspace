@@ -190,6 +190,20 @@ def test_seed_does_not_commit_caller_owned_transaction(migrated_session):
     assert migrated_session.scalar(select(func.count(PaperModel.id))) == 0
 
 
+def test_seed_after_select_autobegin_is_rolled_back_by_caller(migrated_session):
+    assert migrated_session.scalar(select(func.count(PaperModel.id))) == 0
+    assert migrated_session.in_transaction()
+
+    seed_foundation_data(migrated_session)
+    migrated_session.rollback()
+
+    factory = session_factory(migrated_session.get_bind())
+    with factory() as separate_session:
+        assert separate_session.scalar(select(func.count(PaperModel.id))) == 0
+        assert separate_session.scalar(select(func.count(IdeaModel.id))) == 0
+        assert separate_session.scalar(select(func.count(SubmissionModel.id))) == 0
+
+
 def test_failed_seed_rolls_back_without_partial_rows(migrated_session):
     engine = migrated_session.get_bind()
 

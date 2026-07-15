@@ -92,9 +92,16 @@ def seed_foundation_data(session: Session) -> None:
         ),
     )
 
-    transaction = (
-        session.begin_nested() if session.in_transaction() else session.begin()
-    )
+    if session.in_transaction():
+        connection = session.connection()
+        if (
+            connection.dialect.name == "sqlite"
+            and not connection.connection.driver_connection.in_transaction
+        ):
+            connection.exec_driver_sql("BEGIN")
+        transaction = session.begin_nested()
+    else:
+        transaction = session.begin()
     with transaction:
         for model, records in (
             (PaperModel, papers),
