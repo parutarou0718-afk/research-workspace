@@ -1,2 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<ui version="4.0"/>
+<ui version="4.0">
+ <class>OverviewPage</class>
+ <widget class="QWidget" name="overviewPage">
+  <layout class="QVBoxLayout" name="overviewRootVerticalLayout">
+   <property name="leftMargin"><number>0</number></property><property name="topMargin"><number>0</number></property><property name="rightMargin"><number>0</number></property><property name="bottomMargin"><number>0</number></property>
+   <item><widget class="QScrollArea" name="overviewScrollArea">
+    <property name="widgetResizable"><bool>true</bool></property><property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOff</enum></property><property name="verticalScrollBarPolicy"><enum>Qt::ScrollBarAsNeeded</enum></property><property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+    <widget class="QWidget" name="overviewContentWidget"><property name="minimumSize"><size><width>0</width><height>700</height></size></property><layout class="QVBoxLayout" name="overviewContentVerticalLayout">
+     <property name="leftMargin"><number>24</number></property><property name="topMargin"><number>24</number></property><property name="rightMargin"><number>24</number></property><property name="bottomMargin"><number>24</number></property><property name="spacing"><number>16</number></property>
+     <item><widget class="QLabel" name="pageTitleLabel"><property name="font"><font><pointsize>18</pointsize><bold>true</bold></font></property><property name="text"><string>总览</string></property></widget></item>
+     <item><widget class="QLabel" name="pageSubtitleLabel"><property name="text"><string>把握全局，聚焦当下最重要的研究任务</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+     <item><widget class="QFrame" name="summaryCard"><property name="minimumSize"><size><width>0</width><height>180</height></size></property><layout class="QVBoxLayout" name="summaryVerticalLayout"><item><widget class="QLabel" name="summaryLabel"><property name="text"><string>研究工作概览</string></property></widget></item><item><spacer name="summaryVerticalSpacer"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>120</height></size></property></spacer></item></layout></widget></item>
+     <item><spacer name="overviewVerticalSpacer"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>420</height></size></property></spacer></item>
+    </layout></widget>
+   </widget></item>
+  </layout>
+ </widget>
+ <resources/><connections/>
+</ui>

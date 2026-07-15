@@ -1,1 +1,26 @@
-{}
+{
+  "name": "Research Workspace Light",
+  "colors": {
+    "primary": "#4F67F5",
+    "primarySoft": "#EEF1FF",
+    "violet": "#7B61FF",
+    "teal": "#25B8A6",
+    "success": "#2FAE75",
+    "warning": "#F0A23A",
+    "danger": "#E85B64",
+    "textMain": "#17213A",
+    "textSecondary": "#667085",
+    "border": "#E6EAF2",
+    "surface": "#FFFFFF",
+    "background": "#F6F8FC"
+  },
+  "spacing": {"xs": 4, "sm": 8, "md": 12, "lg": 16, "xl": 24, "xxl": 32},
+  "radius": {"small": 8, "card": 12, "large": 16, "pill": 999},
+  "typography": {
+    "fontFamily": "Microsoft YaHei UI, Noto Sans CJK SC, sans-serif",
+    "title": 24,
+    "heading": 18,
+    "body": 14,
+    "caption": 12
+  }
+}

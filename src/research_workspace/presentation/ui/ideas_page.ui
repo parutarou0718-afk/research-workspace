@@ -1,2 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<ui version="4.0"/>
+<ui version="4.0">
+ <class>IdeasPage</class>
+ <widget class="QWidget" name="ideasPage"><layout class="QVBoxLayout" name="ideasRootVerticalLayout">
+  <property name="leftMargin"><number>0</number></property><property name="topMargin"><number>0</number></property><property name="rightMargin"><number>0</number></property><property name="bottomMargin"><number>0</number></property>
+  <item><widget class="QScrollArea" name="ideasScrollArea"><property name="widgetResizable"><bool>true</bool></property><property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOff</enum></property><property name="verticalScrollBarPolicy"><enum>Qt::ScrollBarAsNeeded</enum></property><property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+   <widget class="QWidget" name="ideasContentWidget"><property name="minimumSize"><size><width>0</width><height>700</height></size></property><layout class="QVBoxLayout" name="ideasContentVerticalLayout"><property name="leftMargin"><number>24</number></property><property name="topMargin"><number>24</number></property><property name="rightMargin"><number>24</number></property><property name="bottomMargin"><number>24</number></property>
+    <item><widget class="QLabel" name="pageTitleLabel"><property name="font"><font><pointsize>18</pointsize><bold>true</bold></font></property><property name="text"><string>Idea 库</string></property></widget></item>
+    <item><widget class="QLabel" name="pageSubtitleLabel"><property name="text"><string>集中记录和整理研究灵感</string></property></widget></item>
+    <item><spacer name="ideasVerticalSpacer"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>620</height></size></property></spacer></item>
+   </layout></widget>
+  </widget></item>
+ </layout></widget>
+ <resources/><connections/>
+</ui>
