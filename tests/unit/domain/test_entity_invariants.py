@@ -1,5 +1,6 @@
-from dataclasses import FrozenInstanceError, fields
+from dataclasses import FrozenInstanceError, fields, is_dataclass
 from datetime import UTC, datetime
+import inspect
 import json
 from pathlib import Path
 
@@ -42,9 +43,38 @@ def test_domain_model_entity_fields_match_every_frozen_dataclass_exactly():
     contract = json.loads(contract_path.read_text(encoding="utf-8"))
     from research_workspace.domain import entities
 
+    approved_names = {
+        "Paper",
+        "PaperVersion",
+        "Idea",
+        "Note",
+        "SourceDocument",
+        "Submission",
+        "Conference",
+        "Grant",
+        "EvidenceRef",
+        "EntityRelation",
+        "RelationObservation",
+        "Task",
+        "TaskAttempt",
+        "TaskEffect",
+        "AuditLog",
+        "DomainEvent",
+    }
+    implementation_types = {
+        name: value
+        for name, value in inspect.getmembers(entities, inspect.isclass)
+        if value.__module__ == entities.__name__ and is_dataclass(value)
+    }
+
+    assert set(contract["entities"]) == approved_names
+    assert set(implementation_types) == approved_names
+    for entity_type in implementation_types.values():
+        assert is_dataclass(entity_type)
+        assert entity_type.__dataclass_params__.frozen is True
     assert {
-        name: [field.name for field in fields(getattr(entities, name))]
-        for name in contract["entities"]
+        name: [field.name for field in fields(implementation_types[name])]
+        for name in approved_names
     } == contract["entities"]
 
 
