@@ -1,1 +1,92 @@
-{}
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://research-workspace.local/schemas/parsed-document-1.0.json",
+  "title": "ParsedDocument",
+  "type": "object",
+  "required": ["schema_version", "source", "parser", "title", "metadata", "blocks", "warnings"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "source": {"$ref": "#/$defs/source"},
+    "parser": {"$ref": "#/$defs/parser"},
+    "title": {"type": ["string", "null"]},
+    "metadata": {"type": "object"},
+    "blocks": {"type": "array", "items": {"$ref": "#/$defs/block"}},
+    "warnings": {"type": "array", "items": {"$ref": "#/$defs/warning"}}
+  },
+  "$defs": {
+    "utcDateTime": {"type": "string", "format": "date-time", "pattern": "Z$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "source": {
+      "type": "object",
+      "required": ["path", "sha256", "mime_type", "size_bytes", "modified_at"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "mime_type": {"type": "string", "minLength": 1},
+        "size_bytes": {"type": "integer", "minimum": 0},
+        "modified_at": {"$ref": "#/$defs/utcDateTime"}
+      },
+      "additionalProperties": false
+    },
+    "parser": {
+      "type": "object",
+      "required": ["parser_id", "parser_version"],
+      "properties": {"parser_id": {"type": "string", "minLength": 1}, "parser_version": {"type": "string", "minLength": 1}},
+      "additionalProperties": false
+    },
+    "block": {
+      "type": "object",
+      "required": ["block_id", "kind", "text", "locator", "metadata"],
+      "properties": {
+        "block_id": {"$ref": "#/$defs/sha256"},
+        "kind": {"enum": ["title", "heading", "paragraph", "list_item", "table", "caption", "footnote", "header", "footer", "code", "equation", "image_alt", "other"]},
+        "text": {"type": "string", "minLength": 1},
+        "locator": {"$ref": "#/$defs/locator"},
+        "metadata": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "locator": {
+      "type": "object",
+      "required": ["page", "slide", "paragraph_index", "paragraph_id", "heading_path", "char_start", "char_end", "source_offset_start", "source_offset_end", "bbox"],
+      "properties": {
+        "page": {"type": ["integer", "null"], "minimum": 1},
+        "slide": {"type": ["integer", "null"], "minimum": 1},
+        "paragraph_index": {"type": "integer", "minimum": 0},
+        "paragraph_id": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+        "heading_path": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "char_start": {"type": "integer", "minimum": 0},
+        "char_end": {"type": "integer", "minimum": 0},
+        "source_offset_start": {"type": ["integer", "null"], "minimum": 0},
+        "source_offset_end": {"type": ["integer", "null"], "minimum": 0},
+        "bbox": {"anyOf": [{"$ref": "#/$defs/bbox"}, {"type": "null"}]}
+      },
+      "additionalProperties": false
+    },
+    "bbox": {
+      "type": "object",
+      "required": ["left", "top", "right", "bottom", "unit", "page"],
+      "properties": {
+        "left": {"type": "number", "minimum": 0},
+        "top": {"type": "number", "minimum": 0},
+        "right": {"type": "number", "minimum": 0},
+        "bottom": {"type": "number", "minimum": 0},
+        "unit": {"enum": ["pt", "px", "normalized"]},
+        "page": {"type": ["integer", "null"], "minimum": 1}
+      },
+      "additionalProperties": false
+    },
+    "warning": {
+      "type": "object",
+      "required": ["code", "message", "locator", "retryable"],
+      "properties": {
+        "code": {"type": "string", "minLength": 1},
+        "message": {"type": "string", "minLength": 1},
+        "locator": {"anyOf": [{"$ref": "#/$defs/locator"}, {"type": "null"}]},
+        "retryable": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

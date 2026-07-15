@@ -1,1 +1,47 @@
-{}
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://research-workspace.local/schemas/task-result-1.0.json",
+  "title": "TaskResult",
+  "type": "object",
+  "required": ["schema_version", "task_id", "status", "attempt", "started_at", "finished_at", "output_refs", "result", "error", "retry", "event_ids", "audit_log_ids"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "task_id": {"type": "string", "format": "uuid", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+    "status": {"enum": ["retry_scheduled", "needs_confirmation", "succeeded", "failed", "cancelled"]},
+    "attempt": {"type": "integer", "minimum": 1},
+    "started_at": {"$ref": "#/$defs/utcDateTime"},
+    "finished_at": {"$ref": "#/$defs/utcDateTime"},
+    "output_refs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ref_type", "ref_id"],
+        "properties": {"ref_type": {"type": "string", "minLength": 1}, "ref_id": {"type": "string", "minLength": 1}},
+        "additionalProperties": false
+      }
+    },
+    "result": {"type": ["object", "null"]},
+    "error": {
+      "type": ["object", "null"],
+      "required": ["code", "message", "retryable", "details"],
+      "properties": {"code": {"type": "string", "minLength": 1}, "message": {"type": "string", "minLength": 1}, "retryable": {"type": "boolean"}, "details": {"type": "object"}},
+      "additionalProperties": false
+    },
+    "retry": {
+      "type": ["object", "null"],
+      "required": ["next_attempt_at"],
+      "properties": {"next_attempt_at": {"$ref": "#/$defs/utcDateTime"}},
+      "additionalProperties": false
+    },
+    "event_ids": {"type": "array", "items": {"type": "string", "format": "uuid", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"}, "uniqueItems": true},
+    "audit_log_ids": {"type": "array", "items": {"type": "string", "format": "uuid", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"}, "uniqueItems": true}
+  },
+  "$defs": {"utcDateTime": {"type": "string", "format": "date-time", "pattern": "Z$"}},
+  "allOf": [
+    {"if": {"properties": {"status": {"const": "retry_scheduled"}}}, "then": {"properties": {"result": {"type": "null"}, "error": {"type": "object", "properties": {"retryable": {"const": true}}}, "retry": {"type": "object"}}}},
+    {"if": {"properties": {"status": {"const": "failed"}}}, "then": {"properties": {"result": {"type": "null"}, "error": {"type": "object", "properties": {"retryable": {"const": false}}}, "retry": {"type": "null"}}}},
+    {"if": {"properties": {"status": {"enum": ["succeeded", "needs_confirmation"]}}}, "then": {"properties": {"result": {"type": "object"}, "error": {"type": "null"}, "retry": {"type": "null"}}}},
+    {"if": {"properties": {"status": {"const": "cancelled"}}}, "then": {"properties": {"result": {"type": "null"}, "error": {"type": "object", "properties": {"code": {"const": "TASK_CANCELLED"}, "retryable": {"const": false}}}, "retry": {"type": "null"}}}}
+  ],
+  "additionalProperties": false
+}

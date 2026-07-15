@@ -1,41 +1,31 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://research-workspace.local/schemas/domain-event.json",
+  "$id": "https://research-workspace.local/schemas/domain-event-1.0.json",
   "title": "DomainEvent",
   "type": "object",
-  "required": ["event_id", "event_type", "occurred_at", "aggregate", "payload"],
+  "required": ["schema_version", "event_id", "event_type", "occurred_at", "actor", "aggregate", "payload", "deduplication_key"],
   "properties": {
-    "event_id": {"type": "string", "format": "uuid"},
-    "event_type": {
-      "type": "string",
-      "enum": [
-        "document.imported",
-        "paper.created",
-        "paper.version_added",
-        "paper.version_relation_corrected",
-        "idea.created",
-        "idea.candidate_extracted",
-        "idea.linked",
-        "submission.created",
-        "submission.status_changed",
-        "context.recovered",
-        "task.failed",
-        "audit.undo_applied"
-      ]
+    "schema_version": {"const": "1.0"},
+    "event_id": {"type": "string", "format": "uuid", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+    "event_type": {"enum": ["document.imported", "paper.created", "paper.version_added", "paper.version_relation_corrected", "idea.created", "idea.candidate_extracted", "idea.linked", "submission.created", "submission.status_changed", "context.recovered", "task.failed", "audit.undo_applied"]},
+    "occurred_at": {"$ref": "#/$defs/utcDateTime"},
+    "actor": {
+      "type": "object",
+      "required": ["actor_type", "actor_id"],
+      "properties": {"actor_type": {"enum": ["user", "system", "task_executor", "agent"]}, "actor_id": {"type": ["string", "null"], "maxLength": 255}},
+      "additionalProperties": false
     },
-    "occurred_at": {"type": "string", "format": "date-time"},
     "aggregate": {
       "type": "object",
       "required": ["type", "id"],
-      "properties": {
-        "type": {"type": "string"},
-        "id": {"type": "string"}
-      },
+      "properties": {"type": {"enum": ["Paper", "PaperVersion", "Idea", "SourceDocument", "Submission", "Conference", "Grant", "Task", "AuditLog"]}, "id": {"type": "string", "format": "uuid", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"}},
       "additionalProperties": false
     },
     "payload": {"type": "object"},
-    "causation_id": {"type": ["string", "null"]},
-    "correlation_id": {"type": ["string", "null"]}
+    "deduplication_key": {"type": "string", "minLength": 1, "maxLength": 255},
+    "causation_id": {"type": ["string", "null"], "format": "uuid", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+    "correlation_id": {"type": ["string", "null"], "format": "uuid", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"}
   },
+  "$defs": {"utcDateTime": {"type": "string", "format": "date-time", "pattern": "Z$"}},
   "additionalProperties": false
 }

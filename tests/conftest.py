@@ -1,1 +1,135 @@
-"""Shared pytest configuration."""
+"""Shared pytest configuration and repository-contract fixtures."""
+
+from __future__ import annotations
+
+import copy
+import hashlib
+import json
+from pathlib import Path
+
+import pytest
+import rfc8785
+from jsonschema import Draft202012Validator, FormatChecker
+
+
+ROOT = Path(__file__).resolve().parents[1]
+CONTRACTS = ROOT / "contracts"
+
+
+def validate_contract(schema_name: str, value: object) -> None:
+    schema = json.loads((CONTRACTS / schema_name).read_text(encoding="utf-8"))
+    Draft202012Validator(schema, format_checker=FormatChecker()).validate(value)
+
+
+def _block_id(source_sha256: str, kind: str, locator: dict[str, object], text: str) -> str:
+    hash_locator = {key: value for key, value in locator.items() if key != "paragraph_id"}
+    material = (
+        source_sha256.encode()
+        + b"\0"
+        + kind.encode()
+        + b"\0"
+        + rfc8785.dumps(hash_locator)
+        + b"\0"
+        + text.replace("\r\n", "\n").encode()
+    )
+    return hashlib.sha256(material).hexdigest()
+
+
+@pytest.fixture
+def valid_task() -> dict[str, object]:
+    return {
+        "schema_version": "1.0",
+        "task_id": "123e4567-e89b-12d3-a456-426614174000",
+        "task_type": "import_document",
+        "created_at": "2026-07-16T00:00:00Z",
+        "requested_by": {"actor_type": "user", "actor_id": "local-user"},
+        "idempotency_key": "import-1",
+        "correlation_id": None,
+        "target": None,
+        "input_refs": [{"ref_type": "SourceDocument", "ref_id": "source-1"}],
+        "options": {
+            "local_only": True,
+            "provider_id": None,
+            "dry_run": False,
+            "requires_confirmation": True,
+            "max_attempts": 3,
+            "extensions": {},
+        },
+    }
+
+
+@pytest.fixture
+def valid_result() -> dict[str, object]:
+    return {
+        "schema_version": "1.0",
+        "task_id": "123e4567-e89b-12d3-a456-426614174000",
+        "status": "succeeded",
+        "attempt": 1,
+        "started_at": "2026-07-16T00:00:00Z",
+        "finished_at": "2026-07-16T00:00:01Z",
+        "output_refs": [{"ref_type": "SourceDocument", "ref_id": "source-1"}],
+        "result": {"imported": True},
+        "error": None,
+        "retry": None,
+        "event_ids": ["123e4567-e89b-12d3-a456-426614174001"],
+        "audit_log_ids": ["123e4567-e89b-12d3-a456-426614174002"],
+    }
+
+
+@pytest.fixture
+def valid_event() -> dict[str, object]:
+    return {
+        "schema_version": "1.0",
+        "event_id": "123e4567-e89b-12d3-a456-426614174001",
+        "event_type": "document.imported",
+        "occurred_at": "2026-07-16T00:00:00Z",
+        "actor": {"actor_type": "system", "actor_id": None},
+        "aggregate": {
+            "type": "SourceDocument",
+            "id": "123e4567-e89b-12d3-a456-426614174003",
+        },
+        "payload": {},
+        "deduplication_key": "document-imported-1",
+        "causation_id": None,
+        "correlation_id": None,
+    }
+
+
+@pytest.fixture
+def valid_document() -> dict[str, object]:
+    source_hash = "a" * 64
+    text = "Extracted text"
+    locator: dict[str, object] = {
+        "page": None,
+        "slide": None,
+        "paragraph_index": 0,
+        "paragraph_id": None,
+        "heading_path": ["Introduction", "Background"],
+        "char_start": 0,
+        "char_end": len(text),
+        "source_offset_start": None,
+        "source_offset_end": None,
+        "bbox": None,
+    }
+    block_id = _block_id(source_hash, "paragraph", locator, text)
+    locator["paragraph_id"] = block_id
+    return {
+        "schema_version": "1.0",
+        "source": {
+            "path": r"C:\research\paper.docx",
+            "sha256": source_hash,
+            "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "size_bytes": 12345,
+            "modified_at": "2026-07-16T00:00:00Z",
+        },
+        "parser": {"parser_id": "markitdown", "parser_version": "0.1.6"},
+        "title": "Optional title",
+        "metadata": {},
+        "blocks": [{"block_id": block_id, "kind": "paragraph", "text": text, "locator": locator, "metadata": {}}],
+        "warnings": [],
+    }
+
+
+@pytest.fixture
+def clone():
+    return copy.deepcopy

@@ -4,8 +4,12 @@
 
 ```python
 class DocumentParser(Protocol):
-    supported_extensions: set[str]
-    def parse(self, source: Path) -> ParsedDocument: ...
+    parser_id: str
+    parser_version: str
+    supported_extensions: frozenset[str]
+
+    def parse(self, source: Path) -> Mapping[str, object]:
+        raise NotImplementedError
 ```
 
 输出必须包含段落级稳定 ID、页码/章节（可获得时）、原始偏移和文件指纹。
