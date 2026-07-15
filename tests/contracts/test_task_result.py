@@ -15,7 +15,16 @@ def test_required_result_fields(field, valid_result):
         validate_contract("task_result.schema.json", valid_result)
 
 
-@pytest.mark.parametrize("field,value", [("task_id", "NOT-A-UUID"), ("finished_at", "2026-07-16T09:00:01+09:00"), ("status", "pending"), ("attempt", 0)])
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("task_id", "123E4567-E89B-12D3-A456-426614174000"),
+        ("task_id", "not-a-uuid"),
+        ("finished_at", "2026-07-16T09:00:01+09:00"),
+        ("status", "pending"),
+        ("attempt", 0),
+    ],
+)
 def test_result_rejects_invalid_values(field, value, valid_result):
     valid_result[field] = value
     with pytest.raises(ValidationError):

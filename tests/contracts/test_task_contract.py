@@ -15,7 +15,15 @@ def test_required_task_fields(field, valid_task):
         validate_contract("task_contract.schema.json", valid_task)
 
 
-@pytest.mark.parametrize("path,value", [("task_id", "123E4567-E89B-12D3-A456-426614174000"), ("created_at", "2026-07-16T09:00:00+09:00"), ("task_type", "unknown")])
+@pytest.mark.parametrize(
+    "path,value",
+    [
+        ("task_id", "123E4567-E89B-12D3-A456-426614174000"),
+        ("task_id", "not-a-uuid"),
+        ("created_at", "2026-07-16T09:00:00+09:00"),
+        ("task_type", "unknown"),
+    ],
+)
 def test_task_rejects_invalid_closed_values(path, value, valid_task):
     valid_task[path] = value
     with pytest.raises(ValidationError):

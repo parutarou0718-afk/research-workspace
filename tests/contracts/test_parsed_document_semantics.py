@@ -20,6 +20,31 @@ def test_block_id_must_match_normative_hash(valid_document):
     assert "blocks[0].block_id is not deterministic" in validate_parsed_document_semantics(valid_document)
 
 
+def test_block_id_matches_known_rfc8785_normalization_vector(valid_document):
+    expected_block_id = "f731bbd7ee549dbbb34b50dd72ba6ce6395adb421f43caf9cb0d57ce2b9b56a6"
+    valid_document["source"]["sha256"] = "b" * 64
+    valid_document["blocks"][0] = {
+        "block_id": expected_block_id,
+        "kind": "paragraph",
+        "text": "Cafe\u0301\r\nline",
+        "locator": {
+            "source_offset_start": None,
+            "slide": None,
+            "paragraph_id": expected_block_id,
+            "page": None,
+            "heading_path": ["Résumé"],
+            "char_start": 0,
+            "bbox": None,
+            "source_offset_end": None,
+            "paragraph_index": 0,
+            "char_end": 9,
+        },
+        "metadata": {},
+    }
+
+    assert validate_parsed_document_semantics(valid_document) == ()
+
+
 def test_paragraph_like_block_requires_matching_paragraph_id(valid_document):
     valid_document["blocks"][0]["locator"]["paragraph_id"] = None
     assert "blocks[0].locator.paragraph_id must equal block_id" in validate_parsed_document_semantics(valid_document)
