@@ -13,6 +13,10 @@ from docx import Document
 from docx.shared import Inches
 from lxml import etree
 from PIL import Image
+from pptx import Presentation
+from pptx.chart.data import CategoryChartData
+from pptx.enum.chart import XL_CHART_TYPE
+from pptx.util import Inches as PptxInches
 from pypdf import PdfWriter
 from pypdf.generic import (
     ArrayObject,
@@ -38,6 +42,9 @@ REL = "http://schemas.openxmlformats.org/package/2006/relationships"
 CT = "http://schemas.openxmlformats.org/package/2006/content-types"
 WP = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
 V = "urn:schemas-microsoft-com:vml"
+P = "http://schemas.openxmlformats.org/presentationml/2006/main"
+A = "http://schemas.openxmlformats.org/drawingml/2006/main"
+DCTERMS = "http://purl.org/dc/terms/"
 
 PURPOSES = {
     "docx/body_order.docx": "OOXML body paragraph/table child order and heading path",
@@ -50,9 +57,14 @@ PURPOSES = {
     "pdf/image_only.pdf": "valid raster-only page with no text-showing operator",
     "pdf/corrupt.pdf": "invalid non-PDF bytes",
     "pdf/truncated.pdf": "valid PDF with the final 32 bytes removed",
+    "pptx/ordered_shapes.pptx": "slide and OOXML shape-tree order independent of coordinates",
+    "pptx/nested_groups.pptx": "recursive shape paths and group depth safety",
+    "pptx/table_alt_empty.pptx": "table escaping, explicit image alt, and an empty slide",
+    "pptx/unsupported_constructs.pptx": "stable warnings for chart, SmartArt, media, embedded object, missing alt, and notes",
 }
 
 PDF_GENERATOR_VERSION = "gate1-pdf-1"
+PPTX_GENERATOR_VERSION = "gate1-pptx-1"
 
 
 def _new_document(title: str) -> Document:
@@ -107,6 +119,28 @@ def _write_canonical_package(destination: Path, members: dict[str, bytes]) -> No
             info.create_system = 0
             info.external_attr = 0
             archive.writestr(info, members[name])
+
+
+def _canonical_embedded_workbook(payload: bytes) -> bytes:
+    with ZipFile(BytesIO(payload), "r") as archive:
+        members = {name: archive.read(name) for name in archive.namelist()}
+    core = etree.fromstring(members["docProps/core.xml"])
+    for local_name in ("created", "modified"):
+        element = core.find(f"{{{DCTERMS}}}{local_name}")
+        assert element is not None
+        element.text = "2000-01-01T00:00:00Z"
+    members["docProps/core.xml"] = etree.tostring(
+        core, xml_declaration=True, encoding="UTF-8", standalone=True
+    )
+    output = BytesIO()
+    with ZipFile(output, "w", compression=ZIP_DEFLATED, compresslevel=9) as archive:
+        for name in sorted(members):
+            info = ZipInfo(name, FIXED_ZIP_TIME)
+            info.compress_type = ZIP_DEFLATED
+            info.create_system = 0
+            info.external_attr = 0
+            archive.writestr(info, members[name])
+    return output.getvalue()
 
 
 def _save_canonical(document: Document, destination: Path, transform=None) -> None:
@@ -450,6 +484,222 @@ def _build_pdf_fixtures(output_root: Path) -> None:
     (pdf_root / "truncated.pdf").write_bytes(normal[:-32])
 
 
+def _new_presentation(title: str) -> Presentation:
+    presentation = Presentation()
+    properties = presentation.core_properties
+    properties.title = title
+    properties.author = "Research Workspace Fixture Builder"
+    properties.subject = "Deterministic Gate 1 PPTX fixture"
+    properties.keywords = "gate1,pptx,fixture"
+    properties.created = FIXED_CORE_TIME
+    properties.modified = FIXED_CORE_TIME
+    return presentation
+
+
+def _save_canonical_presentation(
+    presentation: Presentation,
+    destination: Path,
+    transform=None,
+) -> None:
+    with tempfile.TemporaryDirectory() as temporary_directory:
+        raw = Path(temporary_directory) / "raw.pptx"
+        presentation.save(raw)
+        members = _zip_bytes(raw)
+    if transform is not None:
+        members = transform(members)
+    _write_canonical_package(destination, members)
+
+
+def _ordered_shapes_pptx(destination: Path) -> None:
+    presentation = _new_presentation("Ordered shapes fixture")
+    blank = presentation.slide_layouts[6]
+    slide = presentation.slides.add_slide(blank)
+    first = slide.shapes.add_textbox(PptxInches(6), PptxInches(4), PptxInches(2), PptxInches(1))
+    first.text = "Slide 1 XML first"
+    second = slide.shapes.add_textbox(PptxInches(1), PptxInches(1), PptxInches(2), PptxInches(1))
+    second.text = "Slide 1 XML second"
+    slide = presentation.slides.add_slide(blank)
+    first = slide.shapes.add_textbox(PptxInches(5), PptxInches(3), PptxInches(2), PptxInches(1))
+    first.text = "Slide 2 XML first"
+    second = slide.shapes.add_textbox(PptxInches(0.5), PptxInches(0.5), PptxInches(2), PptxInches(1))
+    second.text = "Slide 2 XML second"
+    _save_canonical_presentation(presentation, destination)
+
+
+def _nested_groups_pptx(destination: Path) -> None:
+    presentation = _new_presentation("Nested groups fixture")
+    blank = presentation.slide_layouts[6]
+    slide = presentation.slides.add_slide(blank)
+    outer = slide.shapes.add_group_shape()
+    outer_leaf = outer.shapes.add_textbox(0, 0, PptxInches(2), PptxInches(0.5))
+    outer_leaf.text = "Outer leaf"
+    inner = outer.shapes.add_group_shape()
+    nested_leaf = inner.shapes.add_textbox(0, 0, PptxInches(2), PptxInches(0.5))
+    nested_leaf.text = "Nested leaf"
+
+    deep_slide = presentation.slides.add_slide(blank)
+    group = deep_slide.shapes.add_group_shape()
+    for _ in range(32):
+        group = group.shapes.add_group_shape()
+    too_deep = group.shapes.add_textbox(0, 0, PptxInches(2), PptxInches(0.5))
+    too_deep.text = "Too deep leaf"
+
+    def transform(members: dict[str, bytes]) -> dict[str, bytes]:
+        root = etree.fromstring(members["ppt/slides/slide1.xml"])
+        shape_tree = root.find(f".//{{{P}}}spTree")
+        assert shape_tree is not None
+        outer_group = shape_tree.findall(f"{{{P}}}grpSp")[0]
+        outer_group.find(f"{{{P}}}nvGrpSpPr/{{{P}}}cNvPr").set("id", "2")
+        inner_group = outer_group.findall(f"{{{P}}}grpSp")[0]
+        inner_group.find(f"{{{P}}}nvGrpSpPr/{{{P}}}cNvPr").set("id", "5")
+        inner_shape = inner_group.findall(f"{{{P}}}sp")[0]
+        inner_shape.find(f"{{{P}}}nvSpPr/{{{P}}}cNvPr").set("id", "9")
+        return {
+            **members,
+            "ppt/slides/slide1.xml": etree.tostring(
+                root, xml_declaration=True, encoding="UTF-8", standalone=True
+            ),
+        }
+
+    _save_canonical_presentation(presentation, destination, transform)
+
+
+def _table_alt_empty_pptx(destination: Path) -> None:
+    presentation = _new_presentation("Table alt empty fixture")
+    blank = presentation.slide_layouts[6]
+    slide = presentation.slides.add_slide(blank)
+    table = slide.shapes.add_table(2, 2, PptxInches(0.5), PptxInches(0.5), PptxInches(5), PptxInches(2)).table
+    table.cell(0, 0).text = "back\\slash"
+    table.cell(0, 1).text = "TAB_MARKER"
+    table.cell(1, 0).text = "line\nfeed"
+    table.cell(1, 1).text = "CR_MARKER"
+    with tempfile.TemporaryDirectory() as temporary_directory:
+        image_path = Path(temporary_directory) / "fixture.png"
+        Image.new("RGB", (10, 10), (32, 96, 160)).save(
+            image_path, format="PNG", optimize=False, compress_level=9
+        )
+        slide.shapes.add_picture(
+            str(image_path), PptxInches(6), PptxInches(1), PptxInches(0.5), PptxInches(0.5)
+        )
+    presentation.slides.add_slide(blank)
+
+    def transform(members: dict[str, bytes]) -> dict[str, bytes]:
+        root = etree.fromstring(members["ppt/slides/slide1.xml"])
+        text_nodes = root.findall(f".//{{{A}}}t")
+        for node in text_nodes:
+            if node.text == "TAB_MARKER":
+                node.text = "tab\tvalue"
+            elif node.text == "CR_MARKER":
+                node.text = "carriage\rreturn"
+        pictures = root.findall(f".//{{{P}}}pic")
+        assert len(pictures) == 1
+        properties = pictures[0].find(f"{{{P}}}nvPicPr/{{{P}}}cNvPr")
+        assert properties is not None
+        properties.set("title", "Figure title")
+        properties.set("descr", "Figure description")
+        return {
+            **members,
+            "ppt/slides/slide1.xml": etree.tostring(
+                root, xml_declaration=True, encoding="UTF-8", standalone=True
+            ),
+        }
+
+    _save_canonical_presentation(presentation, destination, transform)
+
+
+def _unsupported_constructs_pptx(destination: Path) -> None:
+    presentation = _new_presentation("Unsupported constructs fixture")
+    slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+    chart_data = CategoryChartData()
+    chart_data.categories = ("One", "Two")
+    chart_data.add_series("Fixture", (1, 2))
+    slide.shapes.add_chart(
+        XL_CHART_TYPE.COLUMN_CLUSTERED,
+        PptxInches(0.5),
+        PptxInches(0.5),
+        PptxInches(3),
+        PptxInches(2),
+        chart_data,
+    )
+    with tempfile.TemporaryDirectory() as temporary_directory:
+        image_path = Path(temporary_directory) / "missing-alt.png"
+        Image.new("RGB", (10, 10), (160, 96, 32)).save(
+            image_path, format="PNG", optimize=False, compress_level=9
+        )
+        slide.shapes.add_picture(
+            str(image_path), PptxInches(4), PptxInches(0.5), PptxInches(0.5), PptxInches(0.5)
+        )
+    slide.notes_slide.notes_text_frame.text = "Speaker notes"
+
+    def transform(members: dict[str, bytes]) -> dict[str, bytes]:
+        workbook_name = "ppt/embeddings/Microsoft_Excel_Sheet1.xlsx"
+        members = {
+            **members,
+            workbook_name: _canonical_embedded_workbook(members[workbook_name]),
+        }
+        root = etree.fromstring(members["ppt/slides/slide1.xml"])
+        shape_tree = root.find(f".//{{{P}}}spTree")
+        assert shape_tree is not None
+        picture_properties = shape_tree.find(f".//{{{P}}}pic/{{{P}}}nvPicPr/{{{P}}}cNvPr")
+        assert picture_properties is not None
+        picture_properties.attrib.pop("title", None)
+        picture_properties.attrib.pop("descr", None)
+        next_id = max(
+            int(item.get("id", "0"))
+            for item in shape_tree.findall(f".//{{{P}}}cNvPr")
+        ) + 1
+        def graphic_frame(name: str, uri: str, marker: str) -> None:
+            nonlocal next_id
+            frame = etree.fromstring(
+                (
+                    f'<p:graphicFrame xmlns:p="{P}" xmlns:a="{A}">'
+                    f'<p:nvGraphicFramePr><p:cNvPr id="{next_id}" name="{name}"/>'
+                    '<p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>'
+                    '<p:xfrm><a:off x="0" y="0"/><a:ext cx="1" cy="1"/></p:xfrm>'
+                    f'<a:graphic><a:graphicData uri="{uri}"><a:{marker}/>'
+                    '</a:graphicData></a:graphic></p:graphicFrame>'
+                ).encode()
+            )
+            next_id += 1
+            shape_tree.append(frame)
+
+        graphic_frame(
+            "SmartArt fixture",
+            "http://schemas.openxmlformats.org/drawingml/2006/diagram",
+            "ext",
+        )
+        graphic_frame(
+            "Media fixture",
+            "http://schemas.microsoft.com/office/powerpoint/2010/main/media",
+            "ext",
+        )
+        graphic_frame(
+            "Embedded object fixture",
+            "http://schemas.openxmlformats.org/presentationml/2006/ole",
+            "ext",
+        )
+        return {
+            **members,
+            "ppt/slides/slide1.xml": etree.tostring(
+                root, xml_declaration=True, encoding="UTF-8", standalone=True
+            ),
+        }
+
+    _save_canonical_presentation(presentation, destination, transform)
+
+
+def _build_pptx_fixtures(output_root: Path) -> None:
+    pptx_root = output_root / "pptx"
+    builders = {
+        "ordered_shapes.pptx": _ordered_shapes_pptx,
+        "nested_groups.pptx": _nested_groups_pptx,
+        "table_alt_empty.pptx": _table_alt_empty_pptx,
+        "unsupported_constructs.pptx": _unsupported_constructs_pptx,
+    }
+    for name, builder in builders.items():
+        builder(pptx_root / name)
+
+
 def _build(output_root: Path) -> bytes:
     docx_root = output_root / "docx"
     builders = {
@@ -461,6 +711,7 @@ def _build(output_root: Path) -> bytes:
     for name, builder in builders.items():
         builder(docx_root / name)
     _build_pdf_fixtures(output_root)
+    _build_pptx_fixtures(output_root)
 
     entries = []
     for relative_path, purpose in PURPOSES.items():
@@ -475,7 +726,11 @@ def _build(output_root: Path) -> bytes:
                 "generator_version": (
                     PDF_GENERATOR_VERSION
                     if relative_path.startswith("pdf/")
-                    else GENERATOR_VERSION
+                    else (
+                        PPTX_GENERATOR_VERSION
+                        if relative_path.startswith("pptx/")
+                        else GENERATOR_VERSION
+                    )
                 ),
             }
         )

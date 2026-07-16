@@ -38,6 +38,10 @@ def test_docx_fixture_manifest_and_zip_metadata_are_deterministic() -> None:
         "pdf/image_only.pdf",
         "pdf/corrupt.pdf",
         "pdf/truncated.pdf",
+        "pptx/ordered_shapes.pptx",
+        "pptx/nested_groups.pptx",
+        "pptx/table_alt_empty.pptx",
+        "pptx/unsupported_constructs.pptx",
     ]
     for entry in (
         item for item in manifest["fixtures"] if item["relative_path"].startswith("docx/")

@@ -70,6 +70,34 @@
       "size_bytes": 1407,
       "purpose": "valid PDF with the final 32 bytes removed",
       "generator_version": "gate1-pdf-1"
+    },
+    {
+      "relative_path": "pptx/ordered_shapes.pptx",
+      "sha256": "859a9ba3a787d8c651e0a55fcddc6535f509bb4a66392bd0be8618ad0e59564c",
+      "size_bytes": 29302,
+      "purpose": "slide and OOXML shape-tree order independent of coordinates",
+      "generator_version": "gate1-pptx-1"
+    },
+    {
+      "relative_path": "pptx/nested_groups.pptx",
+      "sha256": "feb340fdeae63259db4b0313938669f305709e8de2f7605d384352373a6a9f59",
+      "size_bytes": 29550,
+      "purpose": "recursive shape paths and group depth safety",
+      "generator_version": "gate1-pptx-1"
+    },
+    {
+      "relative_path": "pptx/table_alt_empty.pptx",
+      "sha256": "97aabb73756ff4f258e8d8722202bd034dc2725d9daa632288efa974c1a14ba8",
+      "size_bytes": 29592,
+      "purpose": "table escaping, explicit image alt, and an empty slide",
+      "generator_version": "gate1-pptx-1"
+    },
+    {
+      "relative_path": "pptx/unsupported_constructs.pptx",
+      "sha256": "25498cc9d9e33556dbe646637ce36e9970a634d25ac5acf35941ee952492ff1f",
+      "size_bytes": 39524,
+      "purpose": "stable warnings for chart, SmartArt, media, embedded object, missing alt, and notes",
+      "generator_version": "gate1-pptx-1"
     }
   ]
 }
