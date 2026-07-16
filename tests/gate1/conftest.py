@@ -18,6 +18,31 @@ class V01Database:
     event_rows: tuple[dict[str, object], ...]
 
 
+@pytest.fixture
+def safe_source(tmp_path: Path) -> Path:
+    source = tmp_path / "external" / "paper.pdf"
+    source.parent.mkdir()
+    source.write_bytes((b"research-workspace-source\n" * 512) + b"complete")
+    return source
+
+
+@pytest.fixture
+def mutate_after_first_chunk():
+    def build(source: Path):
+        called = False
+
+        def mutate() -> None:
+            nonlocal called
+            if not called:
+                called = True
+                with source.open("ab") as stream:
+                    stream.write(b"changed-during-copy")
+
+        return mutate
+
+    return build
+
+
 def alembic_config(database_path: Path) -> Config:
     config = Config("alembic.ini")
     config.set_main_option("sqlalchemy.url", f"sqlite:///{database_path.as_posix()}")

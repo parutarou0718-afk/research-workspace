@@ -34,7 +34,20 @@ from research_workspace.shared.result import Result
 
 
 _ROOT = Path(__file__).resolve().parents[2]
-_DATA_SUBDIRECTORIES = ("logs", "derived", "exports", "backups")
+_DATA_SUBDIRECTORIES = (
+    "sources/sha256",
+    "derived/parse",
+    "staging/imports",
+    "staging/parse",
+    "staging/backup",
+    "staging/export",
+    "staging/restore",
+    "recovery/current",
+    "recovery/previous",
+    "exports",
+    "backups",
+    "logs",
+)
 SUPPORTED_SCHEMA_REVISION = "0002"
 _EXPECTED_WORKSPACE_TABLES = frozenset((*Base.metadata.tables, "alembic_version"))
 
@@ -154,6 +167,11 @@ def _run_migrations(database_path: Path) -> None:
     command.upgrade(config, "head")
 
 
+def _ensure_data_layout(data_directory: Path) -> None:
+    for relative_path in _DATA_SUBDIRECTORIES:
+        (data_directory / relative_path).mkdir(parents=True, exist_ok=True)
+
+
 def bootstrap_application() -> BootstrapResult:
     _qt_application()
     config_store = JsonConfigStore()
@@ -195,8 +213,7 @@ def bootstrap_application() -> BootstrapResult:
     session = None
     try:
         data_directory = state.config.active_data_directory
-        for name in _DATA_SUBDIRECTORIES:
-            (data_directory / name).mkdir(parents=True, exist_ok=True)
+        _ensure_data_layout(data_directory)
         configure_logging(data_directory / "logs", state.config.log_level)
         database_path = data_directory / "research_workspace.db"
         _run_migrations(database_path)
