@@ -96,8 +96,12 @@ class SqlGate1WriteRepository:
         self._session = session
 
     def register_import(self, result: SnapshotRegistrationDTO) -> ImportCommitDTO:
-        state = "duplicate_content" if result.duplicate_content else "imported"
-        if not result.duplicate_content:
+        existing = self._session.scalar(
+            select(SourceSnapshotModel).where(SourceSnapshotModel.sha256 == result.sha256)
+        )
+        if existing is None:
+            snapshot_id = result.snapshot_id
+            state = "imported"
             self._session.add(
                 SourceSnapshotModel(
                     id=result.snapshot_id,
@@ -109,21 +113,29 @@ class SqlGate1WriteRepository:
                     created_by_operation_id=result.operation_id,
                 )
             )
+        else:
+            if (
+                existing.size_bytes != result.size_bytes
+                or existing.storage_relative_path != result.storage_relative_path
+            ):
+                raise ValueError("SNAPSHOT_HASH_MISMATCH")
+            snapshot_id = existing.id
+            state = "duplicate_content"
 
         observation = self._session.get(SourceObservationModel, result.source_observation_id)
         item = self._session.get(ImportItemModel, result.import_item_id)
         if observation is None or item is None:
-            raise ValueError("IMPORT_REGISTRATION_PREREQUISITE_MISSING")
-        observation.current_snapshot_id = result.snapshot_id
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        observation.current_snapshot_id = snapshot_id
         observation.availability_status = "available"
         observation.last_seen_at = datetime.now(timezone.utc)
         observation.row_version += 1
-        item.snapshot_id = result.snapshot_id
+        item.snapshot_id = snapshot_id
         item.state = state
         item.finished_at = datetime.now(timezone.utc)
         self._session.flush()
         return ImportCommitDTO(
-            result.snapshot_id,
+            snapshot_id,
             result.source_observation_id,
             result.import_item_id,
             state,

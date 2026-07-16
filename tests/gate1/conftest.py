@@ -18,6 +18,70 @@ class V01Database:
     event_rows: tuple[dict[str, object], ...]
 
 
+@dataclass
+class ImportApplication:
+    workspace: Path
+    factory: object
+    command: object
+    workspace_id: object
+
+    def request(self, paths: tuple[Path, ...]):
+        from datetime import datetime, timezone
+        from uuid import uuid4
+
+        from research_workspace.application.dto.import_dto import ImportRequest
+        from research_workspace.domain.capabilities import PathScope, PermissionContext
+        from research_workspace.infrastructure.filesystem.path_safety import normalized_path_hash
+
+        scopes = tuple(
+            PathScope("import_source", normalized_path_hash(path), uuid4(), "copy", False)
+            for path in paths
+        )
+        return ImportRequest(
+            paths,
+            PermissionContext(
+                "1.0",
+                "user",
+                "local-test-user",
+                self.workspace_id,
+                ("source.snapshot_import.request",),
+                (),
+                scopes,
+                False,
+                datetime.now(timezone.utc),
+                "test-policy-1.0",
+                uuid4(),
+            ),
+        )
+
+
+@pytest.fixture
+def import_application(tmp_path: Path) -> ImportApplication:
+    from research_workspace import bootstrap
+    from research_workspace.application.commands.import_documents import ImportDocumentsCommand
+    from research_workspace.application.services.import_orchestrator import ImportOrchestrator
+    from research_workspace.infrastructure.db.session import create_engine_for_path, session_factory
+    from research_workspace.infrastructure.db.models import WorkspaceMetadataModel
+    from research_workspace.infrastructure.db.write_coordinator import SqlWriteCoordinator
+    from research_workspace.infrastructure.filesystem.snapshots import SnapshotStore
+
+    workspace = tmp_path / "workspace"
+    bootstrap._ensure_data_layout(workspace)
+    database = workspace / "research_workspace.db"
+    bootstrap._run_migrations(database)
+    engine = create_engine_for_path(database)
+    factory = session_factory(engine)
+    with factory() as session:
+        workspace_id = session.query(WorkspaceMetadataModel.workspace_id).scalar()
+    coordinator = SqlWriteCoordinator(factory)
+    orchestrator = ImportOrchestrator(workspace, SnapshotStore(workspace), coordinator)
+    application = ImportApplication(
+        workspace, factory, ImportDocumentsCommand(orchestrator), workspace_id
+    )
+    yield application
+    engine.dispose()
+
+
 @pytest.fixture
 def safe_source(tmp_path: Path) -> Path:
     source = tmp_path / "external" / "paper.pdf"
