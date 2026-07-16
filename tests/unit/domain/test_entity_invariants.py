@@ -61,6 +61,7 @@ def test_domain_model_entity_fields_match_every_frozen_dataclass_exactly():
         "AuditLog",
         "DomainEvent",
     }
+    gate1_names = set(contract["gate1_entities"]) - {"SourceDocument", "DomainEvent"}
     implementation_types = {
         name: value
         for name, value in inspect.getmembers(entities, inspect.isclass)
@@ -68,14 +69,17 @@ def test_domain_model_entity_fields_match_every_frozen_dataclass_exactly():
     }
 
     assert set(contract["entities"]) == approved_names
-    assert set(implementation_types) == approved_names
+    assert set(implementation_types) == approved_names | gate1_names
     for entity_type in implementation_types.values():
         assert is_dataclass(entity_type)
         assert entity_type.__dataclass_params__.frozen is True
     assert {
         name: [field.name for field in fields(implementation_types[name])]
-        for name in approved_names
-    } == contract["entities"]
+        for name in approved_names | gate1_names
+    } == {
+        **contract["entities"],
+        **{name: contract["gate1_entities"][name] for name in gate1_names},
+    }
 
 
 def test_closed_status_enums_match_the_approved_values():
@@ -101,7 +105,14 @@ def test_operational_records_are_dormant_frozen_entity_snapshots():
         "prepared", "committed", "manual_reconciliation"
     }
     assert len(TaskType) == 7
-    assert len(EventType) == 12
+    assert {item.value for item in EventType} == {
+        "document.imported", "paper.created", "paper.version_added",
+        "paper.version_relation_corrected", "idea.created", "idea.candidate_extracted",
+        "idea.linked", "submission.created", "submission.status_changed",
+        "context.recovered", "task.failed", "audit.undo_applied",
+        "source.snapshot_imported", "source.snapshot_reused",
+        "document.parse_succeeded", "document.parse_failed",
+    }
 
 
 def test_mapping_fields_are_detached_and_recursively_immutable():

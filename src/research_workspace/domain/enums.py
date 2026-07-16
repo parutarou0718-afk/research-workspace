@@ -178,3 +178,25 @@ class EventType(str, Enum):
     CONTEXT_RECOVERED = "context.recovered"
     TASK_FAILED = "task.failed"
     AUDIT_UNDO_APPLIED = "audit.undo_applied"
+    SOURCE_SNAPSHOT_IMPORTED = "source.snapshot_imported"
+    SOURCE_SNAPSHOT_REUSED = "source.snapshot_reused"
+    DOCUMENT_PARSE_SUCCEEDED = "document.parse_succeeded"
+    DOCUMENT_PARSE_FAILED = "document.parse_failed"
+
+
+class ImportItemState(str, Enum):
+    PENDING = "pending"
+    IMPORTED = "imported"
+    DUPLICATE_CONTENT = "duplicate_content"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class BackgroundOperationStatus(str, Enum):
+    PLANNED = "planned"
+    RUNNING = "running"
+    RETRY_WAIT = "retry_wait"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    MANUAL_ATTENTION = "manual_attention"

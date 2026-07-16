@@ -28,6 +28,159 @@ from research_workspace.domain.enums import (
 from research_workspace.domain.tasks import AttemptStatus, TaskStatus
 
 
+@dataclass(frozen=True)
+class SourceSnapshot:
+    id: str
+    sha256: str
+    size_bytes: int
+    mime_type: str
+    storage_relative_path: str
+    original_filename: str
+    created_at: datetime
+    preferred_parse_artifact_id: str | None
+
+
+@dataclass(frozen=True)
+class SourceObservation:
+    id: str
+    normalized_path_hash: str
+    original_filename: str
+    current_snapshot_id: str | None
+    availability_status: str
+    baseline_only: bool
+    size_bytes: int | None
+    modified_at: datetime | None
+    file_id_hint: str | None
+    volume_serial_hint: str | None
+    first_seen_at: datetime
+    last_seen_at: datetime
+    missing_at: datetime | None
+    row_version: int
+
+
+@dataclass(frozen=True)
+class SourceObservationEvent:
+    id: str
+    source_observation_id: str
+    event_type: str
+    snapshot_id: str | None
+    path_before_hash: str | None
+    path_after_hash: str | None
+    facts_json: Mapping[str, object]
+    raw_file_event_id: str | None
+    observed_at: datetime
+
+    def __post_init__(self) -> None:
+        _freeze_mapping_fields(self, "facts_json")
+
+
+@dataclass(frozen=True)
+class BackgroundOperation:
+    id: str
+    operation_type: str
+    status: str
+    correlation_command_id: str | None
+    work_plan_fingerprint: str
+    permission_context_json: Mapping[str, object]
+    result_summary_json: Mapping[str, object] | None
+    error_code: str | None
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+    cancel_requested_at: datetime | None
+
+    def __post_init__(self) -> None:
+        _freeze_mapping_fields(self, "permission_context_json", "result_summary_json")
+
+
+@dataclass(frozen=True)
+class OperationAttempt:
+    id: str
+    operation_id: str
+    attempt_number: int
+    status: str
+    error_code: str | None
+    diagnostic_summary_json: Mapping[str, object] | None
+    started_at: datetime
+    finished_at: datetime | None
+    next_attempt_at: datetime | None
+
+    def __post_init__(self) -> None:
+        _freeze_mapping_fields(self, "diagnostic_summary_json")
+
+
+@dataclass(frozen=True)
+class ImportBatch:
+    id: str
+    operation_id: str
+    status: str
+    selected_count: int
+    estimated_total_bytes: int
+    estimated_added_bytes: int | None
+    estimate_is_exact: bool
+    disclosure_accepted_at: datetime
+    created_at: datetime
+    finished_at: datetime | None
+
+
+@dataclass(frozen=True)
+class ImportItem:
+    id: str
+    batch_id: str
+    source_observation_id: str
+    snapshot_id: str | None
+    state: str
+    error_code: str | None
+    created_at: datetime
+    finished_at: datetime | None
+
+
+@dataclass(frozen=True)
+class ParseArtifact:
+    id: str
+    source_snapshot_id: str
+    parser_id: str
+    parser_version: str
+    config_fingerprint: str
+    contract_version: str
+    created_at: datetime
+
+
+@dataclass(frozen=True)
+class ParseAttempt:
+    id: str
+    parse_artifact_id: str
+    attempt_number: int
+    status: str
+    started_at: datetime
+    finished_at: datetime | None
+    error_code: str | None
+    warnings_json: tuple[str, ...]
+    executor_version: str
+    output_sha256: str | None
+    derived_file_sha256: str | None
+    derived_relative_path: str | None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "warnings_json", tuple(self.warnings_json))
+
+
+@dataclass(frozen=True)
+class ParsedBlock:
+    id: str
+    source_document_id: str
+    parse_artifact_id: str
+    block_index: int
+    kind: str
+    text: str
+    locator_json: Mapping[str, object]
+    metadata_json: Mapping[str, object]
+    block_hash: str
+
+    def __post_init__(self) -> None:
+        _freeze_mapping_fields(self, "locator_json", "metadata_json")
+
+
 def _freeze_json(value: object) -> object:
     if isinstance(value, Mapping):
         return MappingProxyType({key: _freeze_json(item) for key, item in value.items()})

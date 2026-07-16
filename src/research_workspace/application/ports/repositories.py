@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from typing import Protocol
 
+from research_workspace.application.dto.import_dto import ImportCommitDTO, SnapshotRegistrationDTO
+
 
 @dataclass(frozen=True, slots=True)
 class OverviewData:
@@ -20,3 +22,9 @@ class OverviewData:
 class OverviewRepository(Protocol):
     def get_overview(self) -> OverviewData:
         """Return the complete read-only overview projection."""
+
+
+class Gate1WriteRepository(Protocol):
+    """Session-bound repository; callers never receive its persistence handle."""
+
+    def register_import(self, result: SnapshotRegistrationDTO) -> ImportCommitDTO: ...

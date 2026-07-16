@@ -5,20 +5,21 @@ from __future__ import annotations
 import hashlib
 import unicodedata
 from collections.abc import Mapping, Sequence
-from pathlib import Path
 from typing import Protocol
 
 import rfc8785
 
+from research_workspace.application.dto.parsing_dto import ParseRequest, ParseResult
+
 
 class DocumentParser(Protocol):
-    """Future document parser port."""
+    """Gate 1 deterministic parser port."""
 
     parser_id: str
     parser_version: str
-    supported_extensions: frozenset[str]
+    supported_mime_types: frozenset[str]
 
-    def parse(self, source: Path) -> Mapping[str, object]:
+    def parse(self, request: ParseRequest) -> ParseResult:
         raise NotImplementedError
 
 
