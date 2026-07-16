@@ -206,6 +206,29 @@ def test_self_referential_sequence_is_redacted_without_dropping_log(tmp_path):
     assert "[REDACTED]" in text
 
 
+def test_worker_diagnostics_never_render_paths_or_parsed_content(tmp_path):
+    logger = configure_logging(tmp_path, "INFO", logger_name="privacy-worker")
+    logger.error(
+        "failure",
+        extra={
+            "component": "operation_worker",
+            "operation": "document_parse",
+            "error_code": "PDF_CORRUPT",
+            "source_path": r"C:\\Sensitive\\unpublished-paper.pdf",
+            "parsed_document": {"blocks": [{"text": "SECRET RESEARCH BODY"}]},
+            "diagnostic_summary": "raw parser exception SECRET",
+        },
+    )
+
+    text = (tmp_path / "research_workspace.log").read_text(encoding="utf-8")
+    assert "operation_worker" in text
+    assert "document_parse" in text
+    assert "PDF_CORRUPT" in text
+    assert "unpublished-paper" not in text
+    assert "SECRET RESEARCH BODY" not in text
+    assert "raw parser exception" not in text
+
+
 def test_overly_deep_safe_context_is_redacted_without_dropping_log(tmp_path):
     context = ["leaf"]
     for _ in range(32):

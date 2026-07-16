@@ -45,6 +45,13 @@ class PreparedImportItem:
     source_path: Path
 
 
+@dataclass(frozen=True)
+class ParseOperationSeed:
+    attempt: ParseAttemptSeed
+    work_plan_fingerprint: str
+    permission_context_json: str
+
+
 class WriteCoordinator(Protocol):
     def workspace_id(self) -> UUID: ...
 
@@ -58,11 +65,27 @@ class WriteCoordinator(Protocol):
         self, operation_id: UUID, batch_id: UUID, batch_status: str, result_summary_json: str
     ) -> None: ...
 
+    def mark_import_batch_parsing(self, operation_id: UUID, batch_id: UUID) -> None: ...
+
     def register_parse_success(self, result: ParseSuccessDTO) -> None: ...
 
     def register_parse_failure(self, result: ParseFailureDTO) -> None: ...
 
     def start_parse_attempt(self, seed: ParseAttemptSeed) -> PreparedParseAttempt: ...
+
+    def begin_parse_operation(self, seed: ParseOperationSeed) -> PreparedParseAttempt: ...
+
+    def mark_import_parse_result(
+        self,
+        item_id: UUID,
+        parse_artifact_id: UUID | None,
+        status: str,
+        error_code: str | None,
+    ) -> None: ...
+
+    def cancel_parse_attempt(
+        self, operation_id: UUID, parse_artifact_id: UUID, parse_attempt_id: UUID
+    ) -> None: ...
 
     def set_parse_preference(
         self, source_snapshot_id: UUID, parse_artifact_id: UUID, operation_id: UUID

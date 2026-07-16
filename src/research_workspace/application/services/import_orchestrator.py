@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
 import mimetypes
 from pathlib import Path
 from typing import Literal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import rfc8785
 
@@ -21,6 +22,7 @@ from research_workspace.application.dto.import_dto import (
 from research_workspace.application.ports.write_coordinator import (
     ImportBatchSeed,
     ImportItemSeed,
+    PreparedImportItem,
     WriteCoordinator,
 )
 from research_workspace.infrastructure.filesystem.path_safety import (
@@ -29,7 +31,18 @@ from research_workspace.infrastructure.filesystem.path_safety import (
     normalized_path_hash,
     resolve_safe_external_source,
 )
-from research_workspace.infrastructure.filesystem.snapshots import SnapshotStore
+from research_workspace.infrastructure.filesystem.snapshots import (
+    MaterializedSnapshot,
+    SnapshotStore,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedImportBatch:
+    operation_id: UUID
+    batch_id: UUID
+    request: ImportRequest
+    items: tuple[PreparedImportItem, ...]
 
 
 def public_import_outcome(
@@ -116,13 +129,34 @@ class ImportOrchestrator:
         *,
         cancel_requested: Callable[[], bool] = lambda: False,
     ) -> ImportBatchResult:
-        if "source.snapshot_import.request" not in request.permission_context.capabilities:
-            raise SourceFailure("COMMAND_PERMISSION_DENIED")
-        if request.permission_context.network_allowed is not False:
-            raise SourceFailure("COMMAND_PERMISSION_DENIED")
-        if request.permission_context.workspace_id != self._coordinator.workspace_id():
-            raise SourceFailure("COMMAND_PERMISSION_DENIED")
+        batch = self.prepare(request)
+        successes: list[ImportCommitDTO] = []
+        failed: list = []
+        cancelled: list = []
 
+        for index, item in enumerate(batch.items):
+            if cancel_requested():
+                for remaining in batch.items[index:]:
+                    self._coordinator.mark_import_item(remaining.item_id, "cancelled", None)
+                    cancelled.append(remaining.item_id)
+                break
+            try:
+                source = self.resolve_authorized(item.source_path, request)
+                materialized = self._snapshots.materialize(source, item.item_id)
+                successes.append(self.register_materialized(batch, item, materialized))
+            except SourceFailure as exc:
+                self._coordinator.mark_import_item(item.item_id, "failed", exc.error_code)
+                failed.append(item.item_id)
+            except Exception:
+                self._coordinator.mark_import_item(
+                    item.item_id, "failed", "DATABASE_OPERATION_FAILED"
+                )
+                failed.append(item.item_id)
+
+        return self.finalize(batch, successes, failed, cancelled)
+
+    def prepare(self, request: ImportRequest) -> PreparedImportBatch:
+        self.authorize(request)
         operation_id = uuid4()
         batch_id = uuid4()
         seeds = tuple(_item_seed(path) for path in request.source_paths)
@@ -136,44 +170,52 @@ class ImportOrchestrator:
                 sum(seed.size_bytes or 0 for seed in seeds),
             )
         )
-        successes: list[ImportCommitDTO] = []
-        failed: list = []
-        cancelled: list = []
+        return PreparedImportBatch(operation_id, batch_id, request, prepared)
 
-        for index, item in enumerate(prepared):
-            if cancel_requested():
-                for remaining in prepared[index:]:
-                    self._coordinator.mark_import_item(remaining.item_id, "cancelled", None)
-                    cancelled.append(remaining.item_id)
-                break
-            try:
-                source = self._resolve_authorized(item.source_path, request)
-                materialized = self._snapshots.materialize(source, item.item_id)
-                registration = SnapshotRegistrationDTO(
-                    operation_id,
-                    batch_id,
-                    item.item_id,
-                    item.observation_id,
-                    uuid4(),
-                    source,
-                    source.name,
-                    materialized.sha256,
-                    materialized.size_bytes,
-                    _mime_type(source),
-                    materialized.storage_relative_path,
-                    materialized.physical_file_reused,
-                )
-                successes.append(self._coordinator.register_import(registration))
-            except SourceFailure as exc:
-                self._coordinator.mark_import_item(item.item_id, "failed", exc.error_code)
-                failed.append(item.item_id)
-            except Exception:
-                self._coordinator.mark_import_item(item.item_id, "failed", "DATABASE_OPERATION_FAILED")
-                failed.append(item.item_id)
+    def authorize(self, request: ImportRequest) -> None:
+        if "source.snapshot_import.request" not in request.permission_context.capabilities:
+            raise SourceFailure("COMMAND_PERMISSION_DENIED")
+        if request.permission_context.network_allowed is not False:
+            raise SourceFailure("COMMAND_PERMISSION_DENIED")
+        if request.permission_context.workspace_id != self._coordinator.workspace_id():
+            raise SourceFailure("COMMAND_PERMISSION_DENIED")
 
+    def register_materialized(
+        self,
+        batch: PreparedImportBatch,
+        item: PreparedImportItem,
+        materialized: MaterializedSnapshot,
+    ) -> ImportCommitDTO:
+        source = self.resolve_authorized(item.source_path, batch.request)
+        return self._coordinator.register_import(
+            SnapshotRegistrationDTO(
+                batch.operation_id,
+                batch.batch_id,
+                item.item_id,
+                item.observation_id,
+                uuid4(),
+                source,
+                source.name,
+                materialized.sha256,
+                materialized.size_bytes,
+                _mime_type(source),
+                materialized.storage_relative_path,
+                materialized.physical_file_reused,
+            )
+        )
+
+    def finalize(
+        self,
+        batch: PreparedImportBatch,
+        successes: list[ImportCommitDTO],
+        failed: list,
+        cancelled: list,
+        parse_failed: list | None = None,
+    ) -> ImportBatchResult:
+        parse_failed = parse_failed or []
         if cancelled:
             batch_status = "cancelled"
-        elif successes and failed:
+        elif successes and (failed or parse_failed):
             batch_status = "completed_with_failures"
         elif failed:
             batch_status = "failed"
@@ -181,16 +223,25 @@ class ImportOrchestrator:
             batch_status = "completed"
         summary = rfc8785.dumps(
             {
-                "selected_count": len(prepared),
+                "selected_count": len(batch.items),
                 "imported_count": len(successes),
                 "failed_count": len(failed),
+                "parse_failed_count": len(parse_failed),
                 "cancelled_count": len(cancelled),
             }
         ).decode("utf-8")
-        self._coordinator.finalize_import(operation_id, batch_id, batch_status, summary)
-        return ImportBatchResult(batch_id, operation_id, tuple(successes), tuple(failed), tuple(cancelled))
+        self._coordinator.finalize_import(
+            batch.operation_id, batch.batch_id, batch_status, summary
+        )
+        return ImportBatchResult(
+            batch.batch_id,
+            batch.operation_id,
+            tuple(successes),
+            tuple(failed),
+            tuple(cancelled),
+        )
 
-    def _resolve_authorized(self, path: Path, request: ImportRequest) -> Path:
+    def resolve_authorized(self, path: Path, request: ImportRequest) -> Path:
         last_failure: SourceFailure | None = None
         for scope in request.permission_context.path_scopes:
             try:

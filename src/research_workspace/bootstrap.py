@@ -20,13 +20,24 @@ from research_workspace.application.services.change_data_directory import (
     validate_data_directory,
 )
 from research_workspace.application.services.initialize_application import InitializeApplication
+from research_workspace.application.services.import_orchestrator import ImportOrchestrator
+from research_workspace.application.services.operation_dispatcher import ImportParsePipeline
 from research_workspace.infrastructure.config.json_config_store import JsonConfigStore
 from research_workspace.infrastructure.db.base import Base
 import research_workspace.infrastructure.db.models  # noqa: F401
 from research_workspace.infrastructure.db.repositories import SqlOverviewRepository
 from research_workspace.infrastructure.db.seed import seed_foundation_data
 from research_workspace.infrastructure.db.session import create_engine_for_path, session_factory
+from research_workspace.infrastructure.db.write_coordinator import SqlWriteCoordinator
+from research_workspace.infrastructure.filesystem.snapshots import SnapshotStore
 from research_workspace.infrastructure.logging.configure_logging import configure_logging
+from research_workspace.infrastructure.parsers.docx_parser import DocxParser
+from research_workspace.infrastructure.parsers.pdf_parser import PdfParser
+from research_workspace.infrastructure.parsers.pptx_parser import PptxParser
+from research_workspace.infrastructure.workers.operation_worker import (
+    OperationWorker,
+    ThreadedOperationRunner,
+)
 from research_workspace.presentation.main_window import MainWindow, create_main_window
 from research_workspace.presentation.pages.startup_error_page import StartupErrorPage
 from research_workspace.shared.errors import AppError
@@ -60,10 +71,13 @@ class ApplicationServices:
     get_overview: GetOverview
     engine: Engine
     session: Session
+    import_parse_pipeline: ImportParsePipeline
+    operation_runner: ThreadedOperationRunner
     closed: bool = False
 
     def close(self) -> None:
         if not self.closed:
+            self.operation_runner.shutdown(timeout=10)
             self.session.close()
             self.engine.dispose()
             self.closed = True
@@ -218,8 +232,23 @@ def bootstrap_application() -> BootstrapResult:
         database_path = data_directory / "research_workspace.db"
         _run_migrations(database_path)
         engine = create_engine_for_path(database_path)
-        session = session_factory(engine)()
+        factory = session_factory(engine)
+        session = factory()
         seed_foundation_data(session)
+        coordinator = SqlWriteCoordinator(factory, data_directory=data_directory)
+        snapshot_store = SnapshotStore(data_directory)
+        parsers = (DocxParser(), PdfParser(), PptxParser())
+        parser_registry = {parser.parser_id: parser for parser in parsers}
+        operation_runner = ThreadedOperationRunner(
+            OperationWorker(snapshot_store, parser_registry)
+        )
+        import_parse_pipeline = ImportParsePipeline(
+            data_directory,
+            ImportOrchestrator(data_directory, snapshot_store, coordinator),
+            coordinator,
+            operation_runner,
+            parsers,
+        )
         services = ApplicationServices(
             config=state.config,
             config_store=config_store,
@@ -227,6 +256,8 @@ def bootstrap_application() -> BootstrapResult:
             get_overview=GetOverview(SqlOverviewRepository(session)),
             engine=engine,
             session=session,
+            import_parse_pipeline=import_parse_pipeline,
+            operation_runner=operation_runner,
         )
         return BootstrapResult(True, create_main_window(services), None)
     except Exception as exc:

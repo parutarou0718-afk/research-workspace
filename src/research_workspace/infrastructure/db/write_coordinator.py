@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from research_workspace.application.dto.import_dto import ImportCommitDTO, SnapshotRegistrationDTO
 from research_workspace.application.ports.write_coordinator import (
     ImportBatchSeed,
+    ParseOperationSeed,
     PreparedImportItem,
 )
 from research_workspace.application.dto.parsing_dto import (
@@ -39,6 +40,7 @@ from research_workspace.infrastructure.db.models import (
     ImportBatchModel,
     ImportItemModel,
     ParseArtifactModel,
+    ParseAttemptModel,
     SnapshotParsePreferenceModel,
     SourceObservationModel,
     SourceSnapshotModel,
@@ -258,6 +260,14 @@ class SqlWriteCoordinator:
             operation.error_code = None
             operation.finished_at = now
 
+    def mark_import_batch_parsing(self, operation_id: UUID, batch_id: UUID) -> None:
+        with self._factory.begin() as session:
+            operation = self._required_running_operation(session, operation_id)
+            batch = session.get(ImportBatchModel, batch_id)
+            if batch is None or batch.operation_id != operation.id or batch.status != "importing":
+                raise WriteCoordinatorError("COMMAND_VALIDATION_FAILED")
+            batch.status = "parsing"
+
     def start_parse_attempt(self, seed: ParseAttemptSeed) -> PreparedParseAttempt:
         identity = build_parse_artifact_identity(
             seed.source_snapshot_id,
@@ -284,6 +294,100 @@ class SqlWriteCoordinator:
             raise WriteCoordinatorError(str(exc)) from exc
         except IntegrityError as exc:
             raise WriteCoordinatorError("DATABASE_CONSTRAINT_VIOLATION") from exc
+
+    def begin_parse_operation(self, seed: ParseOperationSeed) -> PreparedParseAttempt:
+        """Create the bounded technical operation and its first parse attempt atomically."""
+
+        now = datetime.now(timezone.utc)
+        identity = build_parse_artifact_identity(
+            seed.attempt.source_snapshot_id,
+            seed.attempt.parser_id,
+            seed.attempt.parser_version,
+            seed.attempt.parser_config,
+            seed.attempt.contract_version,
+        )
+        try:
+            with self._factory.begin() as session:
+                session.add(
+                    BackgroundOperationModel(
+                        id=seed.attempt.operation_id,
+                        operation_type="document_parse",
+                        status="running",
+                        work_plan_fingerprint=seed.work_plan_fingerprint,
+                        permission_context_json=seed.permission_context_json,
+                        result_summary_json=None,
+                        error_code=None,
+                        created_at=now,
+                        started_at=now,
+                        finished_at=None,
+                        cancel_requested_at=None,
+                    )
+                )
+                session.flush()
+                repository = self._repository_factory(session)
+                prepared = repository.start_parse_attempt(seed.attempt, identity)
+                operation = self._required_running_operation(session, seed.attempt.operation_id)
+                operation.result_summary_json = rfc8785.dumps(
+                    {
+                        "parse_artifact_id": str(prepared.parse_artifact_id),
+                        "parse_attempt_id": str(prepared.parse_attempt_id),
+                        "source_snapshot_id": str(prepared.source_snapshot_id),
+                        "status": "running",
+                    }
+                ).decode("utf-8")
+                return prepared
+        except ValueError as exc:
+            raise WriteCoordinatorError(str(exc)) from exc
+        except IntegrityError as exc:
+            raise WriteCoordinatorError("DATABASE_CONSTRAINT_VIOLATION") from exc
+
+    def mark_import_parse_result(
+        self,
+        item_id: UUID,
+        parse_artifact_id: UUID | None,
+        status: str,
+        error_code: str | None,
+    ) -> None:
+        if status not in {"pending", "succeeded", "failed", "cancelled"}:
+            raise WriteCoordinatorError("COMMAND_VALIDATION_FAILED")
+        with self._factory.begin() as session:
+            item = session.get(ImportItemModel, item_id)
+            if item is None or item.state not in {"imported", "duplicate_content"}:
+                raise WriteCoordinatorError("COMMAND_VALIDATION_FAILED")
+            item.parse_status = status
+            item.parse_artifact_id = parse_artifact_id
+            item.error_code = error_code
+
+    def cancel_parse_attempt(
+        self, operation_id: UUID, parse_artifact_id: UUID, parse_attempt_id: UUID
+    ) -> None:
+        now = datetime.now(timezone.utc)
+        with self._factory.begin() as session:
+            operation = self._required_running_operation(session, operation_id)
+            artifact = session.get(ParseArtifactModel, parse_artifact_id)
+            attempt = session.get(ParseAttemptModel, parse_attempt_id)
+            if (
+                artifact is None
+                or attempt is None
+                or attempt.parse_artifact_id != artifact.id
+                or artifact.status != "running"
+                or attempt.status != "running"
+            ):
+                raise WriteCoordinatorError("COMMAND_VALIDATION_FAILED")
+            artifact.status = "cancelled"
+            artifact.updated_at = now
+            attempt.status = "cancelled"
+            attempt.finished_at = now
+            operation.status = "cancelled"
+            operation.cancel_requested_at = now
+            operation.finished_at = now
+            operation.result_summary_json = rfc8785.dumps(
+                {
+                    "parse_artifact_id": str(artifact.id),
+                    "parse_attempt_id": str(attempt.id),
+                    "status": "cancelled",
+                }
+            ).decode("utf-8")
 
     def register_parse_success(self, result: ParseSuccessDTO) -> None:
         self._validate_parse_operation(
