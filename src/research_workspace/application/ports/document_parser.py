@@ -10,6 +10,7 @@ from typing import Protocol
 import rfc8785
 
 from research_workspace.application.dto.parsing_dto import ParseRequest, ParseResult
+from research_workspace.domain.parsing import validate_parsed_document_v2
 
 
 class DocumentParser(Protocol):

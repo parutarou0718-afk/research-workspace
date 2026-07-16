@@ -4,6 +4,8 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator, FormatChecker, ValidationError
 
+from research_workspace.domain.parsing import ParseContractError, validate_parsed_document_v2
+
 
 SCHEMA_PATH = Path(__file__).resolve().parents[3] / "contracts" / "parsed_document.schema.json"
 
@@ -132,3 +134,14 @@ def test_warning_registry_is_closed() -> None:
     document["warnings"][0]["code"] = "AD_HOC_WARNING"
     with pytest.raises(ValidationError):
         validate(document)
+
+
+def test_v2_semantic_entrypoint_rejects_native_locator_discriminator_drift() -> None:
+    document = valid_v2_document()
+    document["blocks"][0]["locator"]["native_locator"] = {
+        "type": "pdf",
+        "slide": 1,
+        "shape_path": [{"shape_id": 1, "tree_index": 0}],
+    }
+    with pytest.raises(ParseContractError, match="PARSED_DOCUMENT_CONTRACT_INVALID"):
+        validate_parsed_document_v2(document)
