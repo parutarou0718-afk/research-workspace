@@ -32,8 +32,16 @@ def test_docx_fixture_manifest_and_zip_metadata_are_deterministic() -> None:
         "docx/table_escapes.docx",
         "docx/image_alt.docx",
         "docx/unsupported_constructs.docx",
+        "pdf/normal_text.pdf",
+        "pdf/empty_password.pdf",
+        "pdf/password_required.pdf",
+        "pdf/image_only.pdf",
+        "pdf/corrupt.pdf",
+        "pdf/truncated.pdf",
     ]
-    for entry in manifest["fixtures"]:
+    for entry in (
+        item for item in manifest["fixtures"] if item["relative_path"].startswith("docx/")
+    ):
         with ZipFile(fixture_root / entry["relative_path"]) as archive:
             assert archive.namelist() == sorted(archive.namelist())
             assert {item.date_time for item in archive.infolist()} == {(1980, 1, 1, 0, 0, 0)}

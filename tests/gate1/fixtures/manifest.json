@@ -28,6 +28,48 @@
       "size_bytes": 39253,
       "purpose": "stable warnings for excluded and unsupported OOXML",
       "generator_version": "gate1-docx-1"
+    },
+    {
+      "relative_path": "pdf/normal_text.pdf",
+      "sha256": "ad15597477f90158d910b9cf23ec522d55b65235f891bf57367fbcf485927399",
+      "size_bytes": 1439,
+      "purpose": "two deterministic text pages",
+      "generator_version": "gate1-pdf-1"
+    },
+    {
+      "relative_path": "pdf/empty_password.pdf",
+      "sha256": "6d4abff4fd61ceb8e550bc6f4cf2aa5537869bbcd7863b43bb0cd02f0d601609",
+      "size_bytes": 1889,
+      "purpose": "empty-password encrypted text document",
+      "generator_version": "gate1-pdf-1"
+    },
+    {
+      "relative_path": "pdf/password_required.pdf",
+      "sha256": "9b42101eea20bc9abd86269121158fff8beadba76b429b340c2a93aa3a352867",
+      "size_bytes": 1533,
+      "purpose": "non-empty-password boundary fixture",
+      "generator_version": "gate1-pdf-1"
+    },
+    {
+      "relative_path": "pdf/image_only.pdf",
+      "sha256": "cc436721f4309fd57ac9245ccc978f29978775f3616ddf841e9e33e73834ace5",
+      "size_bytes": 1439,
+      "purpose": "valid raster-only page with no text-showing operator",
+      "generator_version": "gate1-pdf-1"
+    },
+    {
+      "relative_path": "pdf/corrupt.pdf",
+      "sha256": "57fab0358f5fa1b255a852ab9e21067f9c528a0129a590141210ab01abf623f3",
+      "size_bytes": 40,
+      "purpose": "invalid non-PDF bytes",
+      "generator_version": "gate1-pdf-1"
+    },
+    {
+      "relative_path": "pdf/truncated.pdf",
+      "sha256": "fd7d72a9e9accb37adc8342354baf0d094d321bedaa5abef98e169a44e8998f1",
+      "size_bytes": 1407,
+      "purpose": "valid PDF with the final 32 bytes removed",
+      "generator_version": "gate1-pdf-1"
     }
   ]
 }

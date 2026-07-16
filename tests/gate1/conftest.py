@@ -23,7 +23,15 @@ def snapshot_request(tmp_path: Path):
     entries = {entry["relative_path"]: entry for entry in manifest["fixtures"]}
 
     def build(name: str, config: dict[str, object] | None = None) -> ParseRequest:
-        relative_path = f"docx/{name}"
+        suffix = Path(name).suffix.lower()
+        fixture_type, mime_type = {
+            ".docx": (
+                "docx",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ),
+            ".pdf": ("pdf", "application/pdf"),
+        }[suffix]
+        relative_path = f"{fixture_type}/{name}"
         entry = entries[relative_path]
         payload = (fixture_root / relative_path).read_bytes()
         digest = hashlib.sha256(payload).hexdigest()
@@ -42,7 +50,7 @@ def snapshot_request(tmp_path: Path):
             snapshot_id,
             snapshot_path,
             digest,
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            mime_type,
             parser_config,
         )
 

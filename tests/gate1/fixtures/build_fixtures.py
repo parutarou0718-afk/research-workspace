@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import hashlib
+from io import BytesIO
 import json
 from pathlib import Path
 import tempfile
@@ -12,6 +13,15 @@ from docx import Document
 from docx.shared import Inches
 from lxml import etree
 from PIL import Image
+from pypdf import PdfWriter
+from pypdf.generic import (
+    ArrayObject,
+    ByteStringObject,
+    DecodedStreamObject,
+    DictionaryObject,
+    NameObject,
+    NumberObject,
+)
 
 
 GENERATOR_VERSION = "gate1-docx-1"
@@ -34,7 +44,15 @@ PURPOSES = {
     "docx/table_escapes.docx": "versioned reversible table-cell escaping",
     "docx/image_alt.docx": "local image title and description alternative text",
     "docx/unsupported_constructs.docx": "stable warnings for excluded and unsupported OOXML",
+    "pdf/normal_text.pdf": "two deterministic text pages",
+    "pdf/empty_password.pdf": "empty-password encrypted text document",
+    "pdf/password_required.pdf": "non-empty-password boundary fixture",
+    "pdf/image_only.pdf": "valid raster-only page with no text-showing operator",
+    "pdf/corrupt.pdf": "invalid non-PDF bytes",
+    "pdf/truncated.pdf": "valid PDF with the final 32 bytes removed",
 }
+
+PDF_GENERATOR_VERSION = "gate1-pdf-1"
 
 
 def _new_document(title: str) -> Document:
@@ -312,6 +330,126 @@ def _unsupported_constructs(destination: Path) -> None:
     _save_canonical(document, destination, transform)
 
 
+def _pdf_writer(title: str) -> PdfWriter:
+    writer = PdfWriter()
+    binary_marker = DecodedStreamObject()
+    binary_marker.set_data(b"\x00gate1-binary-pdf-marker")
+    writer._add_object(binary_marker)
+    writer.add_metadata(
+        {
+            "/Title": title,
+            "/Author": "Research Workspace Fixture Builder",
+            "/Subject": "Deterministic Gate 1 PDF fixture",
+            "/Keywords": "gate1,pdf,fixture",
+            "/CreationDate": "D:20000101000000Z",
+            "/ModDate": "D:20000101000000Z",
+        }
+    )
+    identifier = ByteStringObject(b"gate1-pdf-id-0001")
+    writer._ID = ArrayObject((identifier, identifier))
+    return writer
+
+
+def _add_text_page(writer: PdfWriter, text: str) -> None:
+    page = writer.add_blank_page(width=612, height=792)
+    font = DictionaryObject(
+        {
+            NameObject("/Type"): NameObject("/Font"),
+            NameObject("/Subtype"): NameObject("/Type1"),
+            NameObject("/BaseFont"): NameObject("/Helvetica"),
+        }
+    )
+    font_reference = writer._add_object(font)
+    page[NameObject("/Resources")] = DictionaryObject(
+        {
+            NameObject("/Font"): DictionaryObject(
+                {NameObject("/F1"): font_reference}
+            )
+        }
+    )
+    content = DecodedStreamObject()
+    escaped = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+    content.set_data(f"BT /F1 12 Tf 72 720 Td ({escaped}) Tj ET".encode("ascii"))
+    page[NameObject("/Contents")] = writer._add_object(content)
+
+
+def _add_image_only_page(writer: PdfWriter) -> None:
+    page = writer.add_blank_page(width=612, height=792)
+    image = DecodedStreamObject()
+    image.set_data(bytes((32, 96, 160)) * 100)
+    image.update(
+        {
+            NameObject("/Type"): NameObject("/XObject"),
+            NameObject("/Subtype"): NameObject("/Image"),
+            NameObject("/Width"): NumberObject(10),
+            NameObject("/Height"): NumberObject(10),
+            NameObject("/ColorSpace"): NameObject("/DeviceRGB"),
+            NameObject("/BitsPerComponent"): NumberObject(8),
+        }
+    )
+    image_reference = writer._add_object(image)
+    page[NameObject("/Resources")] = DictionaryObject(
+        {
+            NameObject("/XObject"): DictionaryObject(
+                {NameObject("/Im0"): image_reference}
+            )
+        }
+    )
+    content = DecodedStreamObject()
+    content.set_data(b"q 10 0 0 10 72 700 cm /Im0 Do Q")
+    page[NameObject("/Contents")] = writer._add_object(content)
+
+
+def _pdf_bytes(
+    title: str,
+    texts: tuple[str, ...] = (),
+    *,
+    image_only: bool = False,
+    encryption_password: str | None = None,
+) -> bytes:
+    writer = _pdf_writer(title)
+    for text in texts:
+        _add_text_page(writer, text)
+    if image_only:
+        _add_image_only_page(writer)
+    if encryption_password is not None:
+        writer.encrypt(encryption_password, algorithm="RC4-128")
+    output = BytesIO()
+    writer.write(output)
+    payload = output.getvalue()
+    if encryption_password is not None:
+        payload += b"\n%\x00gate1-encrypted-binary-marker\n"
+    return payload
+
+
+def _build_pdf_fixtures(output_root: Path) -> None:
+    pdf_root = output_root / "pdf"
+    pdf_root.mkdir(parents=True, exist_ok=True)
+    normal = _pdf_bytes("Normal text fixture", ("Page one text", "Page two text"))
+    (pdf_root / "normal_text.pdf").write_bytes(normal)
+    (pdf_root / "empty_password.pdf").write_bytes(
+        _pdf_bytes(
+            "Empty password fixture",
+            ("Page one text", "Page two text"),
+            encryption_password="",
+        )
+    )
+    (pdf_root / "password_required.pdf").write_bytes(
+        _pdf_bytes(
+            "Password required fixture",
+            ("Protected page text",),
+            encryption_password="gate1-fixture-password",
+        )
+    )
+    (pdf_root / "image_only.pdf").write_bytes(
+        _pdf_bytes("Image only fixture", image_only=True)
+    )
+    (pdf_root / "corrupt.pdf").write_bytes(
+        b"not-a-pdf\x00deterministic-corrupt-fixture\n"
+    )
+    (pdf_root / "truncated.pdf").write_bytes(normal[:-32])
+
+
 def _build(output_root: Path) -> bytes:
     docx_root = output_root / "docx"
     builders = {
@@ -322,6 +460,7 @@ def _build(output_root: Path) -> bytes:
     }
     for name, builder in builders.items():
         builder(docx_root / name)
+    _build_pdf_fixtures(output_root)
 
     entries = []
     for relative_path, purpose in PURPOSES.items():
@@ -333,7 +472,11 @@ def _build(output_root: Path) -> bytes:
                 "sha256": hashlib.sha256(payload).hexdigest(),
                 "size_bytes": len(payload),
                 "purpose": purpose,
-                "generator_version": GENERATOR_VERSION,
+                "generator_version": (
+                    PDF_GENERATOR_VERSION
+                    if relative_path.startswith("pdf/")
+                    else GENERATOR_VERSION
+                ),
             }
         )
     manifest = {"schema_version": "1.0", "fixtures": entries}
