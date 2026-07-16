@@ -6,6 +6,7 @@ PAGE_KEYS = (
     "papers",
     "ideas",
     "submissions",
+    "imports",
     "conferences",
     "grants",
     "settings",

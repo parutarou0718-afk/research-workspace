@@ -24,7 +24,8 @@ def _token_stylesheet() -> str:
 QWidget {{ color: {colors['textMain']}; font-family: '{font_family}'; font-size: {body_points:g}pt; }}
 QWidget#overviewPage, QWidget#papersPage, QWidget#ideasPage,
 QWidget#submissionsPage, QWidget#conferencesPage, QWidget#grantsPage,
-QWidget#settingsPage, QWidget#startupErrorPage {{ background: {colors['background']}; }}
+QWidget#importsPage, QWidget#settingsPage, QWidget#startupErrorPage,
+QDialog#importBatchDialog {{ background: {colors['background']}; }}
 QFrame[card="true"] {{ background: {colors['surface']}; border: 1px solid {colors['border']}; border-radius: {radius['card']}px; }}
 QLabel#pageTitleLabel {{ font-size: {title_points:g}pt; font-weight: 700; }}
 """.strip()
@@ -52,3 +53,31 @@ def require_child(root: QWidget, widget_type: type[QWidget], object_name: str):
     if child is None:
         raise RuntimeError(f"Missing required widget: {object_name}")
     return child
+
+
+class _ExistingRootLoader(QUiLoader):
+    def __init__(self, root: QWidget) -> None:
+        super().__init__()
+        self._root = root
+
+    def createWidget(self, class_name, parent=None, name=""):
+        if parent is None:
+            self._root.setObjectName(name)
+            return self._root
+        return super().createWidget(class_name, parent, name)
+
+
+def load_ui_into(filename: str, root: QWidget) -> None:
+    """Populate an existing root widget from a Designer-owned layout."""
+
+    path = files("research_workspace.presentation").joinpath("ui", filename)
+    ui_file = QFile(str(path))
+    if not ui_file.open(QIODevice.OpenModeFlag.ReadOnly):
+        raise RuntimeError(f"Unable to open UI resource: {filename}")
+    try:
+        loaded = _ExistingRootLoader(root).load(ui_file)
+    finally:
+        ui_file.close()
+    if loaded is not root:
+        raise RuntimeError(f"Unable to populate UI resource: {filename}")
+    root.setStyleSheet(f"{root.styleSheet()}\n{_token_stylesheet()}")

@@ -116,5 +116,6 @@ def test_locked_dependencies_have_reviewed_commercial_licenses():
         assert name in canonicalize_name(notices_casefolded)
         assert package["version"] in notices
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "Only Overview is backed by the application query and seeded local data." in readme
+    assert "Overview and Imports are backed by application queries." in readme
+    assert "creates local immutable snapshots" in readme
     assert "Papers, Ideas, and Submissions are foundation placeholders." in readme

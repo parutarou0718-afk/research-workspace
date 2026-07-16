@@ -29,6 +29,10 @@ PAGE_CONTROLS = {
     "papers": ["pageTitleLabel", "pageSubtitleLabel"],
     "ideas": ["pageTitleLabel", "pageSubtitleLabel"],
     "submissions": ["pageTitleLabel", "submissionOverviewTable"],
+    "imports": [
+        "pageTitleLabel", "importStorageDisclosureLabel",
+        "selectImportFilesButton", "recentImportsTable",
+    ],
     "conferences": ["pageTitleLabel", "comingSoonStatusLabel"],
     "grants": ["pageTitleLabel", "comingSoonStatusLabel"],
     "settings": [

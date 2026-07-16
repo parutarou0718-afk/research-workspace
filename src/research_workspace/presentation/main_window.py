@@ -6,6 +6,7 @@ from research_workspace.presentation import load_ui_resource, require_child
 from research_workspace.presentation.pages.conferences_page import ConferencesPage
 from research_workspace.presentation.pages.grants_page import GrantsPage
 from research_workspace.presentation.pages.ideas_page import IdeasPage
+from research_workspace.presentation.pages.imports_page import ImportsPage
 from research_workspace.presentation.pages.overview_page import OverviewPage
 from research_workspace.presentation.pages.papers_page import PapersPage
 from research_workspace.presentation.pages.settings_page import SettingsPage
@@ -17,6 +18,7 @@ PAGE_TYPES = {
     "papers": PapersPage,
     "ideas": IdeasPage,
     "submissions": SubmissionsPage,
+    "imports": ImportsPage,
     "conferences": ConferencesPage,
     "grants": GrantsPage,
     "settings": SettingsPage,

@@ -21,6 +21,7 @@
        <item><widget class="QPushButton" name="navPapersButton"><property name="text"><string>论文</string></property><property name="minimumSize"><size><width>0</width><height>36</height></size></property></widget></item>
        <item><widget class="QPushButton" name="navIdeasButton"><property name="text"><string>Idea 库</string></property><property name="minimumSize"><size><width>0</width><height>36</height></size></property></widget></item>
        <item><widget class="QPushButton" name="navSubmissionsButton"><property name="text"><string>投稿</string></property><property name="minimumSize"><size><width>0</width><height>36</height></size></property></widget></item>
+       <item><widget class="QPushButton" name="navImportsButton"><property name="text"><string>导入资料</string></property><property name="minimumSize"><size><width>0</width><height>36</height></size></property></widget></item>
        <item><widget class="QPushButton" name="navConferencesButton"><property name="text"><string>会议</string></property><property name="minimumSize"><size><width>0</width><height>36</height></size></property></widget></item>
        <item><widget class="QPushButton" name="navGrantsButton"><property name="text"><string>基金</string></property><property name="minimumSize"><size><width>0</width><height>36</height></size></property></widget></item>
        <item><spacer name="navigationVerticalSpacer"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>120</height></size></property></spacer></item>

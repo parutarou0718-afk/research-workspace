@@ -3,17 +3,23 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
 import sys
+from typing import Callable
+from uuid import uuid4
 
 from alembic import command
 from alembic.config import Config
 from PySide6.QtWidgets import QApplication
 from sqlalchemy.engine import Engine
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from research_workspace.application.ports.config_store import AppConfig
+from research_workspace.application.dto.import_dto import ImportRequest
+from research_workspace.application.queries.get_imports import GetImports, ImportReadRecord
 from research_workspace.application.queries.get_overview import GetOverview
 from research_workspace.application.services.change_data_directory import (
     ChangeDataDirectory,
@@ -25,11 +31,17 @@ from research_workspace.application.services.operation_dispatcher import ImportP
 from research_workspace.infrastructure.config.json_config_store import JsonConfigStore
 from research_workspace.infrastructure.db.base import Base
 import research_workspace.infrastructure.db.models  # noqa: F401
+from research_workspace.infrastructure.db.models import (
+    ImportItemModel,
+    SourceDocumentModel,
+    SourceObservationModel,
+)
 from research_workspace.infrastructure.db.repositories import SqlOverviewRepository
 from research_workspace.infrastructure.db.seed import seed_foundation_data
 from research_workspace.infrastructure.db.session import create_engine_for_path, session_factory
 from research_workspace.infrastructure.db.write_coordinator import SqlWriteCoordinator
 from research_workspace.infrastructure.filesystem.snapshots import SnapshotStore
+from research_workspace.infrastructure.filesystem.path_safety import normalized_path_hash
 from research_workspace.infrastructure.logging.configure_logging import configure_logging
 from research_workspace.infrastructure.parsers.docx_parser import DocxParser
 from research_workspace.infrastructure.parsers.pdf_parser import PdfParser
@@ -42,6 +54,7 @@ from research_workspace.presentation.main_window import MainWindow, create_main_
 from research_workspace.presentation.pages.startup_error_page import StartupErrorPage
 from research_workspace.shared.errors import AppError
 from research_workspace.shared.result import Result
+from research_workspace.domain.capabilities import PathScope, PermissionContext
 
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -69,6 +82,8 @@ class ApplicationServices:
     config_store: JsonConfigStore
     change_data_directory: ChangeDataDirectory
     get_overview: GetOverview
+    get_imports: GetImports
+    create_import_request: Callable[[tuple[Path, ...]], ImportRequest]
     engine: Engine
     session: Session
     import_parse_pipeline: ImportParsePipeline
@@ -186,6 +201,55 @@ def _ensure_data_layout(data_directory: Path) -> None:
         (data_directory / relative_path).mkdir(parents=True, exist_ok=True)
 
 
+def _read_import_records(factory) -> tuple[ImportReadRecord, ...]:
+    with factory() as read_session:
+        records = read_session.execute(
+            select(
+                SourceObservationModel.original_filename,
+                ImportItemModel.parse_status,
+                ImportItemModel.error_code,
+                SourceDocumentModel.block_count,
+            )
+            .join(
+                SourceObservationModel,
+                SourceObservationModel.id == ImportItemModel.source_observation_id,
+            )
+            .outerjoin(
+                SourceDocumentModel,
+                SourceDocumentModel.parse_artifact_id == ImportItemModel.parse_artifact_id,
+            )
+            .where(
+                ImportItemModel.state.in_(("imported", "duplicate_content")),
+                ImportItemModel.parse_status.in_(("succeeded", "failed")),
+            )
+            .order_by(ImportItemModel.created_at.desc(), ImportItemModel.id)
+            .limit(100)
+        ).all()
+    return tuple(ImportReadRecord(*record) for record in records)
+
+
+def _create_import_request(paths: tuple[Path, ...], workspace_id) -> ImportRequest:
+    normalized_paths = tuple(Path(path) for path in paths)
+    hashes = tuple(normalized_path_hash(path) for path in normalized_paths)
+    context = PermissionContext(
+        schema_version="1.0",
+        actor_type="user",
+        actor_id="local-user",
+        workspace_id=workspace_id,
+        capabilities=("source.snapshot_import.request", "document.parse.request"),
+        scope_refs=hashes,
+        path_scopes=tuple(
+            PathScope("import_source", path_hash, uuid4(), "copy", False)
+            for path_hash in hashes
+        ),
+        network_allowed=False,
+        granted_at=datetime.now(timezone.utc),
+        policy_version="gate1-local-ui-1.0",
+        authorization_decision_id=uuid4(),
+    )
+    return ImportRequest(normalized_paths, context)
+
+
 def bootstrap_application() -> BootstrapResult:
     _qt_application()
     config_store = JsonConfigStore()
@@ -254,6 +318,10 @@ def bootstrap_application() -> BootstrapResult:
             config_store=config_store,
             change_data_directory=change_data_directory,
             get_overview=GetOverview(SqlOverviewRepository(session)),
+            get_imports=GetImports(lambda: _read_import_records(factory)),
+            create_import_request=lambda paths: _create_import_request(
+                tuple(paths), coordinator.workspace_id()
+            ),
             engine=engine,
             session=session,
             import_parse_pipeline=import_parse_pipeline,

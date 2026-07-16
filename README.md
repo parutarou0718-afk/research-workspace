@@ -122,11 +122,13 @@ No new reproducible defect was found during this verification.
 Complete release readiness is not claimed while the manual mixed-DPI gate is
 unresolved.
 
-## Current v0.1 functions
+## Current v0.2 Gate 1 functions
 
-- Seven reachable desktop destinations: Overview, Papers, Ideas, Submissions,
-  Conferences, Grants, and Settings.
-- Only Overview is backed by the application query and seeded local data.
+- Eight reachable desktop destinations: Overview, Papers, Ideas, Submissions,
+  Imports, Conferences, Grants, and Settings.
+- Overview and Imports are backed by application queries.
+- The Imports page creates local immutable snapshots and deterministically
+  parses user-selected DOCX, PDF, and PPTX files outside the UI thread.
 - Papers, Ideas, and Submissions are foundation placeholders.
 - Conference and Grant pages shown as noninteractive coming-soon views.
 - Workspace initialization, repeatable migrations, idempotent seed data, and a
@@ -136,8 +138,8 @@ unresolved.
 
 ## Explicit non-goals
 
-This foundation release does not implement document parsing, file monitoring,
-paper creation forms, Idea editing, submission CRUD, version comparison, AI
+Gate 1 does not implement file monitoring, paper creation forms, Idea editing,
+submission CRUD, version comparison, AI
 providers, context recovery, semantic search, real Agent execution,
 email/calendar integration, OCR, cloud sync, or a public installer. Conference
 and Grant workflows are placeholders, not interactive product functions.

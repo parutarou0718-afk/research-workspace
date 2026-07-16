@@ -7,6 +7,7 @@ PAGE_TYPES = (
     ("papers_page", "PapersPage"),
     ("ideas_page", "IdeasPage"),
     ("submissions_page", "SubmissionsPage"),
+    ("imports_page", "ImportsPage"),
     ("conferences_page", "ConferencesPage"),
     ("grants_page", "GrantsPage"),
     ("settings_page", "SettingsPage"),

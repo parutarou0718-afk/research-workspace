@@ -18,6 +18,7 @@ PAGE_FILES = {
     "papers_page.ui": "papersPage",
     "ideas_page.ui": "ideasPage",
     "submissions_page.ui": "submissionsPage",
+    "imports_page.ui": "importsPage",
     "conferences_page.ui": "conferencesPage",
     "grants_page.ui": "grantsPage",
     "settings_page.ui": "settingsPage",
@@ -61,6 +62,7 @@ def assert_semantic_type_suffixes(root):
 def test_runtime_ui_file_set_is_complete_and_independent():
     assert {path.name for path in UI_DIR.glob("*.ui")} == {
         "main_window.ui",
+        "import_batch_dialog.ui",
         *PAGE_FILES,
     }
 
@@ -82,7 +84,7 @@ def test_main_window_owns_only_navigation_and_page_stack():
     assert root.find("widget").attrib == {"class": "QMainWindow", "name": "mainWindow"}
     assert "pageStack" in names
     assert {f"nav{page}Button" for page in (
-        "Overview", "Papers", "Ideas", "Submissions", "Conferences", "Grants", "Settings"
+        "Overview", "Papers", "Ideas", "Submissions", "Imports", "Conferences", "Grants", "Settings"
     )} <= names
     assert names == {
         "mainWindow",
@@ -95,6 +97,7 @@ def test_main_window_owns_only_navigation_and_page_stack():
         "navPapersButton",
         "navIdeasButton",
         "navSubmissionsButton",
+        "navImportsButton",
         "navConferencesButton",
         "navGrantsButton",
         "navigationVerticalSpacer",
