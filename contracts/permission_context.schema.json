@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://research-workspace.local/schemas/permission-context-1.0.json",
+  "title": "PermissionContext 1.0",
+  "type": "object",
+  "required": [
+    "schema_version", "actor_type", "actor_id", "workspace_id", "capabilities",
+    "scope_refs", "path_scopes", "network_allowed", "granted_at", "policy_version",
+    "authorization_decision_id"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "actor_type": {"enum": ["user", "system"]},
+    "actor_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 255},
+    "workspace_id": {"$ref": "#/$defs/uuid"},
+    "capabilities": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"enum": ["source.observe.request", "source.snapshot_import.request", "document.parse.request", "maintenance.verify.request"]}
+    },
+    "scope_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 255}},
+    "path_scopes": {"type": "array", "items": {"$ref": "#/$defs/pathScope"}},
+    "network_allowed": {"const": false},
+    "granted_at": {"$ref": "#/$defs/utcDateTime"},
+    "policy_version": {"type": "string", "minLength": 1, "maxLength": 64},
+    "authorization_decision_id": {"$ref": "#/$defs/uuid"}
+  },
+  "$defs": {
+    "uuid": {"type": "string", "format": "uuid", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "utcDateTime": {"type": "string", "format": "date-time", "pattern": "Z$"},
+    "pathScope": {
+      "type": "object",
+      "required": ["scope_type", "normalized_path_hash", "root_id", "access_mode", "recursive"],
+      "properties": {
+        "scope_type": {"enum": ["import_source", "snapshot_read", "workspace_staging"]},
+        "normalized_path_hash": {"$ref": "#/$defs/sha256"},
+        "root_id": {"$ref": "#/$defs/uuid"},
+        "access_mode": {"enum": ["read", "list", "copy", "create_only"]},
+        "recursive": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

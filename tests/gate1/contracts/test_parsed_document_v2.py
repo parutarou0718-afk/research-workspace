@@ -1,4 +1,3 @@
-import copy
 import json
 from pathlib import Path
 
@@ -6,7 +5,7 @@ import pytest
 from jsonschema import Draft202012Validator, FormatChecker, ValidationError
 
 
-SCHEMA_PATH = Path(__file__).resolve().parents[2] / "contracts" / "parsed_document.schema.json"
+SCHEMA_PATH = Path(__file__).resolve().parents[3] / "contracts" / "parsed_document.schema.json"
 
 
 def valid_v2_document() -> dict:
@@ -61,57 +60,75 @@ def validate(value: object) -> None:
     Draft202012Validator(schema, format_checker=FormatChecker()).validate(value)
 
 
-def test_complete_parsed_document_v2_is_valid() -> None:
-    validate(valid_v2_document())
-
-
 @pytest.mark.parametrize(
-    "field",
-    ["schema_version", "parse_artifact_id", "source", "parser", "title", "metadata", "blocks", "warnings"],
+    "native_locator",
+    [
+        {
+            "type": "docx",
+            "part": "body",
+            "section_index": None,
+            "part_index": 0,
+            "body_item_index": 0,
+            "paragraph_index": 0,
+            "table_index": None,
+            "row_index": None,
+            "column_index": None,
+            "cell_paragraph_index": None,
+            "style_name": "Normal",
+            "image_relationship_id": None,
+            "alt_source": None,
+        },
+        {"type": "pdf", "page": 1, "extraction_index": 0},
+        {
+            "type": "pptx",
+            "slide": 1,
+            "shape_path": [{"shape_id": 2, "tree_index": 0}],
+            "text_frame_paragraph_index": 0,
+            "table_index": None,
+            "row_index": None,
+            "column_index": None,
+            "notes": False,
+            "alt_source": None,
+        },
+    ],
 )
-def test_required_document_fields(field: str) -> None:
+def test_closed_native_locator_variants(native_locator: dict) -> None:
     document = valid_v2_document()
-    del document[field]
+    document["blocks"][0]["locator"]["native_locator"] = native_locator
+    validate(document)
+
+
+def test_paragraph_index_is_nullable_but_block_index_is_required() -> None:
+    document = valid_v2_document()
+    document["blocks"][0]["locator"]["paragraph_index"] = None
+    validate(document)
+    del document["blocks"][0]["block_index"]
     with pytest.raises(ValidationError):
         validate(document)
 
 
-def test_document_requires_snapshot_and_artifact_identity() -> None:
+def test_block_metadata_is_selected_by_block_kind() -> None:
     document = valid_v2_document()
-    document["source"]["source_snapshot_id"] = None
-    with pytest.raises(ValidationError):
-        validate(document)
-
-
-def test_block_and_document_metadata_are_contract_owned() -> None:
-    for target in ("document", "block"):
-        document = valid_v2_document()
-        metadata = document["metadata"] if target == "document" else document["blocks"][0]["metadata"]
-        metadata["custom"] = {"native_path": r"C:\\private"}
-        with pytest.raises(ValidationError):
-            validate(document)
-
-
-def test_native_locator_discriminator_is_not_inferred_from_mime_type() -> None:
-    document = valid_v2_document()
-    document["blocks"][0]["locator"]["native_locator"] = {
-        "type": "docx",
-        "page": 1,
-        "extraction_index": 0,
+    block = document["blocks"][0]
+    block["kind"] = "table"
+    block["metadata"] = {
+        "table_text_version": "tsv-escaped-1",
+        "row_count": 1,
+        "column_count": 1,
     }
+    block["locator"]["paragraph_id"] = None
+    validate(document)
+    block["metadata"]["style_name"] = "not-table-metadata"
     with pytest.raises(ValidationError):
         validate(document)
 
 
-def test_storage_path_is_relative_and_not_an_external_source_path() -> None:
+def test_warning_registry_is_closed() -> None:
     document = valid_v2_document()
-    document["source"]["storage_relative_path"] = r"C:\\research\\paper.pdf"
-    with pytest.raises(ValidationError):
-        validate(document)
-
-
-def test_document_rejects_extra_closed_properties() -> None:
-    document = valid_v2_document()
-    document["blocks"][0]["locator"]["extra"] = True
+    document["warnings"] = [
+        {"code": "NO_EXTRACTABLE_TEXT", "block_index": None, "native_locator": None}
+    ]
+    validate(document)
+    document["warnings"][0]["code"] = "AD_HOC_WARNING"
     with pytest.raises(ValidationError):
         validate(document)

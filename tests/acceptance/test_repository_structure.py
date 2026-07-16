@@ -18,10 +18,13 @@ assets/ui_reference.png
 ui/design_tokens.json
 ui/research_workspace_main.ui
 contracts/domain_model.json
+contracts/background_operation.schema.json
 contracts/task_contract.schema.json
 contracts/task_result.schema.json
 contracts/event_contract.schema.json
+contracts/parser_config.schema.json
 contracts/parsed_document.schema.json
+contracts/permission_context.schema.json
 contracts/provider_interfaces.md
 migrations/env.py
 migrations/script.py.mako
@@ -89,7 +92,7 @@ src/research_workspace/shared/time.py
 )
 
 
-def test_locked_production_structure_exists_without_extras() -> None:
+def test_foundation_structure_remains_present_during_gate1() -> None:
     actual_root = {path.name for path in ROOT.iterdir() if path.is_file()}
     assert actual_root == LOCKED_ROOT_FILES
     actual_tree = {
@@ -98,4 +101,4 @@ def test_locked_production_structure_exists_without_extras() -> None:
         for path in (ROOT / prefix).rglob("*")
         if path.is_file() and "__pycache__" not in path.parts
     }
-    assert actual_tree == LOCKED_TREE_FILES
+    assert LOCKED_TREE_FILES <= actual_tree

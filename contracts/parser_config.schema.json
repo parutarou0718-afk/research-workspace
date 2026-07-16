@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://research-workspace.local/schemas/parser-config-2.0.json",
+  "title": "ParserConfig 2.0",
+  "type": "object",
+  "required": [
+    "contract_version", "ocr_enabled", "preserve_headers", "preserve_footers",
+    "preserve_footnotes", "table_mode", "language", "preserve_image_alt",
+    "reading_order", "extensions"
+  ],
+  "properties": {
+    "contract_version": {"const": "2.0"},
+    "ocr_enabled": {"const": false},
+    "preserve_headers": {"type": "boolean"},
+    "preserve_footers": {"type": "boolean"},
+    "preserve_footnotes": {"type": "boolean"},
+    "table_mode": {"const": "tsv-escaped-1"},
+    "language": {"type": ["string", "null"], "minLength": 1, "maxLength": 64},
+    "preserve_image_alt": {"type": "boolean"},
+    "reading_order": {"const": "native_structural"},
+    "extensions": {
+      "type": "object",
+      "properties": {
+        "docx": {"type": "object", "additionalProperties": false},
+        "pdf": {"type": "object", "additionalProperties": false},
+        "pptx": {"type": "object", "additionalProperties": false}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,5 +1,5 @@
 {
-  "version": "0.1",
+  "version": "0.2-gate1",
   "entities": {
     "Paper": ["id", "title", "status", "current_version_id", "created_at", "updated_at", "deleted_at"],
     "PaperVersion": ["id", "paper_id", "source_document_id", "version_label", "parent_version_id", "is_current", "created_at"],
@@ -17,6 +17,20 @@
     "TaskEffect": ["id", "operation_key", "task_id", "attempt_id", "effect_type", "output_type", "output_identity", "output_ref_json", "status", "recovery_json", "created_at", "committed_at"],
     "AuditLog": ["id", "actor_type", "actor_id", "action", "target_type", "target_id", "before_json", "after_json", "task_id", "correlation_id", "undo_token", "undo_of_audit_id", "created_at"],
     "DomainEvent": ["id", "event_type", "aggregate_type", "aggregate_id", "payload_json", "deduplication_key", "causation_id", "correlation_id", "created_at", "processed_at"]
+  },
+  "gate1_entities": {
+    "SourceSnapshot": ["id", "sha256", "size_bytes", "mime_type", "storage_relative_path", "original_filename", "created_at", "preferred_parse_artifact_id"],
+    "SourceObservation": ["id", "normalized_path_hash", "original_filename", "current_snapshot_id", "availability_status", "baseline_only", "size_bytes", "modified_at", "file_id_hint", "volume_serial_hint", "first_seen_at", "last_seen_at", "missing_at", "row_version"],
+    "SourceObservationEvent": ["id", "source_observation_id", "event_type", "snapshot_id", "path_before_hash", "path_after_hash", "facts_json", "raw_file_event_id", "observed_at"],
+    "BackgroundOperation": ["id", "operation_type", "status", "correlation_command_id", "work_plan_fingerprint", "permission_context_json", "result_summary_json", "error_code", "created_at", "started_at", "finished_at", "cancel_requested_at"],
+    "OperationAttempt": ["id", "operation_id", "attempt_number", "status", "error_code", "diagnostic_summary_json", "started_at", "finished_at", "next_attempt_at"],
+    "ImportBatch": ["id", "operation_id", "status", "selected_count", "estimated_total_bytes", "estimated_added_bytes", "estimate_is_exact", "disclosure_accepted_at", "created_at", "finished_at"],
+    "ImportItem": ["id", "batch_id", "source_observation_id", "snapshot_id", "state", "error_code", "created_at", "finished_at"],
+    "ParseArtifact": ["id", "source_snapshot_id", "parser_id", "parser_version", "config_fingerprint", "contract_version", "created_at"],
+    "ParseAttempt": ["id", "parse_artifact_id", "attempt_number", "status", "started_at", "finished_at", "error_code", "warnings_json", "executor_version", "output_sha256", "derived_file_sha256", "derived_relative_path"],
+    "SourceDocument": ["id", "parse_artifact_id", "title", "metadata_json", "language", "block_count", "warnings_json", "created_at"],
+    "ParsedBlock": ["id", "source_document_id", "parse_artifact_id", "block_index", "kind", "text", "locator_json", "metadata_json", "block_hash"],
+    "DomainEvent": ["id", "schema_version", "workspace_id", "event_type", "aggregate_type", "aggregate_id", "aggregate_version", "actor_type", "command_id", "operation_id", "payload_json", "deduplication_key", "causation_id", "correlation_id", "created_at", "processed_at"]
   },
   "relation_types": [
     "belongs_to",

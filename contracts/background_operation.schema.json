@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://research-workspace.local/schemas/background-operation-1.0.json",
+  "title": "BackgroundOperation 1.0",
+  "type": "object",
+  "required": [
+    "schema_version", "operation_id", "operation_type", "status", "work_plan_fingerprint",
+    "permission_context", "result_summary", "error_code", "created_at", "started_at",
+    "finished_at", "cancel_requested_at"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "operation_id": {"$ref": "#/$defs/uuid"},
+    "operation_type": {"enum": ["snapshot_import", "document_parse", "material_verify"]},
+    "status": {"enum": ["planned", "running", "retry_wait", "completed", "failed", "cancelled", "manual_attention"]},
+    "work_plan_fingerprint": {"$ref": "#/$defs/sha256"},
+    "permission_context": {"$ref": "#/$defs/permissionContext"},
+    "result_summary": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "required": ["processed_count", "succeeded_count", "failed_count"],
+          "properties": {
+            "processed_count": {"type": "integer", "minimum": 0},
+            "succeeded_count": {"type": "integer", "minimum": 0},
+            "failed_count": {"type": "integer", "minimum": 0}
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "error_code": {"type": ["string", "null"], "pattern": "^[A-Z][A-Z0-9_]{1,127}$"},
+    "created_at": {"$ref": "#/$defs/utcDateTime"},
+    "started_at": {"anyOf": [{"$ref": "#/$defs/utcDateTime"}, {"type": "null"}]},
+    "finished_at": {"anyOf": [{"$ref": "#/$defs/utcDateTime"}, {"type": "null"}]},
+    "cancel_requested_at": {"anyOf": [{"$ref": "#/$defs/utcDateTime"}, {"type": "null"}]}
+  },
+  "$defs": {
+    "uuid": {"type": "string", "format": "uuid", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "utcDateTime": {"type": "string", "format": "date-time", "pattern": "Z$"},
+    "permissionContext": {
+      "type": "object",
+      "required": ["schema_version", "actor_type", "actor_id", "workspace_id", "capabilities", "scope_refs", "path_scopes", "network_allowed", "granted_at", "policy_version", "authorization_decision_id"],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "actor_type": {"enum": ["user", "system"]},
+        "actor_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 255},
+        "workspace_id": {"$ref": "#/$defs/uuid"},
+        "capabilities": {"type": "array", "uniqueItems": true, "items": {"enum": ["source.observe.request", "source.snapshot_import.request", "document.parse.request", "maintenance.verify.request"]}},
+        "scope_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 255}},
+        "path_scopes": {"type": "array", "items": {"$ref": "#/$defs/pathScope"}},
+        "network_allowed": {"const": false},
+        "granted_at": {"$ref": "#/$defs/utcDateTime"},
+        "policy_version": {"type": "string", "minLength": 1, "maxLength": 64},
+        "authorization_decision_id": {"$ref": "#/$defs/uuid"}
+      },
+      "additionalProperties": false
+    },
+    "pathScope": {
+      "type": "object",
+      "required": ["scope_type", "normalized_path_hash", "root_id", "access_mode", "recursive"],
+      "properties": {
+        "scope_type": {"enum": ["import_source", "snapshot_read", "workspace_staging"]},
+        "normalized_path_hash": {"$ref": "#/$defs/sha256"},
+        "root_id": {"$ref": "#/$defs/uuid"},
+        "access_mode": {"enum": ["read", "list", "copy", "create_only"]},
+        "recursive": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
