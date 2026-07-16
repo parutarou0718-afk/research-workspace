@@ -102,7 +102,8 @@ No new reproducible defect was found during this verification.
 
 ## Release blocker and scope ledger
 
-- **Open release blocker:** native Windows mixed-monitor visual smoke and
+- **REL-GATE-001 — Windows mixed-DPI manual release verification**
+  (`BLOCKED_BY_ENVIRONMENT`): native Windows mixed-monitor visual smoke and
   screenshots for a live 100%→125%→150%→100% move remain unverified. No
   packaged development executable or verified multi-scale monitor set was
   available. Automated offscreen geometry tests passed at 100%, 125%, and
