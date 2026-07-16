@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0",
+  "fixtures": [
+    {
+      "relative_path": "docx/body_order.docx",
+      "sha256": "f9b0265cafcd87ab9d16541a5c3a01c045e92c3a15e38c784edffbadd56108c1",
+      "size_bytes": 36836,
+      "purpose": "OOXML body paragraph/table child order and heading path",
+      "generator_version": "gate1-docx-1"
+    },
+    {
+      "relative_path": "docx/table_escapes.docx",
+      "sha256": "6b09da0117b769ac6233deb96b308e59e50d65073551aa5613a44cdecc94fe3f",
+      "size_bytes": 36837,
+      "purpose": "versioned reversible table-cell escaping",
+      "generator_version": "gate1-docx-1"
+    },
+    {
+      "relative_path": "docx/image_alt.docx",
+      "sha256": "522c3962dcda247f63e03852445e63e3a58965ea0211a905ab2d9b5ca70a95ca",
+      "size_bytes": 37137,
+      "purpose": "local image title and description alternative text",
+      "generator_version": "gate1-docx-1"
+    },
+    {
+      "relative_path": "docx/unsupported_constructs.docx",
+      "sha256": "569dbe1384ed64658fd8e3ce14c3aefb5534f928d9d88c989b0282d94ee0f6c8",
+      "size_bytes": 39253,
+      "purpose": "stable warnings for excluded and unsupported OOXML",
+      "generator_version": "gate1-docx-1"
+    }
+  ]
+}

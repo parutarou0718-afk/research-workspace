@@ -3,11 +3,50 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
+from uuid import NAMESPACE_URL, uuid5
 
 from alembic import command
 from alembic.config import Config
 import pytest
 from sqlalchemy import create_engine, text
+
+
+@pytest.fixture
+def snapshot_request(tmp_path: Path):
+    import hashlib
+
+    from research_workspace.application.dto.parsing_dto import ParseRequest
+    from research_workspace.domain.parsing import DEFAULT_PARSER_CONFIG
+
+    fixture_root = Path(__file__).resolve().parent / "fixtures"
+    manifest = json.loads((fixture_root / "manifest.json").read_text(encoding="utf-8"))
+    entries = {entry["relative_path"]: entry for entry in manifest["fixtures"]}
+
+    def build(name: str, config: dict[str, object] | None = None) -> ParseRequest:
+        relative_path = f"docx/{name}"
+        entry = entries[relative_path]
+        payload = (fixture_root / relative_path).read_bytes()
+        digest = hashlib.sha256(payload).hexdigest()
+        assert digest == entry["sha256"]
+        assert len(payload) == entry["size_bytes"]
+        snapshot_path = tmp_path / "workspace" / "sources" / "sha256" / digest[:2] / digest / "content"
+        snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+        snapshot_path.write_bytes(payload)
+        parser_config = dict(DEFAULT_PARSER_CONFIG)
+        if config:
+            parser_config.update(config)
+        artifact_id = uuid5(NAMESPACE_URL, f"gate1:{relative_path}:{parser_config!r}")
+        snapshot_id = uuid5(NAMESPACE_URL, f"gate1-snapshot:{digest}")
+        return ParseRequest(
+            artifact_id,
+            snapshot_id,
+            snapshot_path,
+            digest,
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            parser_config,
+        )
+
+    return build
 
 
 @dataclass(frozen=True)
