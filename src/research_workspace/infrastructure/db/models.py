@@ -19,8 +19,8 @@ def _uuid(primary_key: bool = False, nullable: bool = False):
     return mapped_column(UUIDText(), primary_key=primary_key, nullable=nullable)
 
 
-class SourceDocumentModel(Base):
-    __tablename__ = "source_documents"
+class LegacySourceDocumentV01Model(Base):
+    __tablename__ = "legacy_source_documents_v01"
     __table_args__ = (
         CheckConstraint("size_bytes >= 0", name="size_bytes_nonnegative"),
         CheckConstraint("length(sha256) = 64 AND sha256 NOT GLOB '*[^0-9a-f]*'", name="sha256_lower_hex"),
@@ -37,6 +37,230 @@ class SourceDocumentModel(Base):
     imported_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     read_only: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("1"))
     missing_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    migration_batch_id: Mapped[UUID] = mapped_column(UUIDText(), nullable=False)
+    source_schema_revision: Mapped[str] = mapped_column(String(128), nullable=False)
+    migration_reason: Mapped[str] = mapped_column(String(128), nullable=False)
+    preserved_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+
+
+class WorkspaceMetadataModel(Base):
+    __tablename__ = "workspace_metadata"
+    __table_args__ = (CheckConstraint("watcher_generation >= 0", name="watcher_generation_nonnegative"),)
+    workspace_id: Mapped[UUID] = _uuid(primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    clean_shutdown: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("1"))
+    watcher_generation: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+
+
+class MigrationBatchModel(Base):
+    __tablename__ = "migration_batches"
+    id: Mapped[UUID] = _uuid(primary_key=True)
+    source_revision: Mapped[str] = mapped_column(String(128), nullable=False)
+    target_revision: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(String(64), nullable=False)
+    pre_migration_backup_path_hash: Mapped[str] = mapped_column(CHAR(64), nullable=False)
+    counts_json: Mapped[str] = mapped_column(Text, nullable=False)
+    exceptions_json: Mapped[str] = mapped_column(Text, nullable=False)
+    started_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+
+
+class BackgroundOperationModel(Base):
+    __tablename__ = "background_operations"
+    id: Mapped[UUID] = _uuid(primary_key=True)
+    operation_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(String(64), nullable=False)
+    work_plan_fingerprint: Mapped[str] = mapped_column(CHAR(64), nullable=False)
+    permission_context_json: Mapped[str] = mapped_column(Text, nullable=False)
+    result_summary_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    cancel_requested_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+
+
+class SourceSnapshotModel(Base):
+    __tablename__ = "source_snapshots"
+    __table_args__ = (
+        UniqueConstraint("sha256", name="uq_source_snapshots_sha256"),
+        UniqueConstraint("storage_relative_path", name="uq_source_snapshots_storage_path"),
+        CheckConstraint("size_bytes >= 0", name="size_nonnegative"),
+    )
+    id: Mapped[UUID] = _uuid(primary_key=True)
+    sha256: Mapped[str] = mapped_column(CHAR(64), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    storage_relative_path: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    created_by_operation_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("background_operations.id", ondelete="RESTRICT"), nullable=False)
+
+
+class SourceObservationModel(Base):
+    __tablename__ = "source_observations"
+    __table_args__ = (
+        UniqueConstraint("normalized_path", name="uq_source_observations_normalized_path"),
+        Index("ix_source_observations_normalized_path_hash", "normalized_path_hash"),
+        CheckConstraint("row_version >= 1", name="row_version_positive"),
+    )
+    id: Mapped[UUID] = _uuid(primary_key=True)
+    original_path: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_path: Mapped[str] = mapped_column(Text(collation="NOCASE"), nullable=False)
+    normalized_path_hash: Mapped[str] = mapped_column(CHAR(64), nullable=False)
+    original_filename: Mapped[str] = mapped_column(String(1024), nullable=False)
+    current_snapshot_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("source_snapshots.id", ondelete="RESTRICT"), nullable=True)
+    availability_status: Mapped[str] = mapped_column(String(64), nullable=False)
+    baseline_only: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"))
+    size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    modified_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    file_id_hint: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    volume_serial_hint: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    first_seen_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    missing_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    row_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+
+
+class SourceObservationEventModel(Base):
+    __tablename__ = "source_observation_events"
+    id: Mapped[UUID] = _uuid(primary_key=True)
+    source_observation_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("source_observations.id", ondelete="RESTRICT"), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    snapshot_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("source_snapshots.id", ondelete="RESTRICT"), nullable=True)
+    path_before_hash: Mapped[str | None] = mapped_column(CHAR(64), nullable=True)
+    path_after_hash: Mapped[str | None] = mapped_column(CHAR(64), nullable=True)
+    facts_json: Mapped[str] = mapped_column(Text, nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+
+
+class OperationAttemptModel(Base):
+    __tablename__ = "operation_attempts"
+    __table_args__ = (UniqueConstraint("operation_id", "attempt_number", name="uq_operation_attempts"),)
+    id: Mapped[UUID] = _uuid(primary_key=True)
+    operation_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("background_operations.id", ondelete="RESTRICT"), nullable=False)
+    attempt_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(64), nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    diagnostic_summary_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+
+
+class ImportBatchModel(Base):
+    __tablename__ = "import_batches"
+    id: Mapped[UUID] = _uuid(primary_key=True)
+    operation_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("background_operations.id", ondelete="RESTRICT"), nullable=False, unique=True)
+    status: Mapped[str] = mapped_column(String(64), nullable=False)
+    selected_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    estimated_total_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    estimated_added_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    estimate_is_exact: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    disclosure_accepted_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+
+
+class ParseArtifactModel(Base):
+    __tablename__ = "parse_artifacts"
+    __table_args__ = (UniqueConstraint("source_snapshot_id", "parser_id", "parser_version", "config_fingerprint", "contract_version", name="uq_parse_artifacts_revision"),)
+    id: Mapped[UUID] = _uuid(primary_key=True)
+    source_snapshot_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("source_snapshots.id", ondelete="RESTRICT"), nullable=False)
+    parser_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    parser_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    config_fingerprint: Mapped[str] = mapped_column(CHAR(64), nullable=False)
+    contract_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(64), nullable=False)
+    successful_attempt_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("parse_attempts.id", ondelete="RESTRICT"), nullable=True, unique=True)
+    output_sha256: Mapped[str | None] = mapped_column(CHAR(64), nullable=True)
+    derived_file_sha256: Mapped[str | None] = mapped_column(CHAR(64), nullable=True)
+    derived_relative_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+
+
+class ParseAttemptModel(Base):
+    __tablename__ = "parse_attempts"
+    __table_args__ = (
+        UniqueConstraint("parse_artifact_id", "attempt_number", name="uq_parse_attempts_number"),
+        Index("ux_parse_attempts_one_succeeded", "parse_artifact_id", unique=True, sqlite_where=text("status='succeeded'")),
+    )
+    id: Mapped[UUID] = _uuid(primary_key=True)
+    parse_artifact_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("parse_artifacts.id", ondelete="RESTRICT"), nullable=False)
+    attempt_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(64), nullable=False)
+    executor_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    warnings_json: Mapped[str] = mapped_column(Text, nullable=False)
+    output_sha256: Mapped[str | None] = mapped_column(CHAR(64), nullable=True)
+    derived_file_sha256: Mapped[str | None] = mapped_column(CHAR(64), nullable=True)
+    diagnostic_summary_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class SnapshotParsePreferenceModel(Base):
+    __tablename__ = "snapshot_parse_preferences"
+    source_snapshot_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("source_snapshots.id", ondelete="RESTRICT"), primary_key=True)
+    parse_artifact_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("parse_artifacts.id", ondelete="RESTRICT"), nullable=False)
+    row_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    updated_by_operation_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("background_operations.id", ondelete="RESTRICT"), nullable=False)
+
+
+class SourceDocumentModel(Base):
+    __tablename__ = "source_documents"
+    id: Mapped[UUID] = _uuid(primary_key=True)
+    parse_artifact_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("parse_artifacts.id", ondelete="RESTRICT"), nullable=False, unique=True)
+    title: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False)
+    language: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    block_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    warnings_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+
+
+class ParsedBlockModel(Base):
+    __tablename__ = "parsed_blocks"
+    __table_args__ = (UniqueConstraint("parse_artifact_id", "block_index", name="uq_parsed_blocks_index"),)
+    id: Mapped[str] = mapped_column(CHAR(64), primary_key=True)
+    parse_artifact_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("parse_artifacts.id", ondelete="RESTRICT"), nullable=False)
+    source_document_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("source_documents.id", ondelete="RESTRICT"), nullable=False)
+    block_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    locator_json: Mapped[str] = mapped_column(Text, nullable=False)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False)
+    text_sha256: Mapped[str] = mapped_column(CHAR(64), nullable=False)
+
+
+class EvidenceRefModel(Base):
+    __tablename__ = "evidence_refs"
+    id: Mapped[UUID] = _uuid(primary_key=True)
+    entity_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    entity_id: Mapped[UUID] = mapped_column(UUIDText(), nullable=False)
+    parse_artifact_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("parse_artifacts.id", ondelete="RESTRICT"), nullable=False)
+    parsed_block_id: Mapped[str] = mapped_column(CHAR(64), ForeignKey("parsed_blocks.id", ondelete="RESTRICT"), nullable=False)
+    locator_json: Mapped[str] = mapped_column(Text, nullable=False)
+    quote_hash: Mapped[str] = mapped_column(CHAR(64), nullable=False)
+    saved_excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    created_by_operation_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("background_operations.id", ondelete="RESTRICT"), nullable=False)
+
+
+class ImportItemModel(Base):
+    __tablename__ = "import_items"
+    id: Mapped[UUID] = _uuid(primary_key=True)
+    batch_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("import_batches.id", ondelete="RESTRICT"), nullable=False)
+    source_observation_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("source_observations.id", ondelete="RESTRICT"), nullable=False)
+    snapshot_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("source_snapshots.id", ondelete="RESTRICT"), nullable=True)
+    parse_artifact_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("parse_artifacts.id", ondelete="RESTRICT"), nullable=True)
+    state: Mapped[str] = mapped_column(String(64), nullable=False)
+    parse_status: Mapped[str] = mapped_column(String(64), nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
 
 
 class PaperModel(Base):
@@ -65,7 +289,7 @@ class PaperVersionModel(Base):
     )
     id: Mapped[UUID] = _uuid(primary_key=True)
     paper_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("papers.id", ondelete="RESTRICT"), nullable=False)
-    source_document_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("source_documents.id", ondelete="RESTRICT"), nullable=False)
+    source_document_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("legacy_source_documents_v01.id", name="fk_paper_versions_source_document_id_source_documents", ondelete="RESTRICT"), nullable=False)
     version_label: Mapped[str] = mapped_column(String(128), nullable=False)
     parent_version_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("paper_versions.id", ondelete="RESTRICT"), nullable=True)
     is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"))
@@ -101,7 +325,7 @@ class NoteModel(Base):
     id: Mapped[UUID] = _uuid(primary_key=True)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    source_document_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("source_documents.id", ondelete="RESTRICT"), nullable=True)
+    source_document_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("legacy_source_documents_v01.id", name="fk_notes_source_document_id_source_documents", ondelete="RESTRICT"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
@@ -159,8 +383,8 @@ class GrantModel(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
 
 
-class EvidenceRefModel(Base):
-    __tablename__ = "evidence_refs"
+class LegacyEvidenceRefV01Model(Base):
+    __tablename__ = "legacy_evidence_refs_v01"
     __table_args__ = (
         CheckConstraint("entity_type IN ('Paper','PaperVersion','Idea','Note','SourceDocument','Submission','Conference','Grant','EntityRelation')", name="entity_type_enum"),
         CheckConstraint("page IS NULL OR page >= 1", name="page_positive"),
@@ -173,7 +397,7 @@ class EvidenceRefModel(Base):
     id: Mapped[UUID] = _uuid(primary_key=True)
     entity_type: Mapped[str] = mapped_column(String(64), nullable=False)
     entity_id: Mapped[UUID] = mapped_column(UUIDText(), nullable=False)
-    document_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("source_documents.id", ondelete="RESTRICT"), nullable=False)
+    document_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("legacy_source_documents_v01.id", ondelete="RESTRICT"), nullable=False)
     version_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("paper_versions.id", ondelete="RESTRICT"), nullable=True)
     section: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     page: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -184,6 +408,10 @@ class EvidenceRefModel(Base):
     locator_json: Mapped[str] = mapped_column(Text, nullable=False)
     quote_hash: Mapped[str] = mapped_column(CHAR(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    migration_batch_id: Mapped[UUID] = mapped_column(UUIDText(), nullable=False)
+    source_schema_revision: Mapped[str] = mapped_column(String(128), nullable=False)
+    migration_reason: Mapped[str] = mapped_column(String(128), nullable=False)
+    preserved_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
 
 
 class EntityRelationModel(Base):
@@ -230,7 +458,7 @@ class RelationObservationModel(Base):
     provenance_type: Mapped[str] = mapped_column(String(64), nullable=False)
     confidence: Mapped[Decimal | None] = mapped_column(Numeric(6, 5), nullable=True)
     origin_task_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("tasks.id", ondelete="RESTRICT"), nullable=True)
-    evidence_ref_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("evidence_refs.id", ondelete="RESTRICT"), nullable=True)
+    evidence_ref_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("legacy_evidence_refs_v01.id", name="fk_relation_observations_evidence_ref_id_evidence_refs", ondelete="RESTRICT"), nullable=True)
     provider_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     model_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
@@ -337,16 +565,23 @@ class DomainEventModel(Base):
     __tablename__ = "domain_events"
     __table_args__ = (
         UniqueConstraint("deduplication_key", name="uq_domain_events_deduplication_key"),
-        CheckConstraint("event_type IN ('document.imported','paper.created','paper.version_added','paper.version_relation_corrected','idea.created','idea.candidate_extracted','idea.linked','submission.created','submission.status_changed','context.recovered','task.failed','audit.undo_applied')", name="event_type_enum"),
-        CheckConstraint("aggregate_type IN ('Paper','PaperVersion','Idea','SourceDocument','Submission','Conference','Grant','Task','AuditLog')", name="aggregate_type_enum"),
+        CheckConstraint("schema_version IN ('1.0','2.0')", name="schema_version_enum"),
+        CheckConstraint("actor_type IS NULL OR actor_type IN ('user','system')", name="actor_type_enum"),
     )
     id: Mapped[UUID] = _uuid(primary_key=True)
-    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    aggregate_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(16), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    workspace_id: Mapped[UUID | None] = mapped_column(UUIDText(), nullable=True)
+    command_id: Mapped[UUID | None] = mapped_column(UUIDText(), nullable=True)
+    operation_id: Mapped[UUID | None] = mapped_column(UUIDText(), nullable=True)
+    aggregate_type: Mapped[str] = mapped_column(String(128), nullable=False)
     aggregate_id: Mapped[UUID] = mapped_column(UUIDText(), nullable=False)
+    aggregate_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    actor_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     payload_json: Mapped[str] = mapped_column(Text, nullable=False)
     deduplication_key: Mapped[str] = mapped_column(String(255), nullable=False)
     causation_id: Mapped[UUID | None] = mapped_column(UUIDText(), nullable=True)
     correlation_id: Mapped[UUID | None] = mapped_column(UUIDText(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    occurred_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     processed_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)

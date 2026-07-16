@@ -10,7 +10,17 @@ from sqlalchemy.orm import Session
 
 from research_workspace.infrastructure.db.base import Base, UTCDateTime
 import research_workspace.infrastructure.db.models  # noqa: F401
-from research_workspace.infrastructure.db.models import EntityRelationModel, RelationObservationModel, SourceDocumentModel
+from research_workspace.infrastructure.db.models import EntityRelationModel, LegacySourceDocumentV01Model, RelationObservationModel
+
+
+GATE1_TABLES = {
+    "workspace_metadata", "migration_batches", "source_snapshots", "source_observations",
+    "source_observation_events", "background_operations", "operation_attempts",
+    "import_batches", "import_items", "parse_artifacts", "parse_attempts",
+    "snapshot_parse_preferences", "source_documents", "parsed_blocks", "evidence_refs",
+    "legacy_source_documents_v01", "legacy_evidence_refs_v01", "domain_events",
+}
+GATE1_REPLACED_V01_TABLES = {"source_documents", "evidence_refs", "domain_events"}
 
 
 EXPECTED_SCHEMA = {
@@ -162,11 +172,11 @@ EXPECTED_FOREIGN_KEY_DETAILS = {
     "source_documents": set(), "ideas": set(), "conferences": set(), "grants": set(),
     "entity_relations": set(), "tasks": set(), "domain_events": set(),
     "papers": {("fk_papers_current_version_id_paper_versions", ("current_version_id",), "paper_versions", ("id",), "SET NULL")},
-    "paper_versions": {("fk_paper_versions_paper_id_papers", ("paper_id",), "papers", ("id",), "RESTRICT"), ("fk_paper_versions_source_document_id_source_documents", ("source_document_id",), "source_documents", ("id",), "RESTRICT"), ("fk_paper_versions_parent_version_id_paper_versions", ("parent_version_id",), "paper_versions", ("id",), "RESTRICT")},
-    "notes": {("fk_notes_source_document_id_source_documents", ("source_document_id",), "source_documents", ("id",), "RESTRICT")},
+    "paper_versions": {("fk_paper_versions_paper_id_papers", ("paper_id",), "papers", ("id",), "RESTRICT"), ("fk_paper_versions_source_document_id_source_documents", ("source_document_id",), "legacy_source_documents_v01", ("id",), "RESTRICT"), ("fk_paper_versions_parent_version_id_paper_versions", ("parent_version_id",), "paper_versions", ("id",), "RESTRICT")},
+    "notes": {("fk_notes_source_document_id_source_documents", ("source_document_id",), "legacy_source_documents_v01", ("id",), "RESTRICT")},
     "submissions": {("fk_submissions_paper_id_papers", ("paper_id",), "papers", ("id",), "RESTRICT"), ("fk_submissions_active_version_id_paper_versions", ("active_version_id",), "paper_versions", ("id",), "RESTRICT")},
     "evidence_refs": {("fk_evidence_refs_document_id_source_documents", ("document_id",), "source_documents", ("id",), "RESTRICT"), ("fk_evidence_refs_version_id_paper_versions", ("version_id",), "paper_versions", ("id",), "RESTRICT")},
-    "relation_observations": {("fk_relation_observations_relation_id_entity_relations", ("relation_id",), "entity_relations", ("id",), "RESTRICT"), ("fk_relation_observations_origin_task_id_tasks", ("origin_task_id",), "tasks", ("id",), "RESTRICT"), ("fk_relation_observations_evidence_ref_id_evidence_refs", ("evidence_ref_id",), "evidence_refs", ("id",), "RESTRICT")},
+    "relation_observations": {("fk_relation_observations_relation_id_entity_relations", ("relation_id",), "entity_relations", ("id",), "RESTRICT"), ("fk_relation_observations_origin_task_id_tasks", ("origin_task_id",), "tasks", ("id",), "RESTRICT"), ("fk_relation_observations_evidence_ref_id_evidence_refs", ("evidence_ref_id",), "legacy_evidence_refs_v01", ("id",), "RESTRICT")},
     "audit_logs": {("fk_audit_logs_task_id_tasks", ("task_id",), "tasks", ("id",), "RESTRICT"), ("fk_audit_logs_undo_of_audit_id_audit_logs", ("undo_of_audit_id",), "audit_logs", ("id",), "RESTRICT")},
     "task_attempts": {("fk_task_attempts_task_id_tasks", ("task_id",), "tasks", ("id",), "RESTRICT")},
     "task_effects": {("fk_task_effects_task_id_tasks", ("task_id",), "tasks", ("id",), "RESTRICT"), ("fk_task_effects_attempt_id_task_attempts", ("attempt_id",), "task_attempts", ("id",), "RESTRICT")},
@@ -220,8 +230,10 @@ def test_core_metadata_has_exact_columns(engine):
 
 
 def _assert_exact_schema(inspector):
-    assert set(inspector.get_table_names()) - {"alembic_version"} == set(EXPECTED_SCHEMA)
-    for table, expected in EXPECTED_SCHEMA.items():
+    unchanged = set(EXPECTED_SCHEMA) - GATE1_REPLACED_V01_TABLES
+    assert set(inspector.get_table_names()) - {"alembic_version"} == unchanged | GATE1_TABLES
+    for table in unchanged:
+        expected = EXPECTED_SCHEMA[table]
         actual = {
             col["name"]: (str(col["type"]), col["nullable"])
             for col in inspector.get_columns(table)
@@ -246,10 +258,11 @@ def test_group_two_foreign_keys(engine):
         for fk in inspector.get_foreign_keys(table)
     }
     assert actual == {
-        ("evidence_refs", ("document_id",), "source_documents", "RESTRICT"),
-        ("evidence_refs", ("version_id",), "paper_versions", "RESTRICT"),
+        ("evidence_refs", ("parse_artifact_id",), "parse_artifacts", "RESTRICT"),
+        ("evidence_refs", ("parsed_block_id",), "parsed_blocks", "RESTRICT"),
+        ("evidence_refs", ("created_by_operation_id",), "background_operations", "RESTRICT"),
         ("relation_observations", ("relation_id",), "entity_relations", "RESTRICT"),
-        ("relation_observations", ("evidence_ref_id",), "evidence_refs", "RESTRICT"),
+        ("relation_observations", ("evidence_ref_id",), "legacy_evidence_refs_v01", "RESTRICT"),
         ("audit_logs", ("undo_of_audit_id",), "audit_logs", "RESTRICT"),
         ("relation_observations", ("origin_task_id",), "tasks", "RESTRICT"),
         ("audit_logs", ("task_id",), "tasks", "RESTRICT"),
@@ -262,7 +275,7 @@ def test_defaults_checks_foreign_keys_uniques_and_indexes_are_exact(engine):
 
 
 def _assert_exact_constraints(inspector):
-    for table in EXPECTED_SCHEMA:
+    for table in set(EXPECTED_SCHEMA) - GATE1_REPLACED_V01_TABLES:
         defaults = {col["name"]: str(col["default"]) for col in inspector.get_columns(table) if col["default"] is not None}
         assert defaults == EXPECTED_DEFAULTS[table]
         primary_key = inspector.get_pk_constraint(table)
@@ -287,9 +300,17 @@ def _assert_source_document_path_uniqueness_is_nocase(engine):
     common = dict(sha256="a" * 64, mime_type="application/pdf", size_bytes=1,
         modified_at=now, imported_at=now, read_only=True, missing_at=None)
     with Session(engine) as session:
-        session.add(SourceDocumentModel(id="00000000-0000-0000-0000-000000000001", path="C:/Research/Paper.PDF", **common))
+        session.add(LegacySourceDocumentV01Model(
+            id="00000000-0000-0000-0000-000000000001", path="C:/Research/Paper.PDF",
+            migration_batch_id="00000000-0000-0000-0000-000000000101",
+            source_schema_revision="0001_foundation_schema", migration_reason="NO_VERIFIED_SNAPSHOT_MAPPING",
+            preserved_at=now, **common))
         session.flush()
-        session.add(SourceDocumentModel(id="00000000-0000-0000-0000-000000000002", path="c:/research/paper.pdf", **common))
+        session.add(LegacySourceDocumentV01Model(
+            id="00000000-0000-0000-0000-000000000002", path="c:/research/paper.pdf",
+            migration_batch_id="00000000-0000-0000-0000-000000000101",
+            source_schema_revision="0001_foundation_schema", migration_reason="NO_VERIFIED_SNAPSHOT_MAPPING",
+            preserved_at=now, **common))
         with pytest.raises(IntegrityError):
             session.flush()
 

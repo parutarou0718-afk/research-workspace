@@ -35,6 +35,7 @@ from research_workspace.shared.result import Result
 
 _ROOT = Path(__file__).resolve().parents[2]
 _DATA_SUBDIRECTORIES = ("logs", "derived", "exports", "backups")
+SUPPORTED_SCHEMA_REVISION = "0002"
 _EXPECTED_WORKSPACE_TABLES = frozenset((*Base.metadata.tables, "alembic_version"))
 
 
@@ -90,7 +91,7 @@ class WorkspaceDataDirectoryService:
                 )
             if (
                 integrity == ("ok",)
-                and version == ("0001",)
+                and version == (SUPPORTED_SCHEMA_REVISION,)
                 and inventory == _EXPECTED_WORKSPACE_TABLES
             ):
                 return WorkspaceInspection("existing", resolved)
