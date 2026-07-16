@@ -1,18 +1,34 @@
 """SQL implementations of foundation reads and Gate 1 coordinated writes."""
 
 from datetime import datetime, timezone
+import hashlib
+from uuid import uuid4
+
+import rfc8785
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from research_workspace.application.dto.import_dto import ImportCommitDTO, SnapshotRegistrationDTO
+from research_workspace.application.dto.parsing_dto import (
+    ParseAttemptSeed,
+    ParseFailureDTO,
+    ParseSuccessDTO,
+    PreparedParseAttempt,
+)
 from research_workspace.application.ports.repositories import OverviewData
+from research_workspace.domain.parsing import ParseArtifactIdentity
 from research_workspace.infrastructure.db.models import (
+    BackgroundOperationModel,
     ConferenceModel,
     GrantModel,
     PaperModel,
     SubmissionModel,
     ImportItemModel,
+    ParseArtifactModel,
+    ParseAttemptModel,
+    ParsedBlockModel,
     SourceObservationModel,
+    SourceDocumentModel,
     SourceSnapshotModel,
 )
 
@@ -140,3 +156,158 @@ class SqlGate1WriteRepository:
             result.import_item_id,
             state,
         )
+
+    def start_parse_attempt(
+        self, seed: ParseAttemptSeed, identity: ParseArtifactIdentity
+    ) -> PreparedParseAttempt:
+        operation = self._session.get(BackgroundOperationModel, seed.operation_id)
+        snapshot = self._session.get(SourceSnapshotModel, seed.source_snapshot_id)
+        if operation is None or snapshot is None or operation.status != "running":
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        artifact = self._session.scalar(
+            select(ParseArtifactModel).where(
+                ParseArtifactModel.source_snapshot_id == identity.source_snapshot_id,
+                ParseArtifactModel.parser_id == identity.parser_id,
+                ParseArtifactModel.parser_version == identity.parser_version,
+                ParseArtifactModel.config_fingerprint == identity.config_fingerprint,
+                ParseArtifactModel.contract_version == identity.contract_version,
+            )
+        )
+        now = datetime.now(timezone.utc)
+        if artifact is None:
+            artifact = ParseArtifactModel(
+                id=seed.parse_artifact_id,
+                source_snapshot_id=identity.source_snapshot_id,
+                parser_id=identity.parser_id,
+                parser_version=identity.parser_version,
+                config_fingerprint=identity.config_fingerprint,
+                contract_version=identity.contract_version,
+                status="running",
+                successful_attempt_id=None,
+                output_sha256=None,
+                derived_file_sha256=None,
+                derived_relative_path=None,
+                created_at=now,
+                updated_at=now,
+            )
+            self._session.add(artifact)
+            self._session.flush()
+        elif artifact.status == "succeeded" or artifact.successful_attempt_id is not None:
+            raise ValueError("PARSE_ALREADY_SUCCEEDED")
+        else:
+            artifact.status = "running"
+            artifact.updated_at = now
+
+        latest = self._session.scalar(
+            select(func.max(ParseAttemptModel.attempt_number)).where(
+                ParseAttemptModel.parse_artifact_id == artifact.id
+            )
+        )
+        attempt_number = int(latest or 0) + 1
+        self._session.add(
+            ParseAttemptModel(
+                id=seed.parse_attempt_id,
+                parse_artifact_id=artifact.id,
+                attempt_number=attempt_number,
+                status="running",
+                executor_version=seed.executor_version,
+                started_at=now,
+                finished_at=None,
+                error_code=None,
+                warnings_json="[]",
+                output_sha256=None,
+                derived_file_sha256=None,
+                diagnostic_summary_json=None,
+            )
+        )
+        self._session.flush()
+        return PreparedParseAttempt(
+            seed.operation_id,
+            artifact.id,
+            seed.parse_attempt_id,
+            artifact.source_snapshot_id,
+            artifact.config_fingerprint,
+            attempt_number,
+        )
+
+    def register_parse_failure(
+        self, result: ParseFailureDTO
+    ) -> tuple[ParseArtifactModel, ParseAttemptModel]:
+        artifact, attempt = self._open_attempt(result.parse_artifact_id, result.parse_attempt_id)
+        now = datetime.now(timezone.utc)
+        attempt.status = "failed"
+        attempt.error_code = result.error_code
+        attempt.warnings_json = rfc8785.dumps(sorted(set(result.warning_codes))).decode("utf-8")
+        attempt.finished_at = now
+        artifact.status = "failed"
+        artifact.updated_at = now
+        self._session.flush()
+        return artifact, attempt
+
+    def register_parse_success(
+        self, result: ParseSuccessDTO, parsed_document: dict[str, object]
+    ) -> tuple[ParseArtifactModel, ParseAttemptModel, SourceDocumentModel]:
+        artifact, attempt = self._open_attempt(result.parse_artifact_id, result.parse_attempt_id)
+        if artifact.successful_attempt_id is not None:
+            raise ValueError("PARSE_ALREADY_SUCCEEDED")
+        now = datetime.now(timezone.utc)
+        warnings = parsed_document["warnings"]
+        blocks = parsed_document["blocks"]
+        metadata = parsed_document["metadata"]
+        document = SourceDocumentModel(
+            id=uuid4(),
+            parse_artifact_id=artifact.id,
+            title=parsed_document["title"],
+            metadata_json=rfc8785.dumps(metadata).decode("utf-8"),
+            language=metadata["language"],
+            block_count=len(blocks),
+            warnings_json=rfc8785.dumps(warnings).decode("utf-8"),
+            created_at=now,
+        )
+        self._session.add(document)
+        self._session.flush()
+        for block in blocks:
+            self._session.add(
+                ParsedBlockModel(
+                    id=block["block_id"],
+                    parse_artifact_id=artifact.id,
+                    source_document_id=document.id,
+                    block_index=block["block_index"],
+                    kind=block["kind"],
+                    text=block["text"],
+                    locator_json=rfc8785.dumps(block["locator"]).decode("utf-8"),
+                    metadata_json=rfc8785.dumps(block["metadata"]).decode("utf-8"),
+                    text_sha256=hashlib.sha256(block["text"].encode("utf-8")).hexdigest(),
+                )
+            )
+        attempt.status = "succeeded"
+        attempt.finished_at = now
+        attempt.error_code = None
+        attempt.warnings_json = rfc8785.dumps(
+            sorted({warning["code"] for warning in warnings})
+        ).decode("utf-8")
+        attempt.output_sha256 = result.output_sha256
+        attempt.derived_file_sha256 = result.derived_file_sha256
+        artifact.status = "succeeded"
+        artifact.successful_attempt_id = attempt.id
+        artifact.output_sha256 = result.output_sha256
+        artifact.derived_file_sha256 = result.derived_file_sha256
+        artifact.derived_relative_path = result.derived_relative_path
+        artifact.updated_at = now
+        self._session.flush()
+        return artifact, attempt, document
+
+    def _open_attempt(
+        self, artifact_id, attempt_id
+    ) -> tuple[ParseArtifactModel, ParseAttemptModel]:
+        artifact = self._session.get(ParseArtifactModel, artifact_id)
+        attempt = self._session.get(ParseAttemptModel, attempt_id)
+        if (
+            artifact is None
+            or attempt is None
+            or attempt.parse_artifact_id != artifact.id
+            or attempt.status != "running"
+            or artifact.status != "running"
+        ):
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        return artifact, attempt

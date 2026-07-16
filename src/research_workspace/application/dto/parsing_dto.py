@@ -59,3 +59,29 @@ class ParseFailureDTO:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "warning_codes", tuple(self.warning_codes))
+
+
+@dataclass(frozen=True)
+class ParseAttemptSeed:
+    operation_id: UUID
+    parse_artifact_id: UUID
+    parse_attempt_id: UUID
+    source_snapshot_id: UUID
+    parser_id: str
+    parser_version: str
+    parser_config: Mapping[str, object]
+    contract_version: str
+    executor_version: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "parser_config", freeze_json(self.parser_config))
+
+
+@dataclass(frozen=True)
+class PreparedParseAttempt:
+    operation_id: UUID
+    parse_artifact_id: UUID
+    parse_attempt_id: UUID
+    source_snapshot_id: UUID
+    config_fingerprint: str
+    attempt_number: int

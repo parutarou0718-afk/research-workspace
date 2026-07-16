@@ -6,7 +6,12 @@ from typing import Protocol
 from uuid import UUID
 
 from research_workspace.application.dto.import_dto import ImportCommitDTO, SnapshotRegistrationDTO
-from research_workspace.application.dto.parsing_dto import ParseFailureDTO, ParseSuccessDTO
+from research_workspace.application.dto.parsing_dto import (
+    ParseAttemptSeed,
+    ParseFailureDTO,
+    ParseSuccessDTO,
+    PreparedParseAttempt,
+)
 
 
 @dataclass(frozen=True)
@@ -56,3 +61,9 @@ class WriteCoordinator(Protocol):
     def register_parse_success(self, result: ParseSuccessDTO) -> None: ...
 
     def register_parse_failure(self, result: ParseFailureDTO) -> None: ...
+
+    def start_parse_attempt(self, seed: ParseAttemptSeed) -> PreparedParseAttempt: ...
+
+    def set_parse_preference(
+        self, source_snapshot_id: UUID, parse_artifact_id: UUID, operation_id: UUID
+    ) -> int: ...

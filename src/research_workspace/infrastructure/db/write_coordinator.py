@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
+import json
+from pathlib import Path, PurePosixPath
 import sqlite3
+import stat
 from typing import Callable
 from uuid import UUID, uuid4
 
+from jsonschema import Draft202012Validator, FormatChecker, ValidationError
 import rfc8785
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, OperationalError
@@ -17,16 +22,36 @@ from research_workspace.application.ports.write_coordinator import (
     ImportBatchSeed,
     PreparedImportItem,
 )
-from research_workspace.application.dto.parsing_dto import ParseFailureDTO, ParseSuccessDTO
+from research_workspace.application.dto.parsing_dto import (
+    ParseAttemptSeed,
+    ParseFailureDTO,
+    ParseSuccessDTO,
+    PreparedParseAttempt,
+)
+from research_workspace.domain.import_model import FileStat, StagedSource
+from research_workspace.domain.parsing import (
+    ParseContractError,
+    build_parse_artifact_identity,
+)
 from research_workspace.infrastructure.db.models import (
     BackgroundOperationModel,
     DomainEventModel,
     ImportBatchModel,
     ImportItemModel,
+    ParseArtifactModel,
+    SnapshotParsePreferenceModel,
     SourceObservationModel,
+    SourceSnapshotModel,
     WorkspaceMetadataModel,
 )
 from research_workspace.infrastructure.db.repositories import SqlGate1WriteRepository
+from research_workspace.infrastructure.filesystem.atomic_files import (
+    PromotionState,
+    fsync_file_and_parent,
+    promote_no_replace,
+)
+from research_workspace.infrastructure.filesystem.path_safety import reject_reparse_chain
+from research_workspace.infrastructure.filesystem.stability import sha256_file
 
 
 class WriteCoordinatorError(RuntimeError):
@@ -44,9 +69,11 @@ class SqlWriteCoordinator:
         factory: sessionmaker[Session],
         *,
         repository_factory: RepositoryFactory = SqlGate1WriteRepository,
+        data_directory: Path | None = None,
     ) -> None:
         self._factory = factory
         self._repository_factory = repository_factory
+        self._data_directory = data_directory
 
     def workspace_id(self) -> UUID:
         with self._factory() as session:
@@ -231,8 +258,353 @@ class SqlWriteCoordinator:
             operation.error_code = None
             operation.finished_at = now
 
+    def start_parse_attempt(self, seed: ParseAttemptSeed) -> PreparedParseAttempt:
+        identity = build_parse_artifact_identity(
+            seed.source_snapshot_id,
+            seed.parser_id,
+            seed.parser_version,
+            seed.parser_config,
+            seed.contract_version,
+        )
+        try:
+            with self._factory.begin() as session:
+                repository = self._repository_factory(session)
+                prepared = repository.start_parse_attempt(seed, identity)
+                operation = self._required_running_operation(session, seed.operation_id)
+                operation.result_summary_json = rfc8785.dumps(
+                    {
+                        "parse_artifact_id": str(prepared.parse_artifact_id),
+                        "parse_attempt_id": str(prepared.parse_attempt_id),
+                        "source_snapshot_id": str(prepared.source_snapshot_id),
+                        "status": "running",
+                    }
+                ).decode("utf-8")
+                return prepared
+        except ValueError as exc:
+            raise WriteCoordinatorError(str(exc)) from exc
+        except IntegrityError as exc:
+            raise WriteCoordinatorError("DATABASE_CONSTRAINT_VIOLATION") from exc
+
     def register_parse_success(self, result: ParseSuccessDTO) -> None:
-        raise WriteCoordinatorError("PARSE_REGISTRATION_NOT_AVAILABLE")
+        self._validate_parse_operation(
+            result.operation_id, result.parse_artifact_id, result.parse_attempt_id
+        )
+        document, canonical = self._validate_parse_success(result)
+        self._promote_derived_output(result, canonical)
+        try:
+            with self._factory.begin() as session:
+                repository = self._repository_factory(session)
+                artifact, attempt, source_document = repository.register_parse_success(
+                    result, document
+                )
+                workspace_id = self._required_workspace_id(session)
+                warning_codes = sorted({warning["code"] for warning in document["warnings"]})
+                payload = {
+                    "parse_artifact_id": str(artifact.id),
+                    "source_snapshot_id": str(artifact.source_snapshot_id),
+                    "parse_attempt_id": str(attempt.id),
+                    "block_count": source_document.block_count,
+                    "warning_codes": warning_codes,
+                }
+                session.add(
+                    self._system_event(
+                        event_type="document.parse_succeeded",
+                        workspace_id=workspace_id,
+                        operation_id=result.operation_id,
+                        aggregate_type="ParseArtifact",
+                        aggregate_id=artifact.id,
+                        payload=payload,
+                        deduplication_key=f"document.parse_succeeded:{attempt.id}",
+                    )
+                )
+                operation = self._required_running_operation(session, result.operation_id)
+                operation.status = "completed"
+                operation.result_summary_json = rfc8785.dumps(
+                    {
+                        "parse_artifact_id": str(artifact.id),
+                        "parse_attempt_id": str(attempt.id),
+                        "status": "succeeded",
+                    }
+                ).decode("utf-8")
+                operation.error_code = None
+                operation.finished_at = datetime.now(timezone.utc)
+        except ValueError as exc:
+            raise WriteCoordinatorError(str(exc)) from exc
+        except IntegrityError as exc:
+            raise WriteCoordinatorError("DATABASE_CONSTRAINT_VIOLATION") from exc
 
     def register_parse_failure(self, result: ParseFailureDTO) -> None:
-        raise WriteCoordinatorError("PARSE_REGISTRATION_NOT_AVAILABLE")
+        self._validate_parse_operation(
+            result.operation_id, result.parse_artifact_id, result.parse_attempt_id
+        )
+        try:
+            with self._factory.begin() as session:
+                repository = self._repository_factory(session)
+                artifact, attempt = repository.register_parse_failure(result)
+                workspace_id = self._required_workspace_id(session)
+                payload = {
+                    "parse_artifact_id": str(artifact.id),
+                    "source_snapshot_id": str(artifact.source_snapshot_id),
+                    "parse_attempt_id": str(attempt.id),
+                    "error_code": result.error_code,
+                }
+                session.add(
+                    self._system_event(
+                        event_type="document.parse_failed",
+                        workspace_id=workspace_id,
+                        operation_id=result.operation_id,
+                        aggregate_type="ParseArtifact",
+                        aggregate_id=artifact.id,
+                        payload=payload,
+                        deduplication_key=f"document.parse_failed:{attempt.id}",
+                    )
+                )
+                operation = self._required_running_operation(session, result.operation_id)
+                operation.status = "failed"
+                operation.result_summary_json = rfc8785.dumps(
+                    {
+                        "parse_artifact_id": str(artifact.id),
+                        "parse_attempt_id": str(attempt.id),
+                        "status": "failed",
+                    }
+                ).decode("utf-8")
+                operation.error_code = result.error_code
+                operation.finished_at = datetime.now(timezone.utc)
+        except ValueError as exc:
+            raise WriteCoordinatorError(str(exc)) from exc
+        except IntegrityError as exc:
+            raise WriteCoordinatorError("DATABASE_CONSTRAINT_VIOLATION") from exc
+
+    def set_parse_preference(
+        self, source_snapshot_id: UUID, parse_artifact_id: UUID, operation_id: UUID
+    ) -> int:
+        with self._factory.begin() as session:
+            operation = self._required_running_operation(session, operation_id)
+            artifact = session.get(ParseArtifactModel, parse_artifact_id)
+            snapshot = session.get(SourceSnapshotModel, source_snapshot_id)
+            if (
+                snapshot is None
+                or artifact is None
+                or artifact.status != "succeeded"
+                or artifact.source_snapshot_id != source_snapshot_id
+            ):
+                raise WriteCoordinatorError("COMMAND_VALIDATION_FAILED")
+            preference = session.get(SnapshotParsePreferenceModel, source_snapshot_id)
+            old_artifact_id = preference.parse_artifact_id if preference is not None else None
+            now = datetime.now(timezone.utc)
+            if preference is None:
+                preference = SnapshotParsePreferenceModel(
+                    source_snapshot_id=source_snapshot_id,
+                    parse_artifact_id=parse_artifact_id,
+                    row_version=1,
+                    updated_at=now,
+                    updated_by_operation_id=operation_id,
+                )
+                session.add(preference)
+            else:
+                preference.parse_artifact_id = parse_artifact_id
+                preference.row_version += 1
+                preference.updated_at = now
+                preference.updated_by_operation_id = operation_id
+            operation.status = "completed"
+            operation.result_summary_json = rfc8785.dumps(
+                {
+                    "source_snapshot_id": str(source_snapshot_id),
+                    "old_parse_artifact_id": (
+                        str(old_artifact_id) if old_artifact_id is not None else None
+                    ),
+                    "new_parse_artifact_id": str(parse_artifact_id),
+                }
+            ).decode("utf-8")
+            operation.error_code = None
+            operation.finished_at = now
+            session.flush()
+            return preference.row_version
+
+    def _validate_parse_success(
+        self, result: ParseSuccessDTO
+    ) -> tuple[dict[str, object], bytes]:
+        document = _plain_json(result.parsed_document)
+        if not isinstance(document, dict):
+            raise ParseContractError("COMMAND_VALIDATION_FAILED")
+        schema_path = Path(__file__).resolve().parents[4] / "contracts" / "parsed_document.schema.json"
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        try:
+            Draft202012Validator(schema, format_checker=FormatChecker()).validate(document)
+        except ValidationError as exc:
+            raise ParseContractError("COMMAND_VALIDATION_FAILED", exc.message) from exc
+
+        with self._factory() as session:
+            artifact = session.get(ParseArtifactModel, result.parse_artifact_id)
+            snapshot = (
+                session.get(SourceSnapshotModel, artifact.source_snapshot_id)
+                if artifact is not None
+                else None
+            )
+            if artifact is None or snapshot is None:
+                raise ParseContractError("COMMAND_VALIDATION_FAILED")
+            expected_parser = {
+                "parser_id": artifact.parser_id,
+                "parser_version": artifact.parser_version,
+                "config_fingerprint": artifact.config_fingerprint,
+                "contract_version": artifact.contract_version,
+            }
+            source = document["source"]
+            if (
+                document["parse_artifact_id"] != str(artifact.id)
+                or document["parser"] != expected_parser
+                or source["source_snapshot_id"] != str(snapshot.id)
+                or source["sha256"] != snapshot.sha256
+                or source["size_bytes"] != snapshot.size_bytes
+                or source["mime_type"] != snapshot.mime_type
+                or source["storage_relative_path"] != snapshot.storage_relative_path
+                or [block["block_index"] for block in document["blocks"]]
+                != list(range(len(document["blocks"])))
+            ):
+                raise ParseContractError("COMMAND_VALIDATION_FAILED")
+
+        expected_relative = f"derived/parse/{result.parse_artifact_id}/parsed_document.json"
+        relative = PurePosixPath(result.derived_relative_path)
+        if (
+            result.derived_relative_path != expected_relative
+            or relative.is_absolute()
+            or ".." in relative.parts
+            or len(result.output_sha256) != 64
+            or any(character not in "0123456789abcdef" for character in result.output_sha256)
+        ):
+            raise ParseContractError("COMMAND_VALIDATION_FAILED")
+        canonical = rfc8785.dumps(document)
+        if hashlib.sha256(canonical).hexdigest() != result.derived_file_sha256:
+            raise ParseContractError("COMMAND_VALIDATION_FAILED")
+        return document, canonical
+
+    def _validate_parse_operation(
+        self, operation_id: UUID, parse_artifact_id: UUID, parse_attempt_id: UUID
+    ) -> None:
+        with self._factory() as session:
+            operation = session.get(BackgroundOperationModel, operation_id)
+            if operation is None or operation.status != "running":
+                raise WriteCoordinatorError("COMMAND_VALIDATION_FAILED")
+            try:
+                summary = json.loads(operation.result_summary_json or "null")
+            except json.JSONDecodeError as exc:
+                raise WriteCoordinatorError("COMMAND_VALIDATION_FAILED") from exc
+            if not isinstance(summary, dict) or (
+                summary.get("parse_artifact_id") != str(parse_artifact_id)
+                or summary.get("parse_attempt_id") != str(parse_attempt_id)
+                or summary.get("status") != "running"
+            ):
+                raise WriteCoordinatorError("COMMAND_VALIDATION_FAILED")
+
+    def _promote_derived_output(self, result: ParseSuccessDTO, canonical: bytes) -> None:
+        if self._data_directory is None:
+            raise WriteCoordinatorError("COMMAND_VALIDATION_FAILED")
+        final = self._data_directory / PurePosixPath(result.derived_relative_path)
+        staging = (
+            self._data_directory
+            / "staging"
+            / "parse"
+            / str(result.parse_artifact_id)
+            / f"{result.parse_attempt_id}.partial"
+        )
+        staging.parent.mkdir(parents=True, exist_ok=True)
+        reject_reparse_chain(staging.parent)
+        reject_reparse_chain(final.parent if final.parent.exists() else final.parent.parent)
+
+        if final.exists() or final.is_symlink():
+            if not _ordinary_file_with_hash(final, result.derived_file_sha256, len(canonical)):
+                raise WriteCoordinatorError("SOURCE_UNSTABLE")
+            return
+        if staging.exists() or staging.is_symlink():
+            if not _ordinary_file_with_hash(staging, result.derived_file_sha256, len(canonical)):
+                raise WriteCoordinatorError("SOURCE_UNSTABLE")
+        else:
+            with staging.open("xb") as stream:
+                stream.write(canonical)
+                stream.flush()
+            fsync_file_and_parent(staging)
+        details = staging.stat(follow_symlinks=False)
+        file_stat = FileStat(details.st_size, details.st_mtime_ns, None, str(details.st_dev))
+        staged = StagedSource(
+            staging,
+            staging,
+            result.derived_file_sha256,
+            len(canonical),
+            file_stat,
+            file_stat,
+        )
+        outcome = promote_no_replace(staged, final)
+        if outcome.state is PromotionState.RESUME_VERIFICATION:
+            staging.unlink(missing_ok=True)
+        elif outcome.state is not PromotionState.COMPLETED:
+            raise WriteCoordinatorError("SOURCE_UNSTABLE")
+
+    def _required_workspace_id(self, session: Session) -> UUID:
+        workspace_id = session.scalar(select(WorkspaceMetadataModel.workspace_id))
+        if workspace_id is None:
+            raise ValueError("WORKSPACE_METADATA_MISSING")
+        return workspace_id
+
+    def _required_running_operation(
+        self, session: Session, operation_id: UUID
+    ) -> BackgroundOperationModel:
+        operation = session.get(BackgroundOperationModel, operation_id)
+        if operation is None or operation.status != "running":
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        return operation
+
+    @staticmethod
+    def _system_event(
+        *,
+        event_type: str,
+        workspace_id: UUID,
+        operation_id: UUID,
+        aggregate_type: str,
+        aggregate_id: UUID,
+        payload: dict[str, object],
+        deduplication_key: str,
+    ) -> DomainEventModel:
+        now = datetime.now(timezone.utc)
+        return DomainEventModel(
+            id=uuid4(),
+            schema_version="2.0",
+            event_type=event_type,
+            workspace_id=workspace_id,
+            command_id=None,
+            operation_id=operation_id,
+            aggregate_type=aggregate_type,
+            aggregate_id=aggregate_id,
+            aggregate_version=None,
+            actor_type="system",
+            payload_json=rfc8785.dumps(payload).decode("utf-8"),
+            deduplication_key=deduplication_key,
+            causation_id=None,
+            correlation_id=operation_id,
+            created_at=now,
+            occurred_at=now,
+            processed_at=None,
+        )
+
+
+def _plain_json(value: object) -> object:
+    if isinstance(value, dict) or hasattr(value, "items"):
+        return {str(key): _plain_json(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_plain_json(item) for item in value]
+    return value
+
+
+def _ordinary_file_with_hash(path: Path, expected_sha256: str, expected_size: int) -> bool:
+    try:
+        details = path.lstat()
+    except OSError:
+        return False
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    attributes = getattr(details, "st_file_attributes", 0)
+    return (
+        stat.S_ISREG(details.st_mode)
+        and not path.is_symlink()
+        and not attributes & reparse_flag
+        and details.st_size == expected_size
+        and sha256_file(path) == expected_sha256
+    )

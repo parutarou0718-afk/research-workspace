@@ -91,6 +91,144 @@ def safe_source(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def parse_database(tmp_path: Path):
+    from datetime import datetime, timezone
+    from uuid import uuid4
+
+    from research_workspace import bootstrap
+    from research_workspace.infrastructure.db.models import (
+        BackgroundOperationModel,
+        SourceSnapshotModel,
+    )
+    from research_workspace.infrastructure.db.session import create_engine_for_path, session_factory
+
+    workspace = tmp_path / "workspace"
+    bootstrap._ensure_data_layout(workspace)
+    database = workspace / "research_workspace.db"
+    bootstrap._run_migrations(database)
+    engine = create_engine_for_path(database)
+    factory = session_factory(engine)
+    import_operation_id = uuid4()
+    snapshot_id = uuid4()
+    now = datetime.now(timezone.utc)
+    with factory.begin() as session:
+        session.add(
+            BackgroundOperationModel(
+                id=import_operation_id,
+                operation_type="snapshot_import",
+                status="completed",
+                work_plan_fingerprint="f" * 64,
+                permission_context_json="{}",
+                result_summary_json="{}",
+                error_code=None,
+                created_at=now,
+                started_at=now,
+                finished_at=now,
+                cancel_requested_at=None,
+            )
+        )
+        session.add(
+            SourceSnapshotModel(
+                id=snapshot_id,
+                sha256="1" * 64,
+                size_bytes=123,
+                mime_type="application/pdf",
+                storage_relative_path=f"sources/sha256/11/{'1' * 64}/content",
+                created_at=now,
+                created_by_operation_id=import_operation_id,
+            )
+        )
+    yield workspace, factory, snapshot_id
+    engine.dispose()
+
+
+@pytest.fixture
+def minimal_parsed_document():
+    import hashlib
+    from copy import deepcopy
+    from uuid import UUID
+
+    import rfc8785
+
+    from research_workspace.application.dto.parsing_dto import ParseSuccessDTO
+    from research_workspace.domain.parsing import DEFAULT_PARSER_CONFIG, build_parse_artifact_identity
+
+    class Builder:
+        def success_dto(
+            self,
+            workspace: Path,
+            operation_id: UUID,
+            artifact_id: UUID,
+            attempt_id: UUID,
+            snapshot_id: UUID,
+            change=None,
+            *,
+            title: str = "Parsed title",
+        ) -> ParseSuccessDTO:
+            block_id = hashlib.sha256(str(artifact_id).encode("utf-8")).hexdigest()
+            locator = {
+                "page": 1,
+                "slide": None,
+                "block_index": 0,
+                "paragraph_index": 0,
+                "paragraph_id": block_id,
+                "heading_path": [],
+                "char_start": 0,
+                "char_end": 4,
+                "source_offset_start": None,
+                "source_offset_end": None,
+                "bbox": None,
+                "native_locator": {"type": "pdf", "page": 1, "extraction_index": 0},
+            }
+            document = {
+                "schema_version": "2.0",
+                "parse_artifact_id": str(artifact_id),
+                "source": {
+                    "source_snapshot_id": str(snapshot_id),
+                    "sha256": "1" * 64,
+                    "mime_type": "application/pdf",
+                    "size_bytes": 123,
+                    "storage_relative_path": f"sources/sha256/11/{'1' * 64}/content",
+                },
+                "parser": {
+                    "parser_id": "pypdf",
+                    "parser_version": "6.14.2",
+                    "config_fingerprint": build_parse_artifact_identity(
+                        snapshot_id, "pypdf", "6.14.2", DEFAULT_PARSER_CONFIG, "2.0"
+                    ).config_fingerprint,
+                    "contract_version": "2.0",
+                },
+                "title": title,
+                "metadata": {"language": None, "page_count": 1, "slide_count": None},
+                "blocks": [
+                    {
+                        "block_id": block_id,
+                        "block_index": 0,
+                        "kind": "paragraph",
+                        "text": "text",
+                        "locator": locator,
+                        "metadata": {},
+                    }
+                ],
+                "warnings": [],
+            }
+            if change is not None:
+                change(document)
+            canonical = rfc8785.dumps(document)
+            return ParseSuccessDTO(
+                operation_id,
+                artifact_id,
+                attempt_id,
+                deepcopy(document),
+                "b" * 64,
+                hashlib.sha256(canonical).hexdigest(),
+                f"derived/parse/{artifact_id}/parsed_document.json",
+            )
+
+    return Builder()
+
+
+@pytest.fixture
 def mutate_after_first_chunk():
     def build(source: Path):
         called = False
