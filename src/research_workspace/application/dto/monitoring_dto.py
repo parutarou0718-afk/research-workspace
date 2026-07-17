@@ -112,6 +112,30 @@ class ReconciliationPage:
 
 
 @dataclass(frozen=True, slots=True)
+class ReconciliationRecovery:
+    monitoring_root_id: UUID
+    reconciliation_run_id: UUID | None
+    reason: ReconciliationReason
+    checkpoint: bytes | None
+
+    def __post_init__(self) -> None:
+        if self.checkpoint is not None and not isinstance(self.checkpoint, bytes):
+            raise TypeError("checkpoint must be immutable bytes")
+
+
+@dataclass(frozen=True, slots=True)
+class MonitoringRestartState:
+    previous_clean_shutdown: bool
+    watcher_generation: int
+    reconciliations: tuple[ReconciliationRecovery, ...]
+    pending_check_ids: tuple[UUID, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "reconciliations", tuple(self.reconciliations))
+        object.__setattr__(self, "pending_check_ids", tuple(self.pending_check_ids))
+
+
+@dataclass(frozen=True, slots=True)
 class CandidateDetectionResult:
     earlier_snapshot_id: UUID
     later_snapshot_id: UUID

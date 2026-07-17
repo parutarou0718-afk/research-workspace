@@ -88,11 +88,16 @@ class ApplicationServices:
     session: Session
     import_parse_pipeline: ImportParsePipeline
     operation_runner: ThreadedOperationRunner
+    write_coordinator: SqlWriteCoordinator
     closed: bool = False
 
     def close(self) -> None:
         if not self.closed:
-            self.operation_runner.shutdown(timeout=10)
+            workers_stopped = self.operation_runner.shutdown(timeout=10)
+            if workers_stopped:
+                self.write_coordinator.complete_monitoring_session(
+                    datetime.now(timezone.utc)
+                )
             self.session.close()
             self.engine.dispose()
             self.closed = True
@@ -300,6 +305,7 @@ def bootstrap_application() -> BootstrapResult:
         session = factory()
         seed_foundation_data(session)
         coordinator = SqlWriteCoordinator(factory, data_directory=data_directory)
+        coordinator.begin_monitoring_session(datetime.now(timezone.utc))
         snapshot_store = SnapshotStore(data_directory)
         parsers = (DocxParser(), PdfParser(), PptxParser())
         parser_registry = {parser.parser_id: parser for parser in parsers}
@@ -326,6 +332,7 @@ def bootstrap_application() -> BootstrapResult:
             session=session,
             import_parse_pipeline=import_parse_pipeline,
             operation_runner=operation_runner,
+            write_coordinator=coordinator,
         )
         return BootstrapResult(True, create_main_window(services), None)
     except Exception as exc:

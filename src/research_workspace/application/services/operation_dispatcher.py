@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from dataclasses import replace
+from datetime import datetime
 import hashlib
 from pathlib import Path
 import threading
@@ -12,6 +14,11 @@ from uuid import UUID, uuid4
 import rfc8785
 
 from research_workspace.application.dto.import_dto import ImportCommitDTO, ImportRequest
+from research_workspace.application.dto.monitoring_dto import (
+    MonitoringRestartState,
+    MonitoringRootPlan,
+    ReconciliationRecovery,
+)
 from research_workspace.application.dto.parsing_dto import (
     ParseAttemptSeed,
     ParseFailureDTO,
@@ -54,6 +61,10 @@ from research_workspace.application.services.authorization import (
     authorize_request,
 )
 from research_workspace.domain.capabilities import PermissionContext
+from research_workspace.domain.monitoring import (
+    MonitoringRootStatus,
+    ReconciliationReason,
+)
 
 T = TypeVar("T")
 
@@ -83,6 +94,73 @@ class OperationDispatcher:
         handler: Callable[[PermissionContext], T],
     ) -> DispatchResult[T]:
         raise ValueError("PermissionContext is not a reusable credential")
+
+
+class MonitoringLifecycle:
+    """Application-owned intake, durable flush, join, and restart decisions."""
+
+    def __init__(self, coordinator, observer, operation_runner) -> None:
+        self._coordinator = coordinator
+        self._observer = observer
+        self._operation_runner = operation_runner
+
+    def startup(
+        self, plans: tuple[MonitoringRootPlan, ...], now: datetime
+    ) -> MonitoringRestartState:
+        state = self._coordinator.begin_monitoring_session(now)
+        recoveries = list(state.reconciliations)
+        by_root = {item.monitoring_root_id: item for item in recoveries}
+        for plan in plans:
+            if plan.root_path.is_dir():
+                continue
+            existing = by_root.get(plan.monitoring_root_id)
+            if existing is None or existing.reason is not ReconciliationReason.DISCONNECT:
+                self._coordinator.record_monitoring_health(
+                    plan.monitoring_root_id,
+                    MonitoringRootStatus.DISCONNECTED,
+                    uuid4(),
+                    now,
+                )
+                recovery = ReconciliationRecovery(
+                    plan.monitoring_root_id,
+                    None,
+                    ReconciliationReason.DISCONNECT,
+                    None,
+                )
+                recoveries = [
+                    item
+                    for item in recoveries
+                    if item.monitoring_root_id != plan.monitoring_root_id
+                ]
+                recoveries.append(recovery)
+        return replace(
+            state,
+            reconciliations=tuple(
+                sorted(recoveries, key=lambda item: str(item.monitoring_root_id))
+            ),
+        )
+
+    def shutdown(self, *, now: datetime, timeout: float | None = None) -> bool:
+        roots = tuple(self._observer.active_root_ids)
+        success = True
+        for root_id in roots:
+            self._observer.stop(root_id)
+        success = self._persist_queued_events() and success
+        for root_id in roots:
+            success = self._observer.join(root_id, timeout or 0) and success
+        success = self._persist_queued_events() and success
+        success = self._operation_runner.shutdown(timeout=timeout) and success
+        if success:
+            self._coordinator.complete_monitoring_session(now)
+        return success
+
+    def _persist_queued_events(self) -> bool:
+        try:
+            for event in self._observer.drain_events():
+                self._coordinator.ingest_raw_file_event(event)
+            return True
+        except Exception:
+            return False
 
 
 class ImportParseHandle:

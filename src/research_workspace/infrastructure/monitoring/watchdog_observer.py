@@ -106,6 +106,10 @@ class WatchdogObserver:
         self._observers: dict[UUID, Observer] = {}
         self.queue_policy = "bounded-coalesce-to-overflow"
 
+    @property
+    def active_root_ids(self) -> tuple[UUID, ...]:
+        return tuple(sorted(self._observers, key=str))
+
     def _make_handler(self, plan: MonitoringRootPlan) -> FileSystemEventHandler:
         return _RawEventHandler(
             plan, lambda event: self._enqueue(plan, event), self._clock

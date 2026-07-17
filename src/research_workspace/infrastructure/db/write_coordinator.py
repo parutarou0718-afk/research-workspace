@@ -22,11 +22,13 @@ from research_workspace.application.dto.import_dto import ImportCommitDTO, Snaps
 from research_workspace.application.dto.monitoring_dto import (
     BaselineObservationDTO,
     MonitoringRootSeed,
+    MonitoringRestartState,
     PendingPathCheckDTO,
     RawFileEventDTO,
     ReconciliationObservation,
     ReconciliationPage,
     ReconciliationPlan,
+    ReconciliationRecovery,
 )
 from research_workspace.application.ports.write_coordinator import (
     ImportBatchSeed,
@@ -783,6 +785,93 @@ class SqlWriteCoordinator:
                 operation.status = "cancelled"
                 operation.cancel_requested_at = now
                 operation.finished_at = now
+
+    def begin_monitoring_session(self, now: datetime) -> MonitoringRestartState:
+        with self._factory.begin() as session:
+            metadata = session.scalar(select(WorkspaceMetadataModel))
+            if metadata is None:
+                raise WriteCoordinatorError("WORKSPACE_METADATA_MISSING")
+            previous_clean = metadata.clean_shutdown
+            previous_generation = metadata.watcher_generation
+            roots = session.scalars(
+                select(MonitoringRootModel).where(
+                    MonitoringRootModel.removed_at.is_(None)
+                )
+            ).all()
+            runs = session.scalars(
+                select(ReconciliationRunModel).where(
+                    ReconciliationRunModel.status.in_(("running", "paused"))
+                )
+            ).all()
+            by_root = {run.monitoring_root_id: run for run in runs}
+            recoveries: list[ReconciliationRecovery] = []
+            for root in sorted(roots, key=lambda item: str(item.id)):
+                run = by_root.get(root.id)
+                if run is not None:
+                    recovery = ReconciliationRecovery(
+                        root.id,
+                        run.id,
+                        monitoring_domain.ReconciliationReason(run.reason),
+                        (
+                            run.checkpoint_json.encode("utf-8")
+                            if run.checkpoint_json is not None
+                            else None
+                        ),
+                    )
+                elif root.status == MonitoringRootStatus.OVERFLOW_RECONCILING.value:
+                    recovery = ReconciliationRecovery(
+                        root.id, None,
+                        monitoring_domain.ReconciliationReason.OVERFLOW, None,
+                    )
+                elif root.status == MonitoringRootStatus.DISCONNECTED.value:
+                    recovery = ReconciliationRecovery(
+                        root.id, None,
+                        monitoring_domain.ReconciliationReason.DISCONNECT, None,
+                    )
+                elif not previous_clean or root.watcher_generation != previous_generation:
+                    recovery = ReconciliationRecovery(
+                        root.id, None,
+                        monitoring_domain.ReconciliationReason.UNCLEAN_SHUTDOWN, None,
+                    )
+                else:
+                    recovery = None
+                if recovery is not None:
+                    recoveries.append(recovery)
+            pending_ids = tuple(
+                session.scalars(
+                    select(PendingPathCheckModel.id).where(
+                        PendingPathCheckModel.state.in_(
+                            (
+                                PendingPathState.DETECTED.value,
+                                PendingPathState.DEBOUNCING.value,
+                                PendingPathState.WAITING_FOR_STABILITY.value,
+                                PendingPathState.IMPORTING.value,
+                                PendingPathState.UNSTABLE_SOURCE.value,
+                            )
+                        )
+                    )
+                ).all()
+            )
+            metadata.clean_shutdown = False
+            metadata.watcher_generation += 1
+            metadata.updated_at = now
+            for root in roots:
+                root.watcher_generation = metadata.watcher_generation
+                root.updated_at = max(root.updated_at, now)
+            return MonitoringRestartState(
+                previous_clean,
+                metadata.watcher_generation,
+                tuple(recoveries),
+                tuple(sorted(pending_ids, key=str)),
+            )
+
+    def complete_monitoring_session(self, now: datetime) -> None:
+        with self._factory.begin() as session:
+            metadata = session.scalar(select(WorkspaceMetadataModel))
+            if metadata is None:
+                raise WriteCoordinatorError("WORKSPACE_METADATA_MISSING")
+            metadata.clean_shutdown = True
+            metadata.updated_at = now
 
     @staticmethod
     def _event_paths(event: RawFileEventDTO) -> tuple[Path, ...]:
