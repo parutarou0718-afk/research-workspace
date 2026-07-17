@@ -57,7 +57,10 @@ from research_workspace.infrastructure.workers.worker_signals import (
     ReconciliationWorkerResult,
     SnapshotWorkerResult,
     WorkerCompleted,
+    RecoveryWorkerResult,
+    WorkerProgress,
 )
+from research_workspace.application.services.recovery_points import RecoveryWorkPlan
 
 from research_workspace.application.services.authorization import (
     AuthorizationFailure,
@@ -178,6 +181,10 @@ class ImportParseHandle:
         self.status = "running"
         self.completed_count = 0
         self.persistence_thread_ids: list[int] = []
+        self.progress_phase: str | None = None
+        self.progress_completed = 0
+        self.progress_total = 0
+        self.result = None
 
     def bind(self, handle) -> None:
         self._active = handle
@@ -207,6 +214,13 @@ class ImportParseHandle:
         if status == "completed":
             self.completed_count += 1
 
+    def record_progress(self, progress: WorkerProgress) -> None:
+        if self.done:
+            return
+        self.progress_phase = progress.phase
+        self.progress_completed = progress.completed
+        self.progress_total = progress.total
+
     def shutdown(self, timeout: float | None = None) -> bool:
         self.cancel()
         return True if self._active is None else self._active.shutdown(timeout)
@@ -233,6 +247,7 @@ class Gate2OperationPipeline:
         worker_handle.on_failed(lambda _terminal: handle.finish("failed"))
         worker_handle.on_cancelled(lambda _terminal: handle.finish("cancelled"))
         return handle
+
 
     def start_candidate_detection(
         self, plan: CandidateDetectionWorkPlan, now: datetime
@@ -308,6 +323,92 @@ class Gate2OperationPipeline:
             handle.finish("failed")
             return
         handle.finish("completed")
+
+
+class ProtectedCommandPipeline:
+    """Runs only verified recovery calculation off-thread."""
+
+    def __init__(self, dispatcher, runner, next_generation) -> None:
+        self._dispatcher = dispatcher
+        self._runner = runner
+        self._next_generation = next_generation
+        self._active_keys: set[str] = set()
+
+    def start(
+        self,
+        envelope,
+        *,
+        capability,
+        entity_scopes,
+        expected_versions,
+        build_mutations,
+    ) -> ImportParseHandle:
+        if envelope.idempotency_key in self._active_keys:
+            raise ValueError("COMMAND_IDEMPOTENCY_CONFLICT")
+        prepared = self._dispatcher.prepare(
+            envelope,
+            capability=capability,
+            entity_scopes=tuple(entity_scopes),
+            expected_versions=tuple(expected_versions),
+        )
+        handle = ImportParseHandle(threading.get_ident())
+        if prepared.replay_result is not None:
+            handle.result = prepared.replay_result
+            handle.finish("completed")
+            return handle
+        self._active_keys.add(envelope.idempotency_key)
+        work_plan = RecoveryWorkPlan(
+            uuid4(), prepared.recovery_plan, self._next_generation()
+        )
+        worker_handle = self._runner.start(work_plan)
+        handle.bind(worker_handle)
+        worker_handle.on_progress(handle.record_progress)
+        worker_handle.on_completed(
+            lambda terminal: self._completed(
+                envelope.idempotency_key,
+                prepared,
+                build_mutations,
+                handle,
+                terminal,
+            )
+        )
+        worker_handle.on_failed(
+            lambda _terminal: self._finish(
+                envelope.idempotency_key, handle, "failed"
+            )
+        )
+        worker_handle.on_cancelled(
+            lambda _terminal: self._finish(
+                envelope.idempotency_key, handle, "cancelled"
+            )
+        )
+        return handle
+
+    def _completed(
+        self, key, prepared, build_mutations, handle, terminal
+    ) -> None:
+        if handle.cancelled:
+            self._finish(key, handle, "cancelled")
+            return
+        if (
+            not isinstance(terminal, WorkerCompleted)
+            or not isinstance(terminal.result, RecoveryWorkerResult)
+        ):
+            self._finish(key, handle, "failed")
+            return
+        try:
+            handle.record_persistence()
+            handle.result = self._dispatcher.commit_prepared(
+                prepared, terminal.result.recovery_point, build_mutations
+            )
+        except Exception:
+            self._finish(key, handle, "failed")
+            return
+        self._finish(key, handle, "completed")
+
+    def _finish(self, key: str, handle: ImportParseHandle, status: str) -> None:
+        self._active_keys.discard(key)
+        handle.finish(status)
 
 
 @dataclass(slots=True)

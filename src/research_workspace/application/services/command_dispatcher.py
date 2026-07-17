@@ -14,6 +14,7 @@ from uuid import UUID, uuid4
 import rfc8785
 
 from research_workspace.application.dto.recovery_dto import RecoveryPlan
+from research_workspace.application.dto.recovery_dto import VerifiedRecoveryPoint
 from research_workspace.application.ports.operation_runner import CancellationToken
 from research_workspace.application.services.authorization import (
     AuthorizationRequest,
@@ -96,6 +97,13 @@ class ExistingCommand:
     result: CommandResult | None
 
 
+@dataclass(frozen=True, slots=True)
+class PreparedCommand:
+    plan: CommandPlan
+    recovery_plan: RecoveryPlan
+    replay_result: CommandResult | None
+
+
 class ProtectedWriteCoordinator(Protocol):
     def find_command_by_idempotency(self, key: str) -> ExistingCommand | None: ...
     def persist_command_envelope(self, plan: CommandPlan) -> None: ...
@@ -148,17 +156,60 @@ class CommandDispatcher:
         cancellation: CancellationToken,
         undo_of_command_id: UUID | None = None,
     ) -> CommandResult:
+        prepared = self.prepare(
+            envelope,
+            capability=capability,
+            entity_scopes=entity_scopes,
+            expected_versions=expected_versions,
+            undo_of_command_id=undo_of_command_id,
+        )
+        if prepared.replay_result is not None:
+            return prepared.replay_result
+        try:
+            recovery = self._recovery_service.create(
+                prepared.recovery_plan, cancellation=cancellation
+            )
+        except Exception as exc:
+            return self._resolve_prepared_failure(prepared.plan, exc)
+        return self.commit_prepared(
+            prepared,
+            recovery,
+            build_mutations,
+            recovery_already_registered=True,
+        )
+
+    def prepare(
+        self,
+        envelope: RawCommandEnvelope,
+        *,
+        capability: str,
+        entity_scopes: tuple[tuple[str, UUID], ...],
+        expected_versions: tuple[tuple[str, UUID, int], ...],
+        undo_of_command_id: UUID | None = None,
+    ) -> PreparedCommand:
         envelope.validate_outer_actor()
         fingerprint = canonical_request_fingerprint(envelope.request_payload)
         existing = self._coordinator.find_command_by_idempotency(envelope.idempotency_key)
         if existing is not None:
             check_idempotency(existing, fingerprint)
             if existing.status == "committed" and existing.result is not None:
-                return CommandResult(
-                    existing.result.command_id,
-                    existing.result.affected_entity_ids,
-                    existing.result.affected_count,
-                    True,
+                replay = CommandResult(
+                    existing.result.command_id, existing.result.affected_entity_ids,
+                    existing.result.affected_count, True,
+                )
+                return PreparedCommand(
+                    CommandPlan(
+                        replay.command_id, envelope.command_type,
+                        envelope.idempotency_key, fingerprint, b"{}",
+                        tuple(entity_scopes), tuple(expected_versions),
+                        envelope.request_payload, True, undo_of_command_id,
+                    ),
+                    RecoveryPlan(
+                        uuid4(), replay.command_id, envelope.command_type,
+                        fingerprint, envelope.workspace_id, self._database_path,
+                        self._recovery_root, "0004_gate3_protected_crud",
+                    ),
+                    replay,
                 )
             raise CommandDispatchError("COMMAND_VALIDATION_FAILED")
         try:
@@ -191,39 +242,79 @@ class CommandDispatcher:
                 undo_of_command_id,
             )
             self._coordinator.persist_command_envelope(plan)
-            recovery = self._recovery_service.create(
+            recovery_plan = RecoveryPlan(
+                uuid4(), plan.command_id, plan.command_type,
+                plan.request_fingerprint, envelope.workspace_id,
+                self._database_path, self._recovery_root,
+                "0004_gate3_protected_crud",
+            )
+            return PreparedCommand(plan, recovery_plan, None)
+        except Exception as exc:
+            placeholder = CommandPlan(
+                envelope.command_id, envelope.command_type,
+                envelope.idempotency_key, fingerprint, b"{}",
+                tuple(entity_scopes), tuple(expected_versions),
+                envelope.request_payload, True, undo_of_command_id,
+            )
+            resolved = self._resolve_prepared_failure(placeholder, exc)
+            return PreparedCommand(
+                placeholder,
                 RecoveryPlan(
-                    uuid4(),
-                    plan.command_id,
-                    plan.command_type,
-                    plan.request_fingerprint,
-                    envelope.workspace_id,
-                    self._database_path,
-                    self._recovery_root,
+                    uuid4(), placeholder.command_id, placeholder.command_type,
+                    placeholder.request_fingerprint, envelope.workspace_id,
+                    self._database_path, self._recovery_root,
                     "0004_gate3_protected_crud",
                 ),
-                cancellation=cancellation,
+                resolved,
             )
-            return self._coordinator.commit_mutations(plan, build_mutations(plan))
+
+    def commit_prepared(
+        self,
+        prepared: PreparedCommand,
+        recovery: VerifiedRecoveryPoint,
+        build_mutations: Callable[[CommandPlan], tuple[DomainMutation, ...]],
+        *,
+        recovery_already_registered: bool = False,
+    ) -> CommandResult:
+        if prepared.replay_result is not None:
+            return prepared.replay_result
+        if (
+            not recovery_already_registered
+            and recovery.command_id != prepared.plan.command_id
+        ):
+            raise CommandDispatchError("RECOVERY_POINT_FAILED")
+        try:
+            if not recovery_already_registered:
+                self._coordinator.persist_verified_recovery(
+                    prepared.plan, recovery
+                )
+            return self._coordinator.commit_mutations(
+                prepared.plan, build_mutations(prepared.plan)
+            )
         except Exception as exc:
-            error_code = getattr(exc, "error_code", "COMMAND_VALIDATION_FAILED")
-            persisted = self._coordinator.find_command_by_idempotency(
-                envelope.idempotency_key
-            )
-            if (
-                persisted is not None
-                and persisted.request_fingerprint == fingerprint
-                and persisted.status == "committed"
-                and persisted.result is not None
-            ):
-                return persisted.result
-            try:
-                self._coordinator.mark_command_failed(envelope.command_id, error_code)
-            except Exception:
-                pass
-            if isinstance(exc, CommandDispatchError):
-                raise
-            raise CommandDispatchError(error_code) from exc
+            return self._resolve_prepared_failure(prepared.plan, exc)
+
+    def _resolve_prepared_failure(
+        self, plan: CommandPlan, exc: Exception
+    ) -> CommandResult:
+        error_code = getattr(exc, "error_code", "COMMAND_VALIDATION_FAILED")
+        persisted = self._coordinator.find_command_by_idempotency(
+            plan.idempotency_key
+        )
+        if (
+            persisted is not None
+            and persisted.request_fingerprint == plan.request_fingerprint
+            and persisted.status == "committed"
+            and persisted.result is not None
+        ):
+            return persisted.result
+        try:
+            self._coordinator.mark_command_failed(plan.command_id, error_code)
+        except Exception:
+            pass
+        if isinstance(exc, CommandDispatchError):
+            raise exc
+        raise CommandDispatchError(error_code) from exc
 
 
 def _permission_json(context) -> bytes:

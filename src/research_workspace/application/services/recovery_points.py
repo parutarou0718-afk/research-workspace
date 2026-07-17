@@ -39,6 +39,17 @@ class RestoreResetPlan:
         return cls(workspace_id, "historical_unavailable_after_restore", True)
 
 
+@dataclass(frozen=True, slots=True)
+class RecoveryWorkPlan:
+    operation_id: UUID
+    recovery_plan: RecoveryPlan
+    generation: int
+
+    def __post_init__(self) -> None:
+        if self.generation < 1:
+            raise ValueError("generation must be positive")
+
+
 class RecoveryPointService:
     def __init__(self, backup: SQLiteBackupPort, coordinator: RecoveryCoordinator) -> None:
         self._backup = backup
@@ -62,6 +73,9 @@ class RecoveryPointService:
                 raise
             raise RecoveryPointError() from exc
         return point
+
+    def next_generation(self) -> int:
+        return self._coordinator.next_recovery_generation()
 
     def reset_after_restore(self, plan: RestoreResetPlan) -> None:
         self._coordinator.reset_recovery_after_restore(plan.workspace_id)

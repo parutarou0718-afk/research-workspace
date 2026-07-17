@@ -35,9 +35,9 @@ def test_read_models_are_deeply_immutable() -> None:
     assert isinstance(view.actions, tuple)
 
 
-def test_task13_adds_read_models_without_worker_or_ui() -> None:
+def test_task14_preserves_read_models_without_gate3_ui() -> None:
     assert (ROOT / "tests/gate3/unit/test_gate3_read_models.py").exists()
-    assert not (
+    assert (
         ROOT / "tests/gate3/architecture/test_gate3_worker_boundaries.py"
     ).exists()
     assert not (

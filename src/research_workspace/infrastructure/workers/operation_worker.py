@@ -22,6 +22,7 @@ from research_workspace.application.services.candidate_detection import (
     PaperMembership,
     detect_candidate,
 )
+from research_workspace.application.services.recovery_points import RecoveryWorkPlan
 from research_workspace.infrastructure.filesystem.path_safety import SourceFailure
 from research_workspace.infrastructure.filesystem.snapshots import SnapshotStore
 from research_workspace.infrastructure.monitoring.reconciliation import BoundedReconciler
@@ -31,6 +32,7 @@ from research_workspace.infrastructure.workers.worker_signals import (
     DetectedCandidate,
     ParseWorkerResult,
     ReconciliationWorkerResult,
+    RecoveryWorkerResult,
     SnapshotWorkerResult,
     WorkerCancelled,
     WorkerCompleted,
@@ -71,6 +73,18 @@ class OperationWorker:
     ) -> None:
         self._snapshot_port = snapshot_port
         self._parsers = MappingProxyType(dict(parsers))
+        self._recovery_port = None
+
+    @classmethod
+    def with_recovery(
+        cls,
+        snapshot_port: SnapshotStore,
+        parsers: Mapping[str, DocumentParser],
+        recovery_port,
+    ) -> "OperationWorker":
+        worker = cls(snapshot_port, parsers)
+        worker._recovery_port = recovery_port
+        return worker
 
     def run(
         self,
@@ -82,7 +96,26 @@ class OperationWorker:
             return WorkerCancelled(plan.operation_id)
         emit_progress(WorkerProgress(plan.operation_id, "started", 0, 1))
         try:
-            if isinstance(plan, SnapshotImportWorkPlan):
+            if isinstance(plan, RecoveryWorkPlan):
+                if self._recovery_port is None:
+                    return WorkerFailed(
+                        plan.operation_id, "COMMAND_VALIDATION_FAILED"
+                    )
+                point = self._recovery_port.create_verified_recovery(
+                    plan.recovery_plan,
+                    plan.generation,
+                    lambda progress: emit_progress(
+                        WorkerProgress(
+                            plan.operation_id,
+                            progress.phase,
+                            progress.bytes_done,
+                            progress.bytes_total,
+                        )
+                    ),
+                    cancellation,
+                )
+                result = RecoveryWorkerResult(plan.operation_id, point)
+            elif isinstance(plan, SnapshotImportWorkPlan):
                 materialized = self._snapshot_port.materialize(
                     plan.source_path, plan.import_item_id
                 )

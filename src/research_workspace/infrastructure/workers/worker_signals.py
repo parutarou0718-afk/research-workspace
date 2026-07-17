@@ -14,6 +14,7 @@ from research_workspace.application.dto.monitoring_dto import (
     ReconciliationPage,
 )
 from research_workspace.infrastructure.filesystem.snapshots import MaterializedSnapshot
+from research_workspace.application.dto.recovery_dto import VerifiedRecoveryPoint
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,11 +60,18 @@ class CandidateWorkerResult:
         object.__setattr__(self, "candidates", tuple(self.candidates))
 
 
+@dataclass(frozen=True, slots=True)
+class RecoveryWorkerResult:
+    operation_id: UUID
+    recovery_point: VerifiedRecoveryPoint
+
+
 WorkerResult: TypeAlias = (
     SnapshotWorkerResult
     | ParseWorkerResult
     | ReconciliationWorkerResult
     | CandidateWorkerResult
+    | RecoveryWorkerResult
 )
 
 
