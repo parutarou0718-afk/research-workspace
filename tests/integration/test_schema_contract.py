@@ -21,6 +21,10 @@ GATE1_TABLES = {
     "legacy_source_documents_v01", "legacy_evidence_refs_v01", "domain_events",
 }
 GATE1_REPLACED_V01_TABLES = {"source_documents", "evidence_refs", "domain_events"}
+GATE2_TABLES = {
+    "monitoring_roots", "raw_file_events", "raw_event_pending_links",
+    "pending_path_checks", "reconciliation_runs", "paper_version_candidates",
+}
 
 
 EXPECTED_SCHEMA = {
@@ -231,7 +235,9 @@ def test_core_metadata_has_exact_columns(engine):
 
 def _assert_exact_schema(inspector):
     unchanged = set(EXPECTED_SCHEMA) - GATE1_REPLACED_V01_TABLES
-    assert set(inspector.get_table_names()) - {"alembic_version"} == unchanged | GATE1_TABLES
+    assert set(inspector.get_table_names()) - {"alembic_version"} == (
+        unchanged | GATE1_TABLES | GATE2_TABLES
+    )
     for table in unchanged:
         expected = EXPECTED_SCHEMA[table]
         actual = {

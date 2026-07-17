@@ -109,6 +109,7 @@ class SourceObservationModel(Base):
     normalized_path: Mapped[str] = mapped_column(Text(collation="NOCASE"), nullable=False)
     normalized_path_hash: Mapped[str] = mapped_column(CHAR(64), nullable=False)
     original_filename: Mapped[str] = mapped_column(String(1024), nullable=False)
+    monitoring_root_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("monitoring_roots.id", ondelete="RESTRICT"), nullable=True)
     current_snapshot_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("source_snapshots.id", ondelete="RESTRICT"), nullable=True)
     availability_status: Mapped[str] = mapped_column(String(64), nullable=False)
     baseline_only: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"))
@@ -126,12 +127,244 @@ class SourceObservationEventModel(Base):
     __tablename__ = "source_observation_events"
     id: Mapped[UUID] = _uuid(primary_key=True)
     source_observation_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("source_observations.id", ondelete="RESTRICT"), nullable=False)
+    raw_file_event_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("raw_file_events.id", ondelete="RESTRICT"), nullable=True)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
     snapshot_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("source_snapshots.id", ondelete="RESTRICT"), nullable=True)
     path_before_hash: Mapped[str | None] = mapped_column(CHAR(64), nullable=True)
     path_after_hash: Mapped[str | None] = mapped_column(CHAR(64), nullable=True)
     facts_json: Mapped[str] = mapped_column(Text, nullable=False)
     observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+
+
+class MonitoringRootModel(Base):
+    __tablename__ = "monitoring_roots"
+    __table_args__ = (
+        UniqueConstraint("normalized_path", name="uq_monitoring_roots_normalized_path"),
+        CheckConstraint(
+            "status IN ('active','paused','disconnected','degraded','overflow_reconciling','error')",
+            name="status_enum",
+        ),
+        CheckConstraint("recursive = 1", name="recursive_true"),
+        CheckConstraint("watcher_generation >= 0", name="watcher_generation_nonnegative"),
+        CheckConstraint(
+            "length(normalized_path_hash)=64 "
+            "AND normalized_path_hash NOT GLOB '*[^0-9a-f]*'",
+            name="normalized_path_hash_lower_hex",
+        ),
+        CheckConstraint(
+            "length(config_fingerprint)=64 "
+            "AND config_fingerprint NOT GLOB '*[^0-9a-f]*'",
+            name="config_fingerprint_lower_hex",
+        ),
+    )
+    id: Mapped[UUID] = _uuid(primary_key=True)
+    original_path: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_path: Mapped[str] = mapped_column(Text(collation="NOCASE"), nullable=False)
+    normalized_path_hash: Mapped[str] = mapped_column(CHAR(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(64), nullable=False)
+    recursive: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("1"))
+    config_json: Mapped[str] = mapped_column(Text, nullable=False)
+    config_fingerprint: Mapped[str] = mapped_column(CHAR(64), nullable=False)
+    watcher_generation: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    last_event_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    last_reconciled_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    removed_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+
+
+class RawFileEventModel(Base):
+    __tablename__ = "raw_file_events"
+    __table_args__ = (
+        UniqueConstraint("deduplication_key", name="uq_raw_file_events_deduplication"),
+        CheckConstraint(
+            "event_type IN ('created','modified','moved','deleted','overflow','root_state')",
+            name="event_type_enum",
+        ),
+        CheckConstraint(
+            "source_path_hash IS NULL OR "
+            "(length(source_path_hash)=64 AND source_path_hash NOT GLOB '*[^0-9a-f]*')",
+            name="source_path_hash_lower_hex",
+        ),
+        CheckConstraint(
+            "destination_path_hash IS NULL OR "
+            "(length(destination_path_hash)=64 "
+            "AND destination_path_hash NOT GLOB '*[^0-9a-f]*')",
+            name="destination_path_hash_lower_hex",
+        ),
+        CheckConstraint(
+            "length(deduplication_key)=64 "
+            "AND deduplication_key NOT GLOB '*[^0-9a-f]*'",
+            name="deduplication_key_lower_hex",
+        ),
+        CheckConstraint(
+            "event_type <> 'moved' OR destination_path IS NOT NULL",
+            name="move_has_destination",
+        ),
+        Index("ix_raw_file_events_root_observed", "monitoring_root_id", "observed_at"),
+        Index("ix_raw_file_events_source_hash_observed", "source_path_hash", "observed_at"),
+        Index("ix_raw_file_events_correlation_hint", "correlation_hint"),
+    )
+    id: Mapped[UUID] = _uuid(primary_key=True)
+    monitoring_root_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("monitoring_roots.id", ondelete="RESTRICT"), nullable=False)
+    provider: Mapped[str] = mapped_column(String(128), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    destination_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_path_hash: Mapped[str | None] = mapped_column(CHAR(64), nullable=True)
+    destination_path_hash: Mapped[str | None] = mapped_column(CHAR(64), nullable=True)
+    observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    ingested_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    raw_sequence_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    correlation_hint: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    deduplication_key: Mapped[str] = mapped_column(CHAR(64), nullable=False)
+
+
+class PendingPathCheckModel(Base):
+    __tablename__ = "pending_path_checks"
+    __table_args__ = (
+        UniqueConstraint(
+            "monitoring_root_id", "normalized_path", name="uq_pending_path_checks_root_path"
+        ),
+        CheckConstraint("stability_attempt_count >= 0", name="attempt_count_nonnegative"),
+        CheckConstraint("row_version >= 1", name="row_version_positive"),
+        CheckConstraint(
+            "length(normalized_path_hash)=64 "
+            "AND normalized_path_hash NOT GLOB '*[^0-9a-f]*'",
+            name="normalized_path_hash_lower_hex",
+        ),
+        CheckConstraint(
+            "state IN ('detected','debouncing','waiting_for_stability','importing',"
+            "'imported','duplicate_content','safe_failure','unstable_source')",
+            name="state_enum",
+        ),
+        CheckConstraint("last_event_at >= first_event_at", name="event_time_order"),
+        Index("ix_pending_path_checks_path_hash", "normalized_path_hash"),
+        Index("ix_pending_path_checks_state_due", "state", "next_check_at"),
+    )
+    id: Mapped[UUID] = _uuid(primary_key=True)
+    monitoring_root_id: Mapped[UUID] = mapped_column(
+        UUIDText(), ForeignKey("monitoring_roots.id", ondelete="RESTRICT"), nullable=False
+    )
+    normalized_path: Mapped[str] = mapped_column(Text(collation="NOCASE"), nullable=False)
+    normalized_path_hash: Mapped[str] = mapped_column(CHAR(64), nullable=False)
+    first_event_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    last_event_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    merged_event_types_json: Mapped[str] = mapped_column(Text, nullable=False)
+    state: Mapped[str] = mapped_column(String(64), nullable=False)
+    stability_attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    next_check_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    last_failure_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    source_observation_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("source_observations.id", ondelete="RESTRICT"), nullable=True)
+    row_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+
+
+class RawEventPendingLinkModel(Base):
+    __tablename__ = "raw_event_pending_links"
+    raw_file_event_id: Mapped[UUID] = mapped_column(
+        UUIDText(),
+        ForeignKey("raw_file_events.id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    pending_path_check_id: Mapped[UUID] = mapped_column(
+        UUIDText(),
+        ForeignKey("pending_path_checks.id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    linked_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+
+
+class ReconciliationRunModel(Base):
+    __tablename__ = "reconciliation_runs"
+    __table_args__ = (
+        UniqueConstraint("operation_id", name="uq_reconciliation_runs_operation"),
+        CheckConstraint("items_seen >= 0", name="items_seen_nonnegative"),
+        CheckConstraint("items_suspected_changed >= 0", name="items_changed_nonnegative"),
+        CheckConstraint(
+            "items_estimated IS NULL OR items_estimated >= items_seen",
+            name="estimate_covers_seen",
+        ),
+        CheckConstraint(
+            "reason IN ('baseline','disconnect','overflow','unclean_shutdown','user_verify')",
+            name="reason_enum",
+        ),
+        CheckConstraint(
+            "status IN ('planned','running','paused','completed','failed','cancelled')",
+            name="status_enum",
+        ),
+    )
+    id: Mapped[UUID] = _uuid(primary_key=True)
+    monitoring_root_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("monitoring_roots.id", ondelete="RESTRICT"), nullable=False)
+    operation_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("background_operations.id", ondelete="RESTRICT"), nullable=False)
+    reason: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(64), nullable=False)
+    checkpoint_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    items_seen: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    items_estimated: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    items_suspected_changed: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    started_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+
+
+class PaperVersionCandidateModel(Base):
+    __tablename__ = "paper_version_candidates"
+    __table_args__ = (
+        UniqueConstraint(
+            "earlier_snapshot_id",
+            "later_snapshot_id",
+            "detector_id",
+            "detector_version",
+            "rule_config_fingerprint",
+            name="uq_paper_version_candidates_identity",
+        ),
+        CheckConstraint("earlier_snapshot_id <> later_snapshot_id", name="snapshots_distinct"),
+        CheckConstraint("row_version >= 1", name="row_version_positive"),
+        CheckConstraint(
+            "length(trim(detector_id)) > 0 AND length(trim(detector_version)) > 0",
+            name="detector_nonblank",
+        ),
+        CheckConstraint("rule_id IN ('R1','R2','R3','R4','R5')", name="rule_id_enum"),
+        CheckConstraint(
+            "length(rule_config_fingerprint)=64 "
+            "AND rule_config_fingerprint NOT GLOB '*[^0-9a-f]*'",
+            name="rule_config_fingerprint_lower_hex",
+        ),
+        CheckConstraint(
+            "status IN ('pending','confirmed','rejected','superseded')",
+            name="status_enum",
+        ),
+        CheckConstraint(
+            "(status='superseded' AND superseded_by_candidate_id IS NOT NULL) OR "
+            "(status<>'superseded' AND superseded_by_candidate_id IS NULL)",
+            name="supersession_consistent",
+        ),
+        CheckConstraint(
+            "(status IN ('confirmed','rejected') AND decided_at IS NOT NULL) OR "
+            "(status NOT IN ('confirmed','rejected') AND decided_at IS NULL)",
+            name="decision_time_consistent",
+        ),
+        Index("ix_paper_version_candidates_earlier", "earlier_snapshot_id"),
+        Index("ix_paper_version_candidates_later", "later_snapshot_id"),
+    )
+    id: Mapped[UUID] = _uuid(primary_key=True)
+    earlier_snapshot_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("source_snapshots.id", ondelete="RESTRICT"), nullable=False)
+    later_snapshot_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("source_snapshots.id", ondelete="RESTRICT"), nullable=False)
+    detector_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    detector_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    rule_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    rule_config_fingerprint: Mapped[str] = mapped_column(CHAR(64), nullable=False)
+    direction_rationale_json: Mapped[str] = mapped_column(Text, nullable=False)
+    signals_json: Mapped[str] = mapped_column(Text, nullable=False)
+    input_observation_ids_json: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(64), nullable=False, server_default=text("'pending'"))
+    superseded_by_candidate_id: Mapped[UUID | None] = mapped_column(
+        UUIDText(),
+        ForeignKey("paper_version_candidates.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    row_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    decided_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
 
 
 class OperationAttemptModel(Base):

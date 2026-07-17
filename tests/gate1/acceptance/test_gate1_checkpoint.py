@@ -79,7 +79,6 @@ contracts/application_command.schema.json
 contracts/audit_change.schema.json
 contracts/backup_manifest.schema.json
 contracts/export_manifest.schema.json
-migrations/versions/0003_gate2_monitoring.py
 migrations/versions/0004_gate3_protected_crud.py
 migrations/versions/0005_gate4_transfer.py
 src/research_workspace/application/commands/manage_monitoring_root.py
@@ -242,16 +241,21 @@ def test_fixture_manifest_exactly_matches_committed_fixture_bytes() -> None:
 
 def test_complete_gate1_repository_tree_and_later_gate_absence() -> None:
     actual = _production_files()
-    assert actual == _foundation_production_files() | GATE1_ADDITIONS
+    assert actual == (
+        _foundation_production_files()
+        | GATE1_ADDITIONS
+        | {"migrations/versions/0003_gate2_monitoring.py"}
+    )
     assert LATER_GATE_PATHS.isdisjoint(actual)
 
 
-def test_alembic_has_exactly_gate1_head_0002() -> None:
+def test_alembic_retains_gate1_revision_in_gate2_chain() -> None:
     config = Config(str(ROOT / "alembic.ini"))
     config.set_main_option("script_location", str(ROOT / "migrations"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == ["0002"]
-    assert script.get_current_head() == "0002"
+    assert script.get_revision("0002").down_revision == "0001"
+    assert script.get_heads() == ["0003"]
+    assert script.get_current_head() == "0003"
 
 
 def test_all_acceptance_evidence_modules_exist_collect_and_have_no_skip_or_xfail() -> None:

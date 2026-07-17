@@ -65,7 +65,6 @@ contracts/application_command.schema.json
 contracts/audit_change.schema.json
 contracts/backup_manifest.schema.json
 contracts/export_manifest.schema.json
-migrations/versions/0003_gate2_monitoring.py
 migrations/versions/0004_gate3_protected_crud.py
 migrations/versions/0005_gate4_transfer.py
 src/research_workspace/application/commands/manage_monitoring_root.py
@@ -166,7 +165,11 @@ def assert_gate1_checkpoint_tree_complete() -> None:
 def test_task2_contracts_exist_without_requiring_future_gate1_files() -> None:
     actual = production_files()
     assert TASK2_CONTRACTS <= actual
-    assert actual <= baseline_production_files() | GATE1_ADDITIONS
+    assert actual <= (
+        baseline_production_files()
+        | GATE1_ADDITIONS
+        | {"migrations/versions/0003_gate2_monitoring.py"}
+    )
 
 
 def test_later_gate_production_paths_are_absent() -> None:
