@@ -35,6 +35,13 @@ from research_workspace.infrastructure.db.models import (
     SourceSnapshotModel,
 )
 from research_workspace.domain.monitoring import MonitoringRootStatus
+from research_workspace.application.dto.recovery_dto import VerifiedRecoveryPoint
+from research_workspace.infrastructure.db.models import (
+    ApplicationCommandModel,
+    RecoveryPointModel,
+    RecoverySlotModel,
+    WorkspaceMetadataModel,
+)
 
 
 class SqlOverviewRepository:
@@ -146,6 +153,85 @@ class SqlMonitoringRepository:
             )
         )
         return None if root is None else self._record(root)
+
+
+class SqlRecoveryRepository:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def next_generation(self) -> int:
+        return int(
+            self._session.scalar(select(func.max(RecoveryPointModel.promoted_generation)))
+            or 0
+        ) + 1
+
+    def activate(self, point: VerifiedRecoveryPoint) -> None:
+        command = self._session.get(ApplicationCommandModel, point.command_id)
+        if command is None or command.status != "running" or command.recovery_point_id is not None:
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        workspace_id = self._session.scalar(select(WorkspaceMetadataModel.workspace_id))
+        if workspace_id is None:
+            raise ValueError("WORKSPACE_METADATA_MISSING")
+        slots = {
+            slot.slot_name: slot
+            for slot in self._session.scalars(
+                select(RecoverySlotModel).where(RecoverySlotModel.workspace_id == workspace_id)
+            )
+        }
+        previous = slots.get("previous")
+        current = slots.get("current")
+        if previous is not None:
+            old_point = self._session.get(RecoveryPointModel, previous.recovery_point_id)
+            if old_point is not None:
+                old_point.physical_state = "superseded"
+            self._session.delete(previous)
+        if current is not None:
+            current_point = self._session.get(RecoveryPointModel, current.recovery_point_id)
+            if current_point is not None:
+                current_point.physical_state = "active_previous"
+            self._session.delete(current)
+        self._session.flush()
+        manifest = __import__("json").loads(point.manifest_bytes)
+        promoted_at = datetime.now(timezone.utc)
+        model = RecoveryPointModel(
+            id=point.recovery_point_id,
+            command_id=point.command_id,
+            status="promoted",
+            promoted_generation=point.generation,
+            physical_state="active_current",
+            database_sha256=point.database_sha256,
+            schema_revision=manifest["schema_revision"],
+            snapshot_count=point.snapshot_count,
+            snapshot_manifest_hash=point.snapshot_manifest_hash,
+            manifest_json=point.manifest_bytes.decode("utf-8"),
+            created_at=promoted_at,
+            verified_at=promoted_at,
+            promoted_at=promoted_at,
+        )
+        self._session.add(model)
+        # Break the reciprocal command/recovery FK cycle explicitly: the
+        # recovery row must exist before the command can point back to it.
+        self._session.flush()
+        if current is not None:
+            self._session.add(
+                RecoverySlotModel(
+                    workspace_id=workspace_id,
+                    slot_name="previous",
+                    recovery_point_id=current.recovery_point_id,
+                    generation=current.generation,
+                    updated_at=promoted_at,
+                )
+            )
+        self._session.add(
+            RecoverySlotModel(
+                workspace_id=workspace_id,
+                slot_name="current",
+                recovery_point_id=point.recovery_point_id,
+                generation=point.generation,
+                updated_at=promoted_at,
+            )
+        )
+        command.recovery_point_id = point.recovery_point_id
 
 
 class SqlGate1WriteRepository:

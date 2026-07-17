@@ -39,11 +39,13 @@ def test_gate3_provider_contract_exposes_no_framework_or_generic_runtime() -> No
         assert forbidden not in appended
 
 
-def test_task2_defines_ports_only_and_does_not_create_recovery_runtime() -> None:
-    assert not (
+def test_task4_adds_only_the_approved_recovery_runtime_boundary() -> None:
+    assert (
         ROOT / "src/research_workspace/application/ports/sqlite_backup.py"
     ).exists()
-    assert not (
+    assert (
         ROOT / "src/research_workspace/infrastructure/recovery/sqlite_recovery.py"
     ).exists()
-
+    assert not (
+        ROOT / "src/research_workspace/application/services/command_dispatcher.py"
+    ).exists()

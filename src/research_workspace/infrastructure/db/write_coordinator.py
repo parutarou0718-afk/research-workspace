@@ -50,6 +50,7 @@ from research_workspace.domain.monitoring import (
     RawEventCapacity,
     RawFileEventType,
 )
+from research_workspace.application.dto.recovery_dto import VerifiedRecoveryPoint
 from research_workspace.domain.parsing import (
     ParseContractError,
     build_parse_artifact_identity,
@@ -72,8 +73,13 @@ from research_workspace.infrastructure.db.models import (
     SourceObservationEventModel,
     SourceSnapshotModel,
     WorkspaceMetadataModel,
+    RecoveryPointModel,
+    RecoverySlotModel,
 )
-from research_workspace.infrastructure.db.repositories import SqlGate1WriteRepository
+from research_workspace.infrastructure.db.repositories import (
+    SqlGate1WriteRepository,
+    SqlRecoveryRepository,
+)
 from research_workspace.infrastructure.filesystem.atomic_files import (
     PromotionState,
     fsync_file_and_parent,
@@ -114,6 +120,38 @@ class SqlWriteCoordinator:
         if workspace_id is None:
             raise WriteCoordinatorError("WORKSPACE_METADATA_MISSING")
         return workspace_id
+
+    def next_recovery_generation(self) -> int:
+        with self._factory() as session:
+            return SqlRecoveryRepository(session).next_generation()
+
+    def activate_recovery_point(self, point: VerifiedRecoveryPoint) -> None:
+        try:
+            with self._factory.begin() as session:
+                SqlRecoveryRepository(session).activate(point)
+        except (IntegrityError, ValueError) as exc:
+            code = str(exc)
+            if code not in {"COMMAND_VALIDATION_FAILED", "WORKSPACE_METADATA_MISSING"}:
+                code = "RECOVERY_POINT_FAILED"
+            raise WriteCoordinatorError(code) from exc
+
+    def reset_recovery_after_restore(self, workspace_id: UUID) -> None:
+        with self._factory.begin() as session:
+            actual = session.scalar(select(WorkspaceMetadataModel.workspace_id))
+            if actual != workspace_id:
+                raise WriteCoordinatorError("COMMAND_VALIDATION_FAILED")
+            for point in session.scalars(
+                select(RecoveryPointModel).where(
+                    RecoveryPointModel.physical_state.in_(
+                        ("active_current", "active_previous")
+                    )
+                )
+            ):
+                point.physical_state = "historical_unavailable_after_restore"
+            for slot in session.scalars(
+                select(RecoverySlotModel).where(RecoverySlotModel.workspace_id == workspace_id)
+            ):
+                session.delete(slot)
 
     def register_monitoring_root(
         self, seed: MonitoringRootSeed, baseline: tuple[BaselineObservationDTO, ...]

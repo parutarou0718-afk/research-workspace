@@ -25,6 +25,7 @@ from research_workspace.application.dto.monitoring_dto import (
     ReconciliationPlan,
 )
 from research_workspace.domain.monitoring import MonitoringRootStatus, RawEventCapacity
+from research_workspace.application.dto.recovery_dto import VerifiedRecoveryPoint
 
 
 @dataclass(frozen=True)
@@ -67,6 +68,12 @@ class ParseOperationSeed:
 
 class WriteCoordinator(Protocol):
     def workspace_id(self) -> UUID: ...
+
+    def next_recovery_generation(self) -> int: ...
+
+    def activate_recovery_point(self, point: VerifiedRecoveryPoint) -> None: ...
+
+    def reset_recovery_after_restore(self, workspace_id: UUID) -> None: ...
 
     def begin_import(self, seed: ImportBatchSeed) -> tuple[PreparedImportItem, ...]: ...
 

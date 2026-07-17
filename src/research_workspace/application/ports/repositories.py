@@ -13,6 +13,7 @@ from research_workspace.application.dto.parsing_dto import (
 )
 from research_workspace.application.dto.monitoring_dto import MonitoringRootRecord
 from research_workspace.domain.parsing import ParseArtifactIdentity
+from research_workspace.application.dto.recovery_dto import VerifiedRecoveryPoint
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,3 +56,9 @@ class Gate1WriteRepository(Protocol):
     def register_parse_success(
         self, result: ParseSuccessDTO, parsed_document: dict[str, object]
     ) -> tuple[object, object, object]: ...
+
+
+class RecoveryRepository(Protocol):
+    def next_generation(self) -> int: ...
+
+    def activate(self, point: VerifiedRecoveryPoint) -> None: ...
