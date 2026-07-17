@@ -55,6 +55,13 @@ class SubmissionEditorDialog(ProtectedEditorDialog):
                 self.status_combo.addItems(transitions)
             else:
                 self.status_combo.addItem(record.status)
+                self.status_combo.setEnabled(False)
+                self.status_combo.setProperty(
+                    "lockedReason", "use_transition_action"
+                )
+                self.status_combo.setToolTip(
+                    "Use Update Status to change this submission state."
+                )
             self.status_combo.setCurrentText(record.status)
         self.save_button.clicked.connect(self.save)
         self.cancel_button.clicked.connect(self.reject)
