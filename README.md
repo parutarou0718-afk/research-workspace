@@ -1,190 +1,218 @@
 # Research Workspace
 
-Research Workspace is a local-first Windows desktop app for turning research
-papers into structured notes, ideas, and follow-up work. The Build Week demo
-focuses on one clear story:
+**Turn research papers into structured ideas with a controlled AI workflow.**
+
+Research Workspace is a local-first Windows desktop application for managing
+research papers, notes, ideas, and follow-up work.
+
+The Build Week demo focuses on one clear workflow:
 
 ```text
 Create or import a paper
 → inspect the paper workspace
 → analyze the paper with an OpenAI-compatible model
+→ review Summary, Key Claims, and Suggested Ideas
 → turn a suggested idea into a saved research idea
 ```
 
 The project is built with Python 3.12, PySide6, SQLite, SQLAlchemy, Alembic,
-PyInstaller, and an OpenAI-compatible AI provider interface.
+PyInstaller, and a vendor-neutral AI provider interface.
 
-## Build Week demo status
+## Demo
 
-The English Build Week branch is:
+Demo video: coming soon
+
+Windows portable release:
+
+- Tag: `v0.3-buildweek-en`
+- Download: see the GitHub Releases page
+- Executable: `app/ResearchWorkspace.exe`
+- No local Python installation is required
+
+## Core Product Flow
 
 ```text
-build/v0.2-personal-portable
+Paper
+→ Research Analysis
+→ Suggested Ideas
+→ Create Idea
+→ Idea Detail
 ```
 
-The English demo tag is:
+Research Workspace is not designed as a generic chatbot.
+
+AI is embedded inside a structured research workflow and supports the user at a
+specific point: turning a paper into reviewable research ideas.
+
+## Features
+
+### Research workspace
+
+- Local-first Windows desktop application
+- Persistent SQLite workspace
+- Paper list and Paper Detail workspace
+- Idea Library and Idea Detail
+- Research notes, relations, timeline, and next-step guidance
+- English Build Week interface
+
+### AI configuration
+
+- OpenAI-compatible provider
+- Configurable Base URL
+- Configurable API Key
+- Configurable model
+- Masked API key field
+- Save Settings
+- Test Connection
+
+### Structured paper analysis
+
+The AI workflow returns:
+
+- Summary
+- Key Claims
+- Suggested Ideas
+
+Each suggested idea contains:
+
+- title
+- content
+
+Suggested ideas are not saved automatically. The user opens the existing Create
+Idea dialog, reviews the generated content, and saves it through the normal
+workflow.
+
+### UI states
+
+Paper analysis supports:
+
+- not configured
+- ready
+- loading
+- success
+- failure
+
+The UI does not display raw JSON, provider payloads, or chain-of-thought text.
+
+## Controlled AI Development Workflow
+
+The main result of this project is not only the application itself, but also the
+development process used to build it.
+
+The project followed a checkpoint-driven workflow:
 
 ```text
-v0.3-buildweek-en
+Discuss
+→ Define
+→ Freeze Scope
+→ Implement
+→ Test
+→ Generate Screenshots
+→ Review
+→ Accept or Reject
+→ Commit
+→ Stop
 ```
 
-The Windows portable package is built as a ZIP containing:
+Each feature was treated as a separate, verifiable checkpoint.
+
+Codex was not asked to build the entire application in one prompt. Instead, each
+task had:
+
+- a frozen scope
+- explicit exclusions
+- focused tests
+- UI screenshots
+- regression checks
+- a commit boundary
+- a mandatory stop for review
+
+This prevented uncontrolled feature expansion and made every iteration
+reversible.
+
+## How GPT-5.6 and Codex Were Used
+
+### GPT-5.6
+
+GPT-5.6 was used for:
+
+- product definition
+- requirement refinement
+- scope control
+- architecture review
+- UX evaluation
+- screenshot acceptance
+- risk identification
+- prioritization of the next checkpoint
+
+It helped convert high-level product intent into concrete, testable development
+tasks.
+
+For example:
 
 ```text
-app/ResearchWorkspace.exe
+The demo should be Paper → AI → Idea
 ```
 
-The app does not require a local Python installation after packaging.
+was translated into:
 
-Current local English portable build:
+- a vendor-neutral `AIProvider` interface
+- an OpenAI-compatible implementation
+- an AI Settings surface
+- structured `PaperAnalysis` output
+- loading, success, and failure states
+- Suggested Idea handoff into the existing Create Idea workflow
 
-```text
-E:\research assistant\portable-output-ai01\ResearchWorkspace-v0.2-personal-win64.zip
-```
+### Codex
 
-SHA-256:
+Codex was used for:
 
-```text
-db2178fc219d78c60d183c2b47cccdac9182d1a781edbd0bf0238049a115db6a
-```
+- implementation
+- test creation
+- focused regression checks
+- full test-suite execution
+- UI screenshot generation
+- packaging
+- Git commits
+- release preparation
 
-Smoke result:
-
-```text
-ResearchWorkspace.exe started: true
-CloseMainWindow: true
-Exit code: 0
-```
-
-## Features in the demo
-
-- Local SQLite workspace initialization
-- Paper workspace with card/list layout and detail panel
-- Idea Library and Idea Detail views
-- Settings page with OpenAI-compatible AI configuration
-- AI Settings:
-  - provider label
-  - configurable base URL
-  - masked API key
-  - configurable model
-  - Save Settings
-  - Test Connection
-- Paper Detail research analysis states:
-  - not configured
-  - ready
-  - loading
-  - success
-  - failure
-- Structured AI analysis:
-  - Summary
-  - Key Claims
-  - Suggested Ideas
-- Suggested idea handoff into the existing Create Idea dialog
-- No automatic idea saving; the user reviews and saves normally
-
-## How I collaborated with Codex
-
-This project was built through an iterative collaboration with Codex and
-GPT-5.6. Codex was not used as a one-shot code generator. Instead, I treated it
-as a product-engineering partner that could help me move between architecture,
-implementation, UI iteration, packaging, and release preparation while I made
-the key product decisions.
-
-### My role in the collaboration
-
-I directed the product vision and the decision-making. The main product
-direction was:
-
-- build a real research workspace, not a generic chatbot;
-- keep AI as an enhancement layer inside the research workflow;
-- make the demo story understandable in under three minutes;
-- prioritize Paper → AI → Idea over adding many unrelated pages;
-- keep English Build Week and Chinese friend-use builds as separate versions;
-- ship a Windows portable EXE instead of asking judges to run from source.
-
-I also made the major scope decisions throughout the project:
-
-- Gate 1 focused on deterministic import and parsing.
-- Gate 2 focused on monitoring and version candidates.
-- Gate 3 focused on protected CRUD, audit, undo, relations, and UI.
-- Build Week work shifted into Product Mode, where each page or interaction was
-  reviewed visually and committed in small reversible steps.
-- The AI slice was intentionally kept small: no chat UI, no streaming, no RAG,
-  no embeddings, no multi-provider UI, and no automatic idea creation.
-
-### Where Codex accelerated the workflow
-
-Codex accelerated the project in several concrete ways:
-
-1. **Architecture and boundary control**
-
-   Codex helped maintain strict boundaries between Presentation, Application,
-   Infrastructure, Domain, Repository, Migration, Undo, Recovery, and Worker
-   code. When a task risked crossing those boundaries, the workflow paused for a
-   specification stop instead of silently changing the architecture.
-
-2. **Test-driven implementation**
-
-   Most major backend and UI changes were implemented by writing or identifying
-   failing tests first, observing the real RED state, then making the smallest
-   useful GREEN change. This kept the project from turning into uncontrolled
-   “vibe coding.”
-
-3. **Large-scale verification**
-
-   Codex repeatedly ran focused tests, UI regression tests, Gate acceptance
-   tests, full pytest suites, `git diff --check`, and clean `git status`
-   checks. The current AI demo commit passed:
-
-   ```text
-   Focused AI tests: 11 passed
-   Focused UI / Gate3 UI regression: 34 passed
-   Full suite: 1168 passed
-   ```
-
-4. **UI and product iteration**
-
-   Codex helped rapidly iterate from a traditional Qt-looking app into a more
-   polished Research Workspace interface. I reviewed screenshots, rejected
-   layouts that felt too database-like, and redirected the work toward a design
-   system, Paper workspace, Idea Library, and clear “Next Step” guidance.
-
-5. **Packaging and release preparation**
-
-   Codex helped create and validate the PyInstaller portable build path,
-   inspect package contents, produce a ZIP artifact, smoke-test the EXE startup,
-   and push the English Build Week branch and tags to GitHub.
-
-### How GPT-5.6 and Codex contributed to the final result
-
-GPT-5.6 was most useful as the reasoning layer behind Codex. It helped connect
-product intent to concrete engineering steps: for example, translating “the
-demo should be Paper → AI → Idea” into a vendor-neutral AI provider interface,
-settings UI, Paper Detail state machine, structured response validation, and
-existing Idea dialog handoff.
-
-Codex contributed the execution loop:
+The execution loop was:
 
 ```text
-product direction
-→ implementation plan
+frozen task
+→ implementation
 → focused tests
-→ code changes
-→ UI screenshots
+→ screenshots
 → full regression
 → commit
 → stop for review
 ```
 
-That loop made it possible to move quickly without losing control of the code
-base. The final Build Week result is not just an AI prompt wrapped in a UI; it
-is a runnable desktop research workspace with persistent local data, a
-structured paper-to-idea workflow, and a minimal AI layer that fits naturally
-into that workflow.
+The project therefore used AI as a controlled product-engineering workflow,
+rather than as one-shot code generation.
 
-## Architecture overview
+## Example of the Review Process
 
-The Build Week AI slice follows this boundary:
+The UI was not accepted simply because it worked.
+
+Several iterations were rejected after screenshot review:
+
+- Paper Detail initially failed to guide the user toward Idea creation.
+- The first Paper workspace layout gave too much space to the list and too
+  little to the detail panel.
+- The English empty state contained stray square glyphs.
+- The empty Paper state incorrectly displayed Edit, Move to Trash, and Restore
+  controls.
+
+Each issue was returned as a narrowly scoped task, fixed, retested, reviewed,
+committed, and stopped.
+
+This process kept the application visually coherent while preserving the
+existing architecture.
+
+## Architecture
+
+The AI slice follows this dependency direction:
 
 ```text
 Presentation
@@ -193,9 +221,9 @@ Presentation
 → OpenAI-compatible provider implementation
 ```
 
-Presentation and Application code do not import OpenAI-specific SDK classes.
-The current implementation uses a small OpenAI-compatible HTTP provider and a
-strict structured response model:
+Presentation and Application code do not depend on OpenAI-specific SDK classes.
+
+The structured result is:
 
 ```text
 PaperAnalysis
@@ -206,13 +234,55 @@ PaperAnalysis
   - content
 ```
 
-The AI flow does not modify Domain entities, repositories, migrations, undo,
-recovery, submission logic, or relation logic. Suggested ideas are passed into
-the existing Create Idea dialog and are not saved automatically.
+The AI workflow does not modify:
 
-## Running from source
+- Domain entities
+- repositories
+- ORM mappings
+- migrations
+- undo
+- recovery
+- submission logic
+- relation logic
 
-Install Python 3.12 and `uv`, then run:
+Suggested Ideas are passed into the existing Create Idea dialog and are not
+automatically persisted.
+
+## Technology Stack
+
+- Python 3.12
+- PySide6
+- SQLite
+- SQLAlchemy
+- Alembic
+- JSON Schema
+- PyInstaller
+- pytest
+- pytest-qt
+
+## Test Status
+
+The current Build Week AI demo commit passed:
+
+- Focused AI tests: 11 passed
+- Focused UI / Gate3 UI regression: 34 passed
+- Full suite: 1168 passed
+
+Additional checks included:
+
+- `git diff --check`
+- `git status --short`
+
+Automated tests do not call a live AI API.
+
+## Running from Source
+
+Requirements:
+
+- Python 3.12
+- uv
+
+Install dependencies and start the application:
 
 ```powershell
 uv sync --locked
@@ -225,65 +295,100 @@ Run the full test suite:
 uv run pytest -q
 ```
 
-## Building the Windows portable ZIP
+## Building the Windows Portable Package
 
 From the repository root:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File packaging\windows\build_portable.ps1 `
-  -OutputRoot "E:\research assistant\portable-output-ai01" `
-  -IconPath "C:\path\to\app-icon.png"
+powershell -ExecutionPolicy Bypass `
+  -File packaging\windows\build_portable.ps1 `
+  -OutputRoot ".\dist" `
+  -IconPath "C:\path\to\app-icon.ico"
 ```
 
-The script creates a PyInstaller `onedir` package and a ZIP containing
-`app/ResearchWorkspace.exe`.
+The script creates a PyInstaller onedir package and a ZIP containing:
 
-## Project scope and non-goals
+```text
+app/ResearchWorkspace.exe
+```
 
-Included in the Build Week demo:
+## Build Week Release
 
-- local desktop app;
-- persistent workspace data;
-- Paper and Idea demo flow;
-- OpenAI-compatible paper analysis;
-- suggested idea handoff;
-- Windows portable EXE packaging.
+English Build Week version:
 
-Not included in the Build Week demo:
+- Branch: `build/v0.2-personal-portable`
+- Tag: `v0.3-buildweek-en`
+- Target: Devpost, judges, and demo video
 
-- chat UI;
-- streaming;
-- RAG;
-- embeddings;
-- multi-provider UI;
-- automatic idea saving;
-- Submission workflow expansion;
-- Relation graph expansion;
-- cloud sync;
-- installer;
-- auto-update;
-- digital signing.
+Portable ZIP:
 
-## Version plan
+```text
+ResearchWorkspace-v0.3-buildweek-en-win64.zip
+```
 
-Two versions are planned:
+SHA-256:
 
-1. **English Build Week version**
-   - branch: `build/v0.2-personal-portable`
-   - tag: `v0.3-buildweek-en`
-   - target: Devpost / judges / demo video
+```text
+db2178fc219d78c60d183c2b47cccdac9182d1a781edbd0bf0238049a115db6a
+```
 
-2. **Chinese friend-use version**
-   - planned branch: `localization/zh-cn-friend`
-   - target: a separate Chinese portable ZIP
-   - scope: UI text and packaging only, not business logic changes
+## Included in the Build Week Demo
 
-Keeping these as separate versions avoids mixing Build Week English submission
-requirements with the friend-facing Chinese build.
+- local Windows desktop application
+- persistent research workspace
+- Paper and Idea workflow
+- OpenAI-compatible paper analysis
+- Summary, Key Claims, and Suggested Ideas
+- Suggested Idea handoff
+- Windows portable EXE package
+- checkpoint-driven AI development workflow
 
-## Release note
+## Not Included
 
-This is a Build Week demo build, not a public production release. The app is
-intended to be tested as a Windows portable ZIP. Public release readiness,
-installer work, signing, automatic updates, and broader distribution hardening
-remain future work.
+The Build Week demo intentionally excludes:
+
+- chat UI
+- streaming
+- RAG
+- embeddings
+- vector database
+- PDF analysis pipeline
+- batch analysis
+- multi-provider comparison
+- automatic idea saving
+- Submission workflow expansion
+- Relation graph expansion
+- cloud sync
+- installer
+- auto-update
+- digital signing
+
+## Version Plan
+
+### English Build Week version
+
+- Branch: `build/v0.2-personal-portable`
+- Tag: `v0.3-buildweek-en`
+- Target: Devpost and judges
+
+### Chinese friend-use version
+
+- Branch: `localization/zh-cn-friend`
+- Target: direct personal use as a Chinese-language portable EXE
+
+The Chinese version changes presentation text and packaging only. It does not
+change the core business logic.
+
+## Compatibility Note
+
+Overview and Imports are backed by application queries. Importing documents creates local immutable snapshots.
+
+Papers, Ideas, and Submissions are foundation placeholders. They were later expanded into the current protected editing workflow.
+
+## Release Note
+
+This is a Build Week demo release, not a production-ready public release.
+
+The application is intended to be tested as a Windows portable ZIP. Installer
+support, signing, automatic updates, broader distribution hardening, and public
+production support remain future work.
