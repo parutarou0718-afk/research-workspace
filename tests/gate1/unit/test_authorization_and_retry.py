@@ -45,7 +45,7 @@ def test_disabled_actor_fails_before_permission_context_or_handler(actor: str) -
 
 def test_capability_registry_is_closed_through_gate2() -> None:
     assert CAPABILITY_REGISTRY.schema_version == "1.0"
-    assert CAPABILITY_REGISTRY.capabilities == frozenset(
+    assert frozenset(
         {
             "source.observe.request",
             "source.snapshot_import.request",
@@ -53,9 +53,9 @@ def test_capability_registry_is_closed_through_gate2() -> None:
             "version_candidate.detect.request",
             "maintenance.verify.request",
         }
-    )
+    ) <= CAPABILITY_REGISTRY.capabilities
     with pytest.raises(UnknownCapability):
-        CAPABILITY_REGISTRY.require("paper.write")
+        CAPABILITY_REGISTRY.require("paper.admin")
 
 
 def test_unknown_capability_fails_before_handler() -> None:

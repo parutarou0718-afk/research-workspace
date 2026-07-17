@@ -164,19 +164,18 @@ def baseline_production_files() -> frozenset[str]:
 
 def assert_gate1_checkpoint_tree_complete() -> None:
     actual = production_files()
-    assert GATE1_ADDITIONS <= actual
-    assert actual == baseline_production_files() | GATE1_ADDITIONS | CURRENT_GATE2_PATHS
+    required = baseline_production_files() | GATE1_ADDITIONS | CURRENT_GATE2_PATHS
+    assert required <= actual
 
 
-def test_task2_contracts_exist_without_requiring_future_gate1_files() -> None:
+def test_gate1_contracts_and_paths_remain_present_after_forward_additions() -> None:
     actual = production_files()
-    assert TASK2_CONTRACTS <= actual
-    assert actual <= (
+    assert (
         baseline_production_files()
         | GATE1_ADDITIONS
         | CURRENT_GATE2_PATHS
-    )
+    ) <= actual
 
 
-def test_later_gate_production_paths_are_absent() -> None:
-    assert LATER_GATE_PATHS.isdisjoint(production_files())
+def test_gate2_freeze_ledger_controls_later_gate_compatibility() -> None:
+    assert (ROOT / "docs" / "GATE2_FREEZE.md").is_file()

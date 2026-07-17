@@ -50,6 +50,23 @@ RETRY_POLICY_REGISTRY = RetryPolicyRegistry("1.0", MappingProxyType({
     "SOURCE_HASH_MISMATCH": RetryPolicy(False, 1, (), False, "integrity_error", "failed"),
     "PDF_CORRUPT": RetryPolicy(False, 1, (), False, "parse_failed", "failed"),
     "PDF_TRUNCATED": RetryPolicy(False, 1, (), False, "parse_failed", "failed"),
+    "COMMAND_IDEMPOTENCY_CONFLICT": RetryPolicy(False, 1, (), False, "command_conflict", "failed"),
+    "COMMAND_VALIDATION_FAILED": RetryPolicy(False, 1, (), False, "validation_failed", "failed"),
+    "CONCURRENT_MODIFICATION": RetryPolicy(False, 1, (), True, "concurrent_modification", "failed"),
+    "RECOVERY_POINT_FAILED": RetryPolicy(False, 1, (), True, "recovery_failed", "failed"),
+    "UNDO_NOT_AVAILABLE": RetryPolicy(False, 1, (), True, "undo_unavailable", "failed"),
+    "UNDO_ALREADY_APPLIED": RetryPolicy(False, 1, (), True, "undo_unavailable", "failed"),
+    "UNDO_CONFLICT": RetryPolicy(False, 1, (), True, "undo_conflict", "failed"),
+    "UNDO_DEPENDENCY_CONFLICT": RetryPolicy(False, 1, (), True, "undo_conflict", "failed"),
+    "UNDO_CONSTRAINT_VIOLATION": RetryPolicy(False, 1, (), True, "undo_conflict", "failed"),
+    "DELETE_DEPENDENCY_CONFLICT": RetryPolicy(False, 1, (), True, "dependency_conflict", "failed"),
+    "INVALID_WORKFLOW_TRANSITION": RetryPolicy(False, 1, (), True, "validation_failed", "failed"),
+    "INVALID_VERSION_ASSIGNMENT": RetryPolicy(False, 1, (), True, "validation_failed", "failed"),
+    "VERSION_RETRACTION_DEPENDENCY_CONFLICT": RetryPolicy(False, 1, (), True, "dependency_conflict", "failed"),
+    "RELATION_DUPLICATE": RetryPolicy(False, 1, (), True, "relation_conflict", "failed"),
+    "RELATION_CYCLE": RetryPolicy(False, 1, (), True, "relation_conflict", "failed"),
+    "RELATION_ENDPOINT_INVALID": RetryPolicy(False, 1, (), True, "validation_failed", "failed"),
+    "CANDIDATE_STATE_CHANGED": RetryPolicy(False, 1, (), True, "concurrent_modification", "failed"),
 }))
 
 

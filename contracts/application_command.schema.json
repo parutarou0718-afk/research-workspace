@@ -1,0 +1,216 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://research-workspace.local/schemas/application-command-1.0.json",
+  "title": "ApplicationCommand 1.0",
+  "type": "object",
+  "required": [
+    "id", "command_type", "contract_version", "idempotency_key",
+    "request_fingerprint", "actor_type", "actor_id", "permission_context",
+    "status", "requested_at", "started_at", "committed_at", "failed_at",
+    "recovery_point_id", "undo_of_command_id", "result_summary", "error_code",
+    "migration_batch_id"
+  ],
+  "properties": {
+    "id": {"$ref": "#/$defs/uuid"},
+    "command_type": {"$ref": "#/$defs/commandType"},
+    "contract_version": {"const": "1.0"},
+    "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 255},
+    "request_fingerprint": {"$ref": "#/$defs/sha256"},
+    "actor_type": {"enum": ["user", "system"]},
+    "actor_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 255},
+    "permission_context": {"$ref": "#/$defs/permissionContext"},
+    "status": {"enum": ["pending", "running", "committed", "failed", "cancelled"]},
+    "requested_at": {"$ref": "#/$defs/utcDateTime"},
+    "started_at": {"$ref": "#/$defs/nullableUtcDateTime"},
+    "committed_at": {"$ref": "#/$defs/nullableUtcDateTime"},
+    "failed_at": {"$ref": "#/$defs/nullableUtcDateTime"},
+    "recovery_point_id": {"$ref": "#/$defs/nullableUuid"},
+    "undo_of_command_id": {"$ref": "#/$defs/nullableUuid"},
+    "result_summary": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/resultSummary"}
+      ]
+    },
+    "error_code": {
+      "type": ["string", "null"],
+      "pattern": "^[A-Z][A-Z0-9_]+$",
+      "maxLength": 128
+    },
+    "migration_batch_id": {"$ref": "#/$defs/nullableUuid"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "committed"}}, "required": ["status"]},
+      "then": {
+        "properties": {
+          "committed_at": {"$ref": "#/$defs/utcDateTime"},
+          "failed_at": {"type": "null"},
+          "result_summary": {"$ref": "#/$defs/resultSummary"},
+          "error_code": {"type": "null"}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "failed"}}, "required": ["status"]},
+      "then": {
+        "properties": {
+          "committed_at": {"type": "null"},
+          "failed_at": {"$ref": "#/$defs/utcDateTime"},
+          "result_summary": {"type": "null"},
+          "error_code": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]+$",
+            "maxLength": 128
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"actor_type": {"const": "user"}}, "required": ["actor_type"]},
+      "then": {
+        "properties": {
+          "command_type": {
+            "not": {"const": "system.migration_adopt_v01"}
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "allOf": [
+          {"properties": {"status": {"const": "committed"}}, "required": ["status"]},
+          {
+            "properties": {
+              "command_type": {"not": {"const": "system.migration_adopt_v01"}}
+            },
+            "required": ["command_type"]
+          }
+        ]
+      },
+      "then": {
+        "properties": {"recovery_point_id": {"$ref": "#/$defs/uuid"}}
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command_type": {"const": "system.migration_adopt_v01"}
+        },
+        "required": ["command_type"]
+      },
+      "then": {
+        "properties": {
+          "actor_type": {"const": "system"},
+          "recovery_point_id": {"type": "null"},
+          "migration_batch_id": {"$ref": "#/$defs/uuid"}
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "nullableUuid": {"anyOf": [{"$ref": "#/$defs/uuid"}, {"type": "null"}]},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "utcDateTime": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "nullableUtcDateTime": {
+      "anyOf": [{"$ref": "#/$defs/utcDateTime"}, {"type": "null"}]
+    },
+    "commandType": {
+      "enum": [
+        "paper.create", "paper.update", "paper.soft_delete", "paper.restore",
+        "paper.set_current_version",
+        "idea.create", "idea.update", "idea.soft_delete", "idea.restore",
+        "submission.create", "submission.update", "submission.transition",
+        "submission.soft_delete", "submission.restore",
+        "submission.reassign_paper",
+        "paper_version.confirm", "paper_version.set_context",
+        "paper_version.retract",
+        "candidate.confirm", "candidate.reject", "candidate.reconsider",
+        "relation.confirm", "relation.reject", "relation.reconsider",
+        "relation.retract", "relation.supersede",
+        "undo.execute", "batch.execute", "system.migration_adopt_v01"
+      ]
+    },
+    "permissionContext": {
+      "type": "object",
+      "required": [
+        "schema_version", "actor_type", "actor_id", "workspace_id",
+        "capabilities", "scope_refs", "path_scopes", "network_allowed",
+        "granted_at", "policy_version", "authorization_decision_id"
+      ],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "actor_type": {"enum": ["user", "system"]},
+        "actor_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 255},
+        "workspace_id": {"$ref": "#/$defs/uuid"},
+        "capabilities": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "source.observe.request", "source.snapshot_import.request",
+              "document.parse.request", "version_candidate.detect.request",
+              "paper.write", "idea.write", "submission.write",
+              "relation.review", "undo.execute", "maintenance.verify.request"
+            ]
+          }
+        },
+        "scope_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 255}
+        },
+        "path_scopes": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/pathScope"}
+        },
+        "network_allowed": {"const": false},
+        "granted_at": {"$ref": "#/$defs/utcDateTime"},
+        "policy_version": {"type": "string", "minLength": 1, "maxLength": 64},
+        "authorization_decision_id": {"$ref": "#/$defs/uuid"}
+      },
+      "additionalProperties": false
+    },
+    "pathScope": {
+      "type": "object",
+      "required": [
+        "scope_type", "normalized_path_hash", "root_id", "access_mode",
+        "recursive"
+      ],
+      "properties": {
+        "scope_type": {
+          "enum": ["import_source", "snapshot_read", "workspace_staging"]
+        },
+        "normalized_path_hash": {"$ref": "#/$defs/sha256"},
+        "root_id": {"$ref": "#/$defs/uuid"},
+        "access_mode": {"enum": ["read", "list", "copy", "create_only"]},
+        "recursive": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "resultSummary": {
+      "type": "object",
+      "required": ["affected_entity_ids", "affected_count", "replayed"],
+      "properties": {
+        "affected_entity_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/uuid"}
+        },
+        "affected_count": {"type": "integer", "minimum": 0},
+        "replayed": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

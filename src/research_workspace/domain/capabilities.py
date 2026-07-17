@@ -35,6 +35,11 @@ CAPABILITY_REGISTRY = CapabilityRegistry(
             "source.snapshot_import.request",
             "document.parse.request",
             "version_candidate.detect.request",
+            "paper.write",
+            "idea.write",
+            "submission.write",
+            "relation.review",
+            "undo.execute",
             "maintenance.verify.request",
         }
     ),

@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://research-workspace.local/schemas/audit-change-1.0.json",
+  "title": "AuditChange 1.0",
+  "type": "object",
+  "required": [
+    "id", "command_id", "change_index", "entity_type", "entity_id",
+    "operation", "before_schema_version", "before", "after_schema_version",
+    "after", "changed_fields", "before_row_version", "after_row_version",
+    "created_at"
+  ],
+  "properties": {
+    "id": {"$ref": "#/$defs/uuid"},
+    "command_id": {"$ref": "#/$defs/uuid"},
+    "change_index": {"type": "integer", "minimum": 0},
+    "entity_type": {
+      "enum": [
+        "Paper", "Idea", "Submission", "PaperVersion",
+        "PaperVersionCandidate", "EntityRelation"
+      ]
+    },
+    "entity_id": {"$ref": "#/$defs/uuid"},
+    "operation": {
+      "enum": [
+        "create", "update", "soft_delete", "restore", "confirm",
+        "reject", "reconsider", "retract", "undo"
+      ]
+    },
+    "before_schema_version": {
+      "type": ["string", "null"],
+      "pattern": "^1\\.0$"
+    },
+    "before": {
+      "oneOf": [{"type": "null"}, {"$ref": "#/$defs/domainSnapshot"}]
+    },
+    "after_schema_version": {
+      "type": ["string", "null"],
+      "pattern": "^1\\.0$"
+    },
+    "after": {
+      "oneOf": [{"type": "null"}, {"$ref": "#/$defs/domainSnapshot"}]
+    },
+    "changed_fields": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/domainField"}
+    },
+    "before_row_version": {"type": ["integer", "null"], "minimum": 1},
+    "after_row_version": {"type": ["integer", "null"], "minimum": 1},
+    "created_at": {"$ref": "#/$defs/utcDateTime"}
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "utcDateTime": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "domainField": {
+      "enum": [
+        "title", "status", "current_version_id", "content", "origin_type",
+        "paper_id", "venue", "submitted_at", "deadline_at",
+        "active_version_id", "source_snapshot_id",
+        "context_parse_artifact_id", "version_label",
+        "normalized_version_label", "lifecycle_state", "retracted_at",
+        "superseded_by_relation_id", "confirmation_state",
+        "superseded_by_candidate_id", "decided_at", "deleted_at"
+      ]
+    },
+    "fieldValue": {
+      "type": ["string", "integer", "number", "boolean", "null"]
+    },
+    "domainSnapshot": {
+      "type": "object",
+      "required": [
+        "schema_version", "entity_type", "entity_id", "row_version", "fields"
+      ],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "entity_type": {
+          "enum": [
+            "Paper", "Idea", "Submission", "PaperVersion",
+            "PaperVersionCandidate", "EntityRelation"
+          ]
+        },
+        "entity_id": {"$ref": "#/$defs/uuid"},
+        "row_version": {"type": "integer", "minimum": 1},
+        "fields": {
+          "type": "object",
+          "propertyNames": {"$ref": "#/$defs/domainField"},
+          "additionalProperties": {"$ref": "#/$defs/fieldValue"}
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

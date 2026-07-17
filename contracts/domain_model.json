@@ -1,5 +1,5 @@
 {
-  "version": "0.2-gate2",
+  "version": "0.2-gate3",
   "entities": {
     "Paper": ["id", "title", "status", "current_version_id", "created_at", "updated_at", "deleted_at"],
     "PaperVersion": ["id", "paper_id", "source_document_id", "version_label", "parent_version_id", "is_current", "created_at"],
@@ -62,6 +62,57 @@
       "modified_time_alone_is_direction": false,
       "maximum_neighbors_per_snapshot": 12
     }
+  },
+  "gate3_entities": {
+    "ApplicationCommand": ["id", "command_type", "contract_version", "idempotency_key", "request_fingerprint", "actor_type", "actor_id", "permission_context_json", "status", "requested_at", "started_at", "committed_at", "failed_at", "recovery_point_id", "undo_of_command_id", "result_summary_json", "error_code", "migration_batch_id"],
+    "AuditChange": ["id", "command_id", "change_index", "entity_type", "entity_id", "operation", "before_schema_version", "before_json", "after_schema_version", "after_json", "changed_fields_json", "before_row_version", "after_row_version", "created_at"],
+    "RecoveryPoint": ["id", "command_id", "status", "promoted_generation", "physical_state", "database_sha256", "schema_revision", "snapshot_count", "snapshot_manifest_hash", "manifest_json", "created_at", "verified_at", "promoted_at"],
+    "RecoverySlot": ["workspace_id", "slot_name", "recovery_point_id", "generation", "updated_at"],
+    "Paper": ["id", "title", "status", "current_version_id", "created_at", "updated_at", "deleted_at", "row_version", "created_by_command_id", "updated_by_command_id", "deleted_by_command_id"],
+    "PaperVersion": ["id", "paper_id", "source_snapshot_id", "context_parse_artifact_id", "version_label", "normalized_version_label", "lifecycle_state", "row_version", "created_at", "confirmed_by_command_id", "updated_at", "updated_by_command_id", "retracted_at", "retracted_by_command_id"],
+    "Idea": ["id", "title", "content", "status", "origin_type", "created_at", "updated_at", "deleted_at", "row_version", "created_by_command_id", "updated_by_command_id", "deleted_by_command_id"],
+    "Submission": ["id", "paper_id", "venue", "status", "submitted_at", "deadline_at", "active_version_id", "created_at", "updated_at", "deleted_at", "row_version", "created_by_command_id", "updated_by_command_id", "deleted_by_command_id"],
+    "EntityRelation": ["id", "source_type", "source_id", "relation_type", "target_type", "target_id", "confidence", "confirmation_state", "lifecycle_state", "superseded_by_relation_id", "created_by_actor_type", "created_by_actor_id", "created_by_command_id", "row_version", "created_at", "updated_at", "retracted_at", "retracted_by_command_id"]
+  },
+  "gate3_contracts": {
+    "command_statuses": ["pending", "running", "committed", "failed", "cancelled"],
+    "audit_operations": ["create", "update", "soft_delete", "restore", "confirm", "reject", "reconsider", "retract", "undo"],
+    "paper_version_lifecycle": ["active", "retracted"],
+    "relation_lifecycle": ["active", "retracted", "superseded"],
+    "candidate_decisions": {
+      "confirm": ["pending", "confirmed"],
+      "reject": ["pending", "rejected"],
+      "reconsider": ["rejected", "pending"]
+    },
+    "submission_transitions": {
+      "preparing": ["ready"],
+      "ready": ["preparing", "submitted"],
+      "submitted": ["editorial_review", "external_review", "revision", "accepted", "rejected", "withdrawn", "no_response"],
+      "editorial_review": ["external_review", "revision", "accepted", "rejected", "withdrawn", "no_response"],
+      "external_review": ["revision", "accepted", "rejected", "withdrawn", "no_response"],
+      "revision": ["submitted", "editorial_review", "external_review", "accepted", "rejected", "withdrawn", "no_response"],
+      "no_response": ["editorial_review", "external_review", "revision", "accepted", "rejected", "withdrawn"],
+      "rejected": ["revision"],
+      "accepted": ["withdrawn"],
+      "withdrawn": []
+    },
+    "version_successor_direction": {
+      "source": "later_paper_version",
+      "target": "earlier_paper_version"
+    },
+    "interactive_relation_registry": {
+      "version_successor_of": {"source": ["PaperVersion"], "target": ["PaperVersion"], "symmetric": false},
+      "used_in": {"source": ["Idea"], "target": ["Paper", "PaperVersion"], "symmetric": false},
+      "supports": {"source": ["EvidenceRef"], "target": ["Paper", "PaperVersion", "Idea"], "symmetric": false},
+      "contradicts": {"source": ["EvidenceRef"], "target": ["Paper", "PaperVersion", "Idea"], "symmetric": false},
+      "extends": {"source": ["Paper", "Idea"], "target": ["same_entity_type"], "symmetric": false},
+      "related_to": {"source": ["Paper", "Idea"], "target": ["same_entity_type"], "symmetric": true},
+      "presented_at": {"source": ["Paper"], "target": ["Conference"], "symmetric": false, "read_only": true},
+      "submitted_as": {"source": ["PaperVersion"], "target": ["Submission"], "symmetric": false},
+      "split_from": {"source": ["Paper"], "target": ["Paper"], "symmetric": false},
+      "merged_from": {"source": ["Paper"], "target": ["Paper"], "symmetric": false}
+    },
+    "maximum_batch_targets": 100
   },
   "relation_types": [
     "belongs_to",

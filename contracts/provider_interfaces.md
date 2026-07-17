@@ -202,3 +202,121 @@ write coordinator own every persistent fact.
 
 Gate 2 exposes no `confirm_candidate`, `reject_candidate`, or reconsideration
 port. Formal candidate decisions remain Gate 3 protected commands.
+
+## Gate 3 protected-write ports
+
+The Application layer accepts an untrusted `RawCommandEnvelope`, rejects
+disabled actors, authorizes the current request, canonicalizes the request, and
+produces one immutable `CommandPlan`. Historical permission snapshots are audit
+evidence only and cannot be supplied as authorization.
+
+```python
+@dataclass(frozen=True)
+class RawCommandEnvelope:
+    command_id: UUID
+    command_type: str
+    contract_version: Literal["1.0"]
+    idempotency_key: str
+    actor_type: str
+    actor_id: str | None
+    workspace_id: UUID
+    requested_at: datetime
+    request_payload: bytes
+
+@dataclass(frozen=True)
+class CommandPlan:
+    command_id: UUID
+    command_type: str
+    idempotency_key: str
+    request_fingerprint: str
+    permission_context: bytes
+    entity_scopes: tuple[tuple[str, UUID], ...]
+    expected_versions: tuple[tuple[str, UUID, int], ...]
+    canonical_request: bytes
+    protected: bool
+
+@dataclass(frozen=True)
+class RecoveryPlan:
+    recovery_point_id: UUID
+    command_id: UUID
+    command_type: str
+    request_fingerprint: str
+    workspace_id: UUID
+    database_path: Path
+    recovery_root: Path
+    schema_revision: Literal["0004_gate3_protected_crud"]
+
+@dataclass(frozen=True)
+class VerifiedRecoveryPoint:
+    recovery_point_id: UUID
+    command_id: UUID
+    generation: int
+    database_sha256: str
+    snapshot_count: int
+    snapshot_manifest_hash: str
+    manifest_bytes: bytes
+    promoted_slot: Literal["current"]
+
+@dataclass(frozen=True)
+class DomainMutation:
+    entity_type: str
+    entity_id: UUID
+    operation: str
+    expected_row_version: int | None
+    before_snapshot: bytes | None
+    after_snapshot: bytes | None
+    changed_fields: tuple[str, ...]
+    event_type: str
+    event_payload: bytes
+
+@dataclass(frozen=True)
+class DecisionReviewBundle:
+    candidate_id: UUID
+    candidate_row_version: int
+    detector_id: str
+    detector_version: str
+    rule_id: str
+    rule_config_fingerprint: str
+    earlier_snapshot_id: UUID
+    later_snapshot_id: UUID
+    direction_rationale: bytes
+    signals: bytes
+    input_observation_ids: tuple[UUID, ...]
+    existing_memberships: tuple[UUID, ...]
+    existing_relation_ids: tuple[UUID, ...]
+```
+
+All `bytes` values above are immutable canonical JSON, hashes, or verified
+manifest bytes according to their field contracts. They are not arbitrary
+mutable mappings.
+
+```python
+class SQLiteBackup(Protocol):
+    def create_verified_recovery(
+        self,
+        plan: RecoveryPlan,
+        report_progress: Callable[[RecoveryProgress], None],
+        cancellation: CancellationToken,
+    ) -> VerifiedRecoveryPoint: ...
+
+class ProtectedWriteCoordinator(Protocol):
+    def persist_command_envelope(self, plan: CommandPlan) -> None: ...
+    def persist_verified_recovery(
+        self, plan: CommandPlan, recovery: VerifiedRecoveryPoint
+    ) -> None: ...
+    def commit_mutations(
+        self, plan: CommandPlan, mutations: tuple[DomainMutation, ...]
+    ) -> CommandResult: ...
+    def mark_command_failed(self, command_id: UUID, error_code: str) -> None: ...
+```
+
+The backup adapter may read only the declared workspace database, recovery root,
+and registered snapshot inventory. A worker receives one frozen `RecoveryPlan`
+and returns one immutable result. Workers never own a database session,
+repository, user permission, domain transition, formal event publication,
+widget/model, unrestricted path, or network authority.
+
+`DecisionReviewBundle` is a read projection over immutable Gate 2 candidate
+evidence and current Gate 3 membership/relation facts. It is not a stored
+Evidence Bundle entity and cannot rewrite candidate identity, rules, signals, or
+direction rationale.

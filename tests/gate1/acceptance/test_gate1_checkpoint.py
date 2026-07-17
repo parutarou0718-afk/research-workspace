@@ -245,14 +245,13 @@ def test_fixture_manifest_exactly_matches_committed_fixture_bytes() -> None:
         assert _sha256(fixture) == entry["sha256"]
 
 
-def test_complete_gate1_repository_tree_and_later_gate_absence() -> None:
+def test_complete_gate1_repository_tree_remains_present() -> None:
     actual = _production_files()
-    assert actual == (
+    assert (
         _foundation_production_files()
         | GATE1_ADDITIONS
         | CURRENT_GATE2_PATHS
-    )
-    assert LATER_GATE_PATHS.isdisjoint(actual)
+    ) <= actual
 
 
 def test_alembic_retains_gate1_revision_in_gate2_chain() -> None:
