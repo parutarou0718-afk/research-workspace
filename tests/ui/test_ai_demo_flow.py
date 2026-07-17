@@ -72,6 +72,22 @@ class AnalysisService:
         return self.handle
 
 
+class ConnectionHandle:
+    def __init__(self, *, done=False, error=None):
+        self.done = done
+        self.error = error
+
+
+class ConnectionTester:
+    def __init__(self, handle):
+        self.handle = handle
+        self.requests = []
+
+    def test_async(self, settings):
+        self.requests.append(settings)
+        return self.handle
+
+
 def services(*, configured=True, handle=None):
     return SimpleNamespace(
         get_papers=Query((paper(),)),
@@ -103,6 +119,57 @@ def test_settings_page_exposes_ai_configuration_and_masks_key(qtbot, tmp_path):
     assert page.ai_model_edit.text() == "gpt-demo"
 
 
+def test_ai_settings_actions_show_success_and_working_feedback(qtbot, tmp_path):
+    from research_workspace.infrastructure.config.ai_settings_store import (
+        JsonAISettingsStore,
+    )
+
+    store = JsonAISettingsStore(tmp_path / "ai-settings.json")
+    tester = ConnectionTester(ConnectionHandle(done=False))
+    page = SettingsPage(
+        SimpleNamespace(ai_settings_store=store, ai_connection_tester=tester)
+    )
+    qtbot.addWidget(page.widget)
+    page.ai_base_url_edit.setText("https://example.test/v1")
+    page.ai_api_key_edit.setText("sk-secret-demo")
+    page.ai_model_edit.setText("gpt-demo")
+
+    qtbot.mouseClick(page.save_ai_settings_button, Qt.MouseButton.LeftButton)
+
+    assert page.ai_settings_status_label.text() == "AI 设置已保存。"
+    assert page.ai_settings_status_label.property("feedback") == "success"
+
+    qtbot.mouseClick(page.test_ai_connection_button, Qt.MouseButton.LeftButton)
+
+    assert page.test_ai_connection_button.isEnabled() is False
+    assert page.ai_settings_status_label.text() == "正在测试连接…"
+    assert page.ai_settings_status_label.property("feedback") == "working"
+
+
+def test_ai_settings_connection_failure_uses_error_feedback(qtbot, tmp_path):
+    from research_workspace.infrastructure.config.ai_settings_store import (
+        JsonAISettingsStore,
+    )
+
+    store = JsonAISettingsStore(tmp_path / "ai-settings.json")
+    tester = ConnectionTester(
+        ConnectionHandle(done=True, error=SimpleNamespace(message="Authentication failed."))
+    )
+    page = SettingsPage(
+        SimpleNamespace(ai_settings_store=store, ai_connection_tester=tester)
+    )
+    qtbot.addWidget(page.widget)
+    page.ai_base_url_edit.setText("https://example.test/v1")
+    page.ai_api_key_edit.setText("sk-secret-demo")
+    page.ai_model_edit.setText("gpt-demo")
+
+    qtbot.mouseClick(page.test_ai_connection_button, Qt.MouseButton.LeftButton)
+    page._poll_ai_connection_test()
+
+    assert page.ai_settings_status_label.text() == "Authentication failed."
+    assert page.ai_settings_status_label.property("feedback") == "error"
+
+
 def test_paper_analysis_not_configured_opens_settings(qtbot):
     page = PapersPage(services(configured=False))
     qtbot.addWidget(page.widget)
@@ -126,6 +193,7 @@ def test_paper_analysis_loading_prevents_repeated_clicks(qtbot):
     assert app_services.paper_ai_analysis.requests
     assert page.analyze_with_ai_button.isEnabled() is False
     assert page.research_analysis_text_label.text() == "正在分析论文…"
+    assert page.research_analysis_text_label.property("feedback") == "working"
 
 
 def test_paper_analysis_success_shows_structured_output_and_prefills_idea(qtbot, monkeypatch):
@@ -180,6 +248,7 @@ def test_paper_analysis_failure_shows_concise_retry(qtbot):
     page._poll_ai_analysis()
 
     assert page.research_analysis_text_label.text() == "Authentication failed."
+    assert page.research_analysis_text_label.property("feedback") == "error"
     assert page.analyze_with_ai_button.text() == "重试"
 
 

@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from research_workspace.application.ports.ai_provider import AISettings
-from research_workspace.presentation import load_ui_resource, require_child
+from research_workspace.presentation import load_ui_resource, require_child, set_feedback
 from research_workspace.presentation.localization import zh_error
 
 
@@ -113,27 +113,27 @@ class SettingsPage:
     def save_ai_settings(self) -> None:
         store = self._ai_store()
         if store is None:
-            self.ai_settings_status_label.setText("AI 设置存储不可用。")
+            set_feedback(self.ai_settings_status_label, "error", "AI 设置存储不可用。")
             return
         try:
             store.save(self._current_ai_settings())
         except ValueError as exc:
-            self.ai_settings_status_label.setText(zh_error(str(exc)))
+            set_feedback(self.ai_settings_status_label, "error", zh_error(str(exc)))
             return
-        self.ai_settings_status_label.setText("AI 设置已保存。")
+        set_feedback(self.ai_settings_status_label, "success", "AI 设置已保存。")
 
     def test_ai_connection(self) -> None:
         tester = getattr(self.services, "ai_connection_tester", None)
         test_async = getattr(tester, "test_async", None)
         if test_async is None:
-            self.ai_settings_status_label.setText("连接测试不可用。")
+            set_feedback(self.ai_settings_status_label, "error", "连接测试不可用。")
             return
         try:
             settings = self._current_ai_settings()
         except ValueError as exc:
-            self.ai_settings_status_label.setText(zh_error(str(exc)))
+            set_feedback(self.ai_settings_status_label, "error", zh_error(str(exc)))
             return
-        self.ai_settings_status_label.setText("正在测试连接…")
+        set_feedback(self.ai_settings_status_label, "working", "正在测试连接…")
         self.test_ai_connection_button.setEnabled(False)
         self._ai_test_handle = test_async(settings)
         self._ai_test_timer.start()
@@ -145,10 +145,12 @@ class SettingsPage:
         self._ai_test_timer.stop()
         self.test_ai_connection_button.setEnabled(True)
         if handle.error is None:
-            self.ai_settings_status_label.setText("连接成功。")
+            set_feedback(self.ai_settings_status_label, "success", "连接成功。")
             return
-        self.ai_settings_status_label.setText(
-            zh_error(getattr(handle.error, "message", str(handle.error)))
+        set_feedback(
+            self.ai_settings_status_label,
+            "error",
+            zh_error(getattr(handle.error, "message", str(handle.error))),
         )
 
     def choose_directory(self) -> None:

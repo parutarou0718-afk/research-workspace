@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QPushButton,
 )
 
-from research_workspace.presentation import load_ui_into, require_child
+from research_workspace.presentation import load_ui_into, require_child, set_feedback
 from research_workspace.presentation.dialogs.paper_editor_dialog import (
     ProtectedEditorDialog,
 )
@@ -58,7 +58,11 @@ class IdeaEditorDialog(ProtectedEditorDialog):
         self.cancel_button.clicked.connect(self.reject)
 
     def save(self) -> None:
-        self.recovery_status_label.setText("正在准备安全恢复点…")
+        set_feedback(
+            self.recovery_status_label,
+            "working",
+            "正在准备安全恢复点…",
+        )
         self.save_button.setEnabled(False)
         values = (
             self.title_edit.text(),
@@ -73,7 +77,7 @@ class IdeaEditorDialog(ProtectedEditorDialog):
                     self.record.id, *values
                 )
         except Exception as exc:
-            self.error_label.setText(str(exc))
+            set_feedback(self.error_label, "error", str(exc))
             self.save_button.setEnabled(True)
             return
         self._track(handle)

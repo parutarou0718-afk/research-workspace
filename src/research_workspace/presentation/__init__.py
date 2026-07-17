@@ -38,6 +38,29 @@ QWidget#submissionsPage, QWidget#conferencesPage, QWidget#grantsPage,
 QWidget#importsPage, QWidget#monitoringPage, QWidget#versionCandidatesPage,
 QWidget#relationsPage, QWidget#settingsPage, QWidget#startupErrorPage,
 QDialog#importBatchDialog {{ background: {colors['background']}; }}
+QPushButton {{
+  min-height: {button['height']}px;
+  border: 1px solid #C7D7FE;
+  border-radius: {button['radius']}px;
+  padding: 0 14px;
+  background: {colors['surface']};
+  color: {colors['primaryHover']};
+  font-weight: 500;
+}}
+QPushButton:hover {{
+  background: {colors['primarySoft']};
+  border-color: {colors['primary']};
+}}
+QPushButton:pressed {{
+  background: #D8E4FF;
+  border-color: {colors['primaryHover']};
+  padding-top: 1px;
+}}
+QPushButton:disabled {{
+  background: #F2F4F7;
+  border-color: {colors['border']};
+  color: {colors['textMuted']};
+}}
 QFrame[card="true"], QFrame[component="card"] {{
   background: {colors['surface']};
   border: {card['borderWidth']}px solid {colors['border']};
@@ -66,16 +89,28 @@ QPushButton[variant="primary"]:hover {{
   background: {button['variants']['primary']['hover']};
   border-color: {button['variants']['primary']['hover']};
 }}
+QPushButton[variant="primary"]:pressed {{
+  background: #2F5FD0;
+  border-color: #2F5FD0;
+  padding-top: 1px;
+}}
 QPushButton[variant="secondary"] {{
   min-height: {button['height']}px;
-  border: 1px solid {button['variants']['secondary']['border']};
+  border: 1px solid #C7D7FE;
   border-radius: {button['radius']}px;
   padding: 0 16px;
   background: {button['variants']['secondary']['background']};
-  color: {button['variants']['secondary']['foreground']};
+  color: {colors['primaryHover']};
+  font-weight: 500;
 }}
 QPushButton[variant="secondary"]:hover {{
-  background: {button['variants']['secondary']['hover']};
+  background: {colors['primarySoft']};
+  border-color: {colors['primary']};
+}}
+QPushButton[variant="secondary"]:pressed {{
+  background: #D8E4FF;
+  border-color: {colors['primaryHover']};
+  padding-top: 1px;
 }}
 QPushButton[variant="ghost"] {{
   min-height: {button['height']}px;
@@ -87,6 +122,11 @@ QPushButton[variant="ghost"] {{
 }}
 QPushButton[variant="ghost"]:hover {{
   background: {button['variants']['ghost']['hover']};
+}}
+QPushButton[variant="ghost"]:pressed {{
+  background: {colors['primarySoft']};
+  color: {colors['primaryHover']};
+  padding-top: 1px;
 }}
 QPushButton[variant="danger"] {{
   min-height: {button['height']}px;
@@ -100,6 +140,11 @@ QPushButton[variant="danger"] {{
 QPushButton[variant="danger"]:hover {{
   background: {button['variants']['danger']['hover']};
   border-color: {button['variants']['danger']['hover']};
+}}
+QPushButton[variant="danger"]:pressed {{
+  background: #991B1B;
+  border-color: #991B1B;
+  padding-top: 1px;
 }}
 QLineEdit[component="input"], QLineEdit[component="search"] {{
   min-height: {input_component['height']}px;
@@ -119,8 +164,28 @@ QLabel[badge="revision"] {{ background: {badge['revision']['background']}; color
 QLabel[badge="accepted"] {{ background: {badge['accepted']['background']}; color: {badge['accepted']['foreground']}; border-radius: 10px; padding: 3px 8px; }}
 QLabel[badge="rejected"] {{ background: {badge['rejected']['background']}; color: {badge['rejected']['foreground']}; border-radius: 10px; padding: 3px 8px; }}
 QLabel[badge="archived"] {{ background: {badge['archived']['background']}; color: {badge['archived']['foreground']}; border-radius: 10px; padding: 3px 8px; }}
+QLabel[feedback="working"] {{ background: {colors['primarySoft']}; color: {colors['primaryHover']}; border-radius: 8px; padding: 4px 8px; }}
+QLabel[feedback="success"] {{ background: #DCFCE7; color: {colors['success']}; border-radius: 8px; padding: 4px 8px; }}
+QLabel[feedback="error"] {{ background: #FEE2E2; color: {colors['danger']}; border-radius: 8px; padding: 4px 8px; }}
 QLabel#pageTitleLabel {{ font-size: {title_points:g}pt; font-weight: 700; }}
 """.strip()
+
+
+def refresh_style(widget: QWidget) -> None:
+    """Re-polish one widget after dynamic Qt properties change."""
+
+    style = widget.style()
+    style.unpolish(widget)
+    style.polish(widget)
+
+
+def set_feedback(widget: QWidget, state: str | None, text: str | None = None) -> None:
+    """Set a visible interaction feedback state on a QLabel-like widget."""
+
+    if text is not None and hasattr(widget, "setText"):
+        widget.setText(text)
+    widget.setProperty("feedback", state or "")
+    refresh_style(widget)
 
 
 def load_ui_resource(filename: str) -> QWidget:
