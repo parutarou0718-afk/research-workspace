@@ -1,6 +1,7 @@
 """Read-only immutable PaperVersionCandidate projection."""
 
 from dataclasses import dataclass
+import json
 from uuid import UUID
 
 from sqlalchemy import select
@@ -23,6 +24,41 @@ class VersionCandidateRecord:
     status: str
     superseded_by_candidate_id: UUID | None
     row_version: int
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionReviewBundle:
+    candidate_id: UUID
+    candidate_row_version: int
+    detector_id: str
+    detector_version: str
+    rule_id: str
+    rule_config_fingerprint: str
+    earlier_snapshot_id: UUID
+    later_snapshot_id: UUID
+    direction_rationale: bytes
+    signals: bytes
+    input_observation_ids: tuple[UUID, ...]
+    existing_memberships: tuple[UUID, ...]
+    existing_relation_ids: tuple[UUID, ...]
+
+
+def build_decision_review_bundle(
+    candidate: VersionCandidateRecord,
+    existing_memberships: tuple[UUID, ...],
+    existing_relation_ids: tuple[UUID, ...],
+) -> DecisionReviewBundle:
+    observations = tuple(
+        UUID(value) for value in json.loads(candidate.input_observation_ids_json)
+    )
+    return DecisionReviewBundle(
+        candidate.candidate_id, candidate.row_version, candidate.detector_id,
+        candidate.detector_version, candidate.rule_id,
+        candidate.rule_config_fingerprint, candidate.earlier_snapshot_id,
+        candidate.later_snapshot_id, bytes(candidate.direction_rationale_json),
+        bytes(candidate.signals_json), observations,
+        tuple(existing_memberships), tuple(existing_relation_ids),
+    )
 
 
 class GetVersionCandidates:

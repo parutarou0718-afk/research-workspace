@@ -25,6 +25,7 @@ from research_workspace.infrastructure.db.models import (
     GrantModel,
     PaperModel,
     PaperVersionModel,
+    PaperVersionCandidateModel,
     EntityRelationModel,
     EvidenceRefModel,
     IdeaModel,
@@ -349,6 +350,9 @@ class SqlGate1WriteRepository:
         self._session = session
 
     def apply_mutation(self, mutation: DomainMutation, command_id: UUID) -> None:
+        if mutation.entity_type == "PaperVersionCandidate":
+            self._apply_candidate_decision(mutation, command_id)
+            return
         if mutation.entity_type == "PaperVersion":
             self._apply_paper_version(mutation, command_id)
             return
@@ -526,6 +530,30 @@ class SqlGate1WriteRepository:
             or fields["target_type"] != "PaperVersion"
         ):
             raise ValueError("INVALID_VERSION_RELATION_ENDPOINT")
+        if mutation.operation == "retract":
+            relation = self._session.get(EntityRelationModel, mutation.entity_id)
+            if (
+                relation is None or relation.lifecycle_state != "active"
+                or relation.row_version != mutation.expected_row_version
+            ):
+                raise ValueError("RELATION_STATE_CHANGED")
+            replacement_id = fields.get("superseded_by_relation_id")
+            if replacement_id:
+                replacement = self._session.get(
+                    EntityRelationModel, UUID(replacement_id)
+                )
+                if replacement is None or replacement.lifecycle_state != "active":
+                    raise ValueError("RELATION_STATE_CHANGED")
+            relation.lifecycle_state = fields["lifecycle_state"]
+            relation.superseded_by_relation_id = (
+                UUID(replacement_id) if replacement_id else None
+            )
+            relation.row_version += 1
+            relation.updated_at = datetime.now(timezone.utc)
+            relation.retracted_at = datetime.now(timezone.utc)
+            relation.retracted_by_command_id = command_id
+            self._session.flush()
+            return
         later = self._session.get(PaperVersionModel, UUID(fields["source_id"]))
         earlier = self._session.get(PaperVersionModel, UUID(fields["target_id"]))
         if later is None or earlier is None:
@@ -565,6 +593,37 @@ class SqlGate1WriteRepository:
             row_version=1, created_at=now, updated_at=now,
             retracted_at=None, retracted_by_command_id=None,
         ))
+        self._session.flush()
+
+    def _apply_candidate_decision(
+        self, mutation: DomainMutation, command_id: UUID
+    ) -> None:
+        fields = self._mutation_fields(mutation)
+        candidate = self._session.get(
+            PaperVersionCandidateModel, mutation.entity_id
+        )
+        if (
+            candidate is None
+            or candidate.row_version != mutation.expected_row_version
+        ):
+            raise ValueError("CANDIDATE_STATE_CHANGED")
+        target = fields["status"]
+        allowed = {
+            ("pending", "confirmed"),
+            ("pending", "rejected"),
+            ("rejected", "pending"),
+        }
+        if (candidate.status, target) not in allowed:
+            raise ValueError("CANDIDATE_STATE_CHANGED")
+        candidate.status = target
+        candidate.row_version += 1
+        candidate.decided_at = (
+            datetime.now(timezone.utc)
+            if target in {"confirmed", "rejected"} else None
+        )
+        candidate.decided_by_command_id = (
+            command_id if target in {"confirmed", "rejected"} else None
+        )
         self._session.flush()
 
     @staticmethod

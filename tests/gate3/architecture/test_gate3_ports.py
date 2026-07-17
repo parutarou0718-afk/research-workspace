@@ -61,6 +61,9 @@ def test_task6_adds_paper_without_later_gate3_commands() -> None:
     assert (
         ROOT / "src/research_workspace/application/services/relation_graph.py"
     ).exists()
-    assert not (
+    assert (
         ROOT / "src/research_workspace/application/commands/review_relation.py"
+    ).exists()
+    assert not (
+        ROOT / "src/research_workspace/application/commands/undo_command.py"
     ).exists()

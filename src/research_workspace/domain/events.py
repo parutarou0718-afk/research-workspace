@@ -27,6 +27,16 @@ _VERSION_RELATION_EVENTS = frozenset({
     "paper_version_relation.created",
     "paper_version_relation.retracted",
 })
+_CANDIDATE_STATE_EVENTS = frozenset({
+    "paper_version_candidate.confirmed",
+    "paper_version_candidate.rejected",
+    "paper_version_candidate.reconsidered",
+    "paper_version_candidate.superseded",
+})
+_RELATION_STATE_EVENTS = frozenset({
+    "relation.confirmed", "relation.rejected", "relation.reconsidered",
+    "relation.retracted", "relation.superseded",
+})
 
 
 def validate_user_event_payload(event_type: str, payload: object) -> None:
@@ -60,6 +70,24 @@ def validate_user_event_payload(event_type: str, payload: object) -> None:
         if set(payload) != {
             "relation_id", "later_paper_version_id",
             "earlier_paper_version_id", "row_version",
+        }:
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        if not isinstance(payload["row_version"], int) or payload["row_version"] < 1:
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        return
+    if event_type in _CANDIDATE_STATE_EVENTS:
+        if set(payload) != {
+            "candidate_id", "old_status", "new_status", "row_version",
+            "replacement_candidate_id",
+        }:
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        if not isinstance(payload["row_version"], int) or payload["row_version"] < 1:
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        return
+    if event_type in _RELATION_STATE_EVENTS:
+        if set(payload) != {
+            "relation_id", "relation_type", "old_state", "new_state",
+            "row_version",
         }:
             raise ValueError("COMMAND_VALIDATION_FAILED")
         if not isinstance(payload["row_version"], int) or payload["row_version"] < 1:
