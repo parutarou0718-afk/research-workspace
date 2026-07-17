@@ -115,6 +115,54 @@ def test_paper_idea_submission_dialogs_call_only_approved_actions(qtbot) -> None
     assert paper.recovery_status_label.text() == "正在准备安全恢复点…"
 
 
+def test_submission_edit_locks_status_combo_to_prevent_false_dropdown(qtbot) -> None:
+    from research_workspace.presentation.dialogs.submission_editor_dialog import (
+        SubmissionEditorDialog,
+    )
+
+    record = SimpleNamespace(
+        id=uuid4(),
+        paper_id=uuid4(),
+        venue="IEEE TPAMI",
+        status="revision",
+        allowed_transitions=("accepted", "rejected"),
+        active_version_id=uuid4(),
+    )
+
+    dialog = SubmissionEditorDialog(_services(), record)
+    qtbot.addWidget(dialog)
+
+    assert dialog.status_combo.count() == 1
+    assert dialog.status_combo.currentText() == "revision"
+    assert dialog.status_combo.isEnabled() is False
+    assert dialog.status_combo.property("lockedReason") == "use_transition_action"
+
+
+def test_submission_transition_keeps_allowed_status_choices_clickable(qtbot) -> None:
+    from research_workspace.presentation.dialogs.submission_editor_dialog import (
+        SubmissionEditorDialog,
+    )
+
+    record = SimpleNamespace(
+        id=uuid4(),
+        paper_id=uuid4(),
+        venue="IEEE TPAMI",
+        status="revision",
+        allowed_transitions=("accepted", "rejected"),
+        active_version_id=uuid4(),
+    )
+
+    dialog = SubmissionEditorDialog(_services(), record, transition_only=True)
+    qtbot.addWidget(dialog)
+
+    assert dialog.status_combo.isEnabled() is True
+    assert dialog.status_combo.property("lockedReason") is None
+    assert [dialog.status_combo.itemText(index) for index in range(dialog.status_combo.count())] == [
+        "accepted",
+        "rejected",
+    ]
+
+
 def test_crud_pages_are_real_lists_without_future_controls(qtbot) -> None:
     from research_workspace.presentation.pages.papers_page import PapersPage
     from research_workspace.presentation.pages.ideas_page import IdeasPage
