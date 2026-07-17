@@ -2,7 +2,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 from xml.etree import ElementTree
 
-from PySide6.QtWidgets import QPushButton
+from PySide6.QtWidgets import QLabel, QPushButton
 
 from research_workspace.presentation.pages.ideas_page import IdeasPage
 
@@ -89,6 +89,7 @@ def test_idea_detail_empty_state_has_next_step_context(qtbot):
     page = IdeasPage(services())
     qtbot.addWidget(page.widget)
 
+    assert page.widget.findChild(QLabel, "ideasEmptyIconLabel") is None
     assert not page.empty_detail_card.isHidden()
     assert page.empty_detail_title_label.text() == "Idea Detail"
     assert page.detail_card.isHidden()

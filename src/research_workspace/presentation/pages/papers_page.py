@@ -55,6 +55,7 @@ class PapersPage(CrudPageController):
         self.empty_action_button = require_child(
             self.widget, QPushButton, "papersEmptyActionButton"
         )
+        self.list_card = require_child(self.widget, QFrame, "papersListCard")
         self.workspace_layout = self.widget.findChild(
             QHBoxLayout, "papersWorkspaceHorizontalLayout"
         )
@@ -162,8 +163,12 @@ class PapersPage(CrudPageController):
             self.list_view.addItem(item)
         has_rows = bool(rows)
         self.empty_state.setVisible(not has_rows)
+        self.list_card.setVisible(has_rows)
         self.detail_card.setVisible(has_rows)
         self.list_view.setVisible(has_rows)
+        self.edit_button.setVisible(has_rows)
+        self.delete_button.setVisible(has_rows)
+        self.restore_button.setVisible(has_rows)
         if has_rows and self.list_view.currentRow() < 0:
             self.list_view.setCurrentRow(0)
         self._update_detail()

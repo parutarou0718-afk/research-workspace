@@ -145,6 +145,7 @@ def test_paper_page_empty_state_is_specific_and_actionable(qtbot):
     qtbot.addWidget(page.widget)
 
     assert not page.empty_state.isHidden()
+    assert page.widget.findChild(QLabel, "papersEmptyIconLabel") is None
     assert page.empty_title_label.text() == "No papers yet."
     assert (
         page.empty_body_label.text()
@@ -152,6 +153,10 @@ def test_paper_page_empty_state_is_specific_and_actionable(qtbot):
     )
     assert page.empty_action_button.text() == "Create Paper"
     assert page.list_view.count() == 0
+    assert page.widget.findChild(QFrame, "papersListCard").isHidden()
+    assert page.edit_button.isHidden()
+    assert page.delete_button.isHidden()
+    assert page.restore_button.isHidden()
 
 
 def test_paper_page_renders_cards_detail_and_search(qtbot):
@@ -161,6 +166,7 @@ def test_paper_page_renders_cards_detail_and_search(qtbot):
     qtbot.addWidget(page.widget)
 
     assert page.empty_state.isHidden()
+    assert not page.widget.findChild(QFrame, "papersListCard").isHidden()
     assert page.list_view.count() == 2
     assert "Transformer Survey" in page.list_view.item(0).text()
 
