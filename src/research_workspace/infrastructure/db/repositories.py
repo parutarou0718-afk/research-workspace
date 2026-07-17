@@ -27,6 +27,7 @@ from research_workspace.infrastructure.db.models import (
     PaperVersionModel,
     EntityRelationModel,
     EvidenceRefModel,
+    IdeaModel,
     SubmissionModel,
     ImportItemModel,
     MonitoringRootModel,
@@ -38,8 +39,8 @@ from research_workspace.infrastructure.db.models import (
     SourceSnapshotModel,
 )
 from research_workspace.domain.monitoring import MonitoringRootStatus
-from research_workspace.domain.entities import Paper
-from research_workspace.domain.enums import PaperStatus
+from research_workspace.domain.entities import Idea, Paper
+from research_workspace.domain.enums import IdeaOriginType, IdeaStatus, PaperStatus
 from research_workspace.application.services.command_dispatcher import DomainMutation
 from research_workspace.application.dto.recovery_dto import VerifiedRecoveryPoint
 from research_workspace.infrastructure.db.models import (
@@ -265,6 +266,31 @@ class SqlPaperReadRepository:
         return tuple(self._record(row) for row in rows)
 
 
+class SqlIdeaReadRepository:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    @staticmethod
+    def _record(row: IdeaModel) -> Idea:
+        return Idea(
+            row.id, row.title, row.content, IdeaStatus(row.status),
+            IdeaOriginType(row.origin_type), row.created_at, row.updated_at,
+            row.deleted_at, row.row_version, row.created_by_command_id,
+            row.updated_by_command_id, row.deleted_by_command_id,
+        )
+
+    def get_idea(self, idea_id: UUID) -> Idea | None:
+        row = self._session.get(IdeaModel, idea_id)
+        return None if row is None else self._record(row)
+
+    def list_ideas(self, *, include_deleted: bool = False) -> tuple[Idea, ...]:
+        statement = select(IdeaModel)
+        if not include_deleted:
+            statement = statement.where(IdeaModel.deleted_at.is_(None))
+        rows = self._session.scalars(statement.order_by(IdeaModel.title, IdeaModel.id)).all()
+        return tuple(self._record(row) for row in rows)
+
+
 class SqlGate1WriteRepository:
     """A session-bound adapter used only inside the write coordinator."""
 
@@ -272,6 +298,9 @@ class SqlGate1WriteRepository:
         self._session = session
 
     def apply_mutation(self, mutation: DomainMutation, command_id: UUID) -> None:
+        if mutation.entity_type == "Idea":
+            self._apply_idea(mutation, command_id)
+            return
         if mutation.entity_type != "Paper":
             raise ValueError("COMMAND_VALIDATION_FAILED")
         after = __import__("json").loads(mutation.after_snapshot) if mutation.after_snapshot else None
@@ -354,6 +383,70 @@ class SqlGate1WriteRepository:
                 PaperModel.row_version == mutation.expected_row_version,
             )
             .values(**values)
+        )
+        if result.rowcount != 1:
+            raise ValueError("CONCURRENT_MODIFICATION")
+
+    def _apply_idea(self, mutation: DomainMutation, command_id: UUID) -> None:
+        after = __import__("json").loads(mutation.after_snapshot) if mutation.after_snapshot else None
+        if after is None:
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        fields = after["fields"]
+        if fields["origin_type"] != "manual":
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        now = datetime.now(timezone.utc)
+        if mutation.operation == "create":
+            self._session.add(
+                IdeaModel(
+                    id=mutation.entity_id, title=fields["title"], content=fields["content"],
+                    status=fields["status"], origin_type="manual", created_at=now,
+                    updated_at=now, deleted_at=None, row_version=1,
+                    created_by_command_id=command_id, updated_by_command_id=command_id,
+                    deleted_by_command_id=None,
+                )
+            )
+            self._session.flush()
+            return
+        idea = self._session.get(IdeaModel, mutation.entity_id)
+        if idea is None:
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        if mutation.operation == "soft_delete":
+            relations = self._session.scalar(
+                select(func.count(EntityRelationModel.id)).where(
+                    EntityRelationModel.lifecycle_state == "active",
+                    or_(
+                        (EntityRelationModel.source_type == "Idea")
+                        & (EntityRelationModel.source_id == idea.id),
+                        (EntityRelationModel.target_type == "Idea")
+                        & (EntityRelationModel.target_id == idea.id),
+                    ),
+                )
+            )
+            evidence = self._session.scalar(
+                select(func.count(EvidenceRefModel.id)).where(
+                    EvidenceRefModel.entity_type == "Idea",
+                    EvidenceRefModel.entity_id == idea.id,
+                )
+            )
+            if relations or evidence:
+                raise ValueError("DELETE_DEPENDENCY_CONFLICT")
+        deleted_at = (
+            datetime.fromisoformat(fields["deleted_at"].replace("Z", "+00:00"))
+            if fields["deleted_at"] else None
+        )
+        result = self._session.execute(
+            update(IdeaModel)
+            .where(
+                IdeaModel.id == mutation.entity_id,
+                IdeaModel.row_version == mutation.expected_row_version,
+            )
+            .values(
+                title=fields["title"], content=fields["content"], status=fields["status"],
+                origin_type="manual", deleted_at=deleted_at,
+                deleted_by_command_id=command_id if deleted_at else None,
+                updated_by_command_id=command_id, updated_at=now,
+                row_version=mutation.expected_row_version + 1,
+            )
         )
         if result.rowcount != 1:
             raise ValueError("CONCURRENT_MODIFICATION")

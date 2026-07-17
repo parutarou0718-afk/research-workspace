@@ -225,7 +225,7 @@ class PaperVersion:
 
 @dataclass(frozen=True)
 class Idea:
-    id: str
+    id: UUID
     title: str
     content: str
     status: IdeaStatus
@@ -233,6 +233,10 @@ class Idea:
     created_at: datetime
     updated_at: datetime
     deleted_at: datetime | None
+    row_version: int
+    created_by_command_id: UUID
+    updated_by_command_id: UUID
+    deleted_by_command_id: UUID | None
 
 
 @dataclass(frozen=True)

@@ -79,7 +79,7 @@ def test_domain_model_entity_fields_match_every_frozen_dataclass_exactly():
     } == {
         **{
             name: contract["gate3_entities"].get(name, fields)
-            if name == "Paper"
+            if name in {"Paper", "Idea"}
             else fields
             for name, fields in contract["entities"].items()
         },

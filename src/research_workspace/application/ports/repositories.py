@@ -16,6 +16,7 @@ from research_workspace.domain.parsing import ParseArtifactIdentity
 from research_workspace.application.dto.recovery_dto import VerifiedRecoveryPoint
 from research_workspace.application.services.command_dispatcher import DomainMutation
 from research_workspace.application.queries.get_papers import PaperReadRepository
+from research_workspace.application.queries.get_ideas import IdeaReadRepository
 
 
 @dataclass(frozen=True, slots=True)
