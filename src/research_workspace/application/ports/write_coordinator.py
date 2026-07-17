@@ -15,6 +15,7 @@ from research_workspace.application.dto.parsing_dto import (
 from research_workspace.application.dto.monitoring_dto import (
     BaselineObservationDTO,
     MonitoringRootSeed,
+    RawFileEventDTO,
 )
 from research_workspace.domain.monitoring import MonitoringRootStatus
 
@@ -110,3 +111,5 @@ class WriteCoordinator(Protocol):
     def remove_monitoring_root(
         self, monitoring_root_id: UUID, expected_status: MonitoringRootStatus
     ) -> int: ...
+
+    def ingest_raw_file_event(self, event: RawFileEventDTO) -> tuple[UUID, ...]: ...

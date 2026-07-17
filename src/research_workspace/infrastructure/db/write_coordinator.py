@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 import sqlite3
 import stat
@@ -21,6 +22,7 @@ from research_workspace.application.dto.import_dto import ImportCommitDTO, Snaps
 from research_workspace.application.dto.monitoring_dto import (
     BaselineObservationDTO,
     MonitoringRootSeed,
+    RawFileEventDTO,
 )
 from research_workspace.application.ports.write_coordinator import (
     ImportBatchSeed,
@@ -34,7 +36,7 @@ from research_workspace.application.dto.parsing_dto import (
     PreparedParseAttempt,
 )
 from research_workspace.domain.import_model import FileStat, StagedSource
-from research_workspace.domain.monitoring import MonitoringRootStatus
+from research_workspace.domain.monitoring import MonitoringRootStatus, RawFileEventType
 from research_workspace.domain.parsing import (
     ParseContractError,
     build_parse_artifact_identity,
@@ -45,8 +47,11 @@ from research_workspace.infrastructure.db.models import (
     ImportBatchModel,
     ImportItemModel,
     MonitoringRootModel,
+    PendingPathCheckModel,
     ParseArtifactModel,
     ParseAttemptModel,
+    RawEventPendingLinkModel,
+    RawFileEventModel,
     SnapshotParsePreferenceModel,
     SourceObservationModel,
     SourceObservationEventModel,
@@ -60,6 +65,10 @@ from research_workspace.infrastructure.filesystem.atomic_files import (
     promote_no_replace,
 )
 from research_workspace.infrastructure.filesystem.path_safety import reject_reparse_chain
+from research_workspace.infrastructure.filesystem.path_safety import (
+    normalize_path_text,
+    normalized_path_hash,
+)
 from research_workspace.infrastructure.filesystem.stability import sha256_file
 
 
@@ -225,6 +234,169 @@ class SqlWriteCoordinator:
             root.removed_at = now
             root.updated_at = now
             return root.watcher_generation
+
+    def ingest_raw_file_event(self, event: RawFileEventDTO) -> tuple[UUID, ...]:
+        """Append one raw provider fact and merge its affected path checks."""
+
+        try:
+            with self._factory.begin() as session:
+                existing = session.scalar(
+                    select(RawFileEventModel).where(
+                        RawFileEventModel.deduplication_key == event.deduplication_key
+                    )
+                )
+                if existing is not None:
+                    return self._linked_pending_ids(session, existing.id)
+
+                root = session.get(MonitoringRootModel, event.monitoring_root_id)
+                if (
+                    root is None
+                    or root.removed_at is not None
+                    or root.status != MonitoringRootStatus.ACTIVE.value
+                ):
+                    raise WriteCoordinatorError("MONITOR_ROOT_STATE_CHANGED")
+                paths = self._event_paths(event)
+                for path in paths:
+                    if not self._path_belongs_to_root(path, root.normalized_path):
+                        raise WriteCoordinatorError("MONITOR_ROOT_PATH_UNSAFE")
+
+                raw = RawFileEventModel(
+                    id=event.event_id,
+                    monitoring_root_id=event.monitoring_root_id,
+                    provider=event.provider,
+                    event_type=event.event_type.value,
+                    source_path=str(event.source_path) if event.source_path is not None else None,
+                    destination_path=(
+                        str(event.destination_path)
+                        if event.destination_path is not None
+                        else None
+                    ),
+                    source_path_hash=(
+                        normalized_path_hash(event.source_path)
+                        if event.source_path is not None
+                        else None
+                    ),
+                    destination_path_hash=(
+                        normalized_path_hash(event.destination_path)
+                        if event.destination_path is not None
+                        else None
+                    ),
+                    observed_at=event.observed_at,
+                    ingested_at=event.ingested_at,
+                    raw_sequence_json=(
+                        event.raw_sequence_json.decode("utf-8")
+                        if event.raw_sequence_json is not None
+                        else None
+                    ),
+                    correlation_hint=event.correlation_hint,
+                    deduplication_key=event.deduplication_key,
+                )
+                session.add(raw)
+                session.flush()
+
+                config = json.loads(root.config_json)
+                quiet_seconds = int(config["quiet_window_seconds"])
+                pending_ids: list[UUID] = []
+                for path in paths:
+                    normalized = normalize_path_text(path)
+                    pending = session.scalar(
+                        select(PendingPathCheckModel).where(
+                            PendingPathCheckModel.monitoring_root_id == root.id,
+                            PendingPathCheckModel.normalized_path == normalized,
+                        )
+                    )
+                    observation = session.scalar(
+                        select(SourceObservationModel).where(
+                            SourceObservationModel.normalized_path == normalized
+                        )
+                    )
+                    if pending is None:
+                        pending = PendingPathCheckModel(
+                            id=uuid4(),
+                            monitoring_root_id=root.id,
+                            normalized_path=normalized,
+                            normalized_path_hash=normalized_path_hash(path),
+                            first_event_at=event.observed_at,
+                            last_event_at=event.observed_at,
+                            merged_event_types_json=rfc8785.dumps(
+                                [event.event_type.value]
+                            ).decode("utf-8"),
+                            state="debouncing",
+                            stability_attempt_count=0,
+                            next_check_at=event.observed_at + timedelta(seconds=quiet_seconds),
+                            last_failure_code=None,
+                            source_observation_id=observation.id if observation is not None else None,
+                            row_version=1,
+                        )
+                        session.add(pending)
+                        session.flush()
+                    else:
+                        merged = set(json.loads(pending.merged_event_types_json))
+                        merged.add(event.event_type.value)
+                        pending.merged_event_types_json = rfc8785.dumps(
+                            sorted(merged)
+                        ).decode("utf-8")
+                        pending.first_event_at = min(
+                            pending.first_event_at, event.observed_at
+                        )
+                        pending.last_event_at = max(
+                            pending.last_event_at, event.observed_at
+                        )
+                        pending.next_check_at = pending.last_event_at + timedelta(
+                            seconds=quiet_seconds
+                        )
+                        pending.state = "debouncing"
+                        pending.row_version += 1
+                    session.add(
+                        RawEventPendingLinkModel(
+                            raw_file_event_id=raw.id,
+                            pending_path_check_id=pending.id,
+                            linked_at=event.ingested_at,
+                        )
+                    )
+                    pending_ids.append(pending.id)
+                root.last_event_at = (
+                    event.observed_at
+                    if root.last_event_at is None
+                    else max(root.last_event_at, event.observed_at)
+                )
+                root.updated_at = max(root.updated_at, event.ingested_at)
+                return tuple(sorted(pending_ids, key=str))
+        except WriteCoordinatorError:
+            raise
+        except (IntegrityError, ValueError, KeyError, UnicodeDecodeError) as exc:
+            raise WriteCoordinatorError("DATABASE_CONSTRAINT_VIOLATION") from exc
+
+    @staticmethod
+    def _event_paths(event: RawFileEventDTO) -> tuple[Path, ...]:
+        if event.event_type in {RawFileEventType.OVERFLOW, RawFileEventType.ROOT_STATE}:
+            return ()
+        if event.source_path is None:
+            raise WriteCoordinatorError("COMMAND_VALIDATION_FAILED")
+        if event.event_type is RawFileEventType.MOVED:
+            if event.destination_path is None:
+                raise WriteCoordinatorError("COMMAND_VALIDATION_FAILED")
+            return (event.source_path, event.destination_path)
+        if event.destination_path is not None:
+            raise WriteCoordinatorError("COMMAND_VALIDATION_FAILED")
+        return (event.source_path,)
+
+    @staticmethod
+    def _path_belongs_to_root(path: Path, normalized_root: str) -> bool:
+        normalized = normalize_path_text(path)
+        try:
+            return os.path.commonpath((normalized, normalized_root)) == normalized_root
+        except ValueError:
+            return False
+
+    @staticmethod
+    def _linked_pending_ids(session: Session, raw_event_id: UUID) -> tuple[UUID, ...]:
+        ids = session.scalars(
+            select(RawEventPendingLinkModel.pending_path_check_id).where(
+                RawEventPendingLinkModel.raw_file_event_id == raw_event_id
+            )
+        ).all()
+        return tuple(sorted(ids, key=str))
 
     def begin_import(self, seed: ImportBatchSeed) -> tuple[PreparedImportItem, ...]:
         now = datetime.now(timezone.utc)
