@@ -174,6 +174,8 @@ class CommandDispatcher:
                     uuid4(),
                 )
             )
+            if not 1 <= len(entity_scopes) <= 100:
+                raise CommandDispatchError("COMMAND_VALIDATION_FAILED")
             context_json = _permission_json(context)
             canonical_request = rfc8785.dumps(json.loads(envelope.request_payload))
             plan = CommandPlan(

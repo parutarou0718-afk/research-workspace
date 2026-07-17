@@ -39,7 +39,7 @@ def test_gate3_provider_contract_exposes_no_framework_or_generic_runtime() -> No
         assert forbidden not in appended
 
 
-def test_task6_adds_paper_without_later_gate3_commands() -> None:
+def test_task12_completes_protected_writes_without_gate3_ui() -> None:
     assert (
         ROOT / "src/research_workspace/application/ports/sqlite_backup.py"
     ).exists()
@@ -67,6 +67,9 @@ def test_task6_adds_paper_without_later_gate3_commands() -> None:
     assert (
         ROOT / "src/research_workspace/application/commands/undo_command.py"
     ).exists()
-    assert not (
+    assert (
         ROOT / "tests/gate3/integration/test_batch_command_atomicity.py"
+    ).exists()
+    assert not (
+        ROOT / "src/research_workspace/presentation/viewmodels/papers_viewmodel.py"
     ).exists()
