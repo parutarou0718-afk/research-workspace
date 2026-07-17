@@ -29,6 +29,7 @@ PAGE_FILES = {
 DIALOG_FILES = {
     "paper_editor_dialog.ui",
     "idea_editor_dialog.ui",
+    "relation_review_dialog.ui",
     "submission_editor_dialog.ui",
 }
 LOWER_CAMEL = re.compile(r"^[a-z][A-Za-z0-9]*$")

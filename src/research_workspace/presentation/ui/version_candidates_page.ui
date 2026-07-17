@@ -4,40 +4,27 @@
  <widget class="QWidget" name="versionCandidatesPage">
   <layout class="QVBoxLayout" name="versionCandidatesRootVerticalLayout">
    <property name="leftMargin"><number>0</number></property><property name="topMargin"><number>0</number></property><property name="rightMargin"><number>0</number></property><property name="bottomMargin"><number>0</number></property>
-   <item>
-    <widget class="QScrollArea" name="versionCandidatesScrollArea">
-     <property name="widgetResizable"><bool>true</bool></property>
-     <property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOff</enum></property>
-     <property name="verticalScrollBarPolicy"><enum>Qt::ScrollBarAsNeeded</enum></property>
-     <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
-     <widget class="QWidget" name="versionCandidatesContentWidget">
-      <property name="minimumSize"><size><width>0</width><height>760</height></size></property>
-      <layout class="QVBoxLayout" name="versionCandidatesContentVerticalLayout">
-       <property name="leftMargin"><number>24</number></property><property name="topMargin"><number>24</number></property><property name="rightMargin"><number>24</number></property><property name="bottomMargin"><number>24</number></property><property name="spacing"><number>14</number></property>
-       <item><widget class="QLabel" name="pageTitleLabel"><property name="text"><string>新版本候选</string></property></widget></item>
-       <item><widget class="QLabel" name="candidateHelpLabel"><property name="text"><string>这里只展示系统生成的可解释候选；正式版本关系需在后续阶段由用户确认。</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
-       <item>
-        <widget class="QTableWidget" name="versionCandidatesTable">
-         <property name="minimumSize"><size><width>0</width><height>300</height></size></property>
-         <property name="editTriggers"><set>QAbstractItemView::NoEditTriggers</set></property>
-         <property name="selectionBehavior"><enum>QAbstractItemView::SelectRows</enum></property>
-         <property name="selectionMode"><enum>QAbstractItemView::SingleSelection</enum></property>
-         <property name="columnCount"><number>7</number></property>
-         <column><property name="text"><string>较早快照</string></property></column>
-         <column><property name="text"><string>较新快照</string></property></column>
-         <column><property name="text"><string>方向依据</string></property></column>
-         <column><property name="text"><string>规则</string></property></column>
-         <column><property name="text"><string>状态</string></property></column>
-         <column><property name="text"><string>检测修订</string></property></column>
-         <column><property name="text"><string>查看状态</string></property></column>
-        </widget>
-       </item>
-       <item><widget class="QTextBrowser" name="candidateDetailText"><property name="minimumSize"><size><width>0</width><height>220</height></size></property><property name="openExternalLinks"><bool>false</bool></property><property name="readOnly"><bool>true</bool></property></widget></item>
-       <item><spacer name="versionCandidatesVerticalSpacer"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>80</height></size></property></spacer></item>
-      </layout>
-     </widget>
+   <item><widget class="QScrollArea" name="versionCandidatesScrollArea">
+    <property name="widgetResizable"><bool>true</bool></property><property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOff</enum></property><property name="verticalScrollBarPolicy"><enum>Qt::ScrollBarAsNeeded</enum></property><property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+    <widget class="QWidget" name="versionCandidatesContentWidget">
+     <property name="minimumSize"><size><width>0</width><height>1000</height></size></property>
+     <layout class="QVBoxLayout" name="versionCandidatesContentVerticalLayout">
+      <property name="leftMargin"><number>24</number></property><property name="topMargin"><number>24</number></property><property name="rightMargin"><number>24</number></property><property name="bottomMargin"><number>24</number></property><property name="spacing"><number>14</number></property>
+      <item><widget class="QLabel" name="pageTitleLabel"><property name="text"><string>版本候选与安全撤销</string></property></widget></item>
+      <item><widget class="QLabel" name="candidateHelpLabel"><property name="text"><string>候选证据保持只读；正式关系只通过受保护命令确认。</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+      <item><widget class="QTableWidget" name="versionCandidatesTable">
+       <property name="minimumSize"><size><width>0</width><height>280</height></size></property><property name="editTriggers"><set>QAbstractItemView::NoEditTriggers</set></property><property name="selectionBehavior"><enum>QAbstractItemView::SelectRows</enum></property><property name="selectionMode"><enum>QAbstractItemView::SingleSelection</enum></property><property name="horizontalScrollMode"><enum>QAbstractItemView::ScrollPerPixel</enum></property><property name="columnCount"><number>7</number></property>
+       <column><property name="text"><string>较早快照</string></property></column><column><property name="text"><string>较新快照</string></property></column><column><property name="text"><string>方向依据</string></property></column><column><property name="text"><string>规则</string></property></column><column><property name="text"><string>状态</string></property></column><column><property name="text"><string>检测器</string></property></column><column><property name="text"><string>查看状态</string></property></column>
+      </widget></item>
+      <item><layout class="QHBoxLayout" name="candidateActionHorizontalLayout"><item><widget class="QPushButton" name="reviewCandidateButton"><property name="text"><string>审阅候选</string></property></widget></item><item><spacer name="candidateActionSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property></spacer></item></layout></item>
+      <item><widget class="QTextBrowser" name="candidateDetailText"><property name="minimumSize"><size><width>0</width><height>180</height></size></property><property name="openExternalLinks"><bool>false</bool></property><property name="readOnly"><bool>true</bool></property></widget></item>
+      <item><widget class="QLabel" name="undoSectionTitleLabel"><property name="text"><string>可安全撤销的操作</string></property></widget></item>
+      <item><widget class="QLabel" name="undoNoticeLabel"><property name="text"><string>撤销会创建新的补偿命令；撤销操作本身不能再次撤销。</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+      <item><widget class="QTableWidget" name="safeUndoTable"><property name="minimumSize"><size><width>0</width><height>180</height></size></property><property name="editTriggers"><set>QAbstractItemView::NoEditTriggers</set></property><property name="selectionBehavior"><enum>QAbstractItemView::SelectRows</enum></property><property name="selectionMode"><enum>QAbstractItemView::SingleSelection</enum></property><property name="horizontalScrollMode"><enum>QAbstractItemView::ScrollPerPixel</enum></property><property name="columnCount"><number>3</number></property><column><property name="text"><string>命令类型</string></property></column><column><property name="text"><string>提交时间</string></property></column><column><property name="text"><string>影响对象</string></property></column></widget></item>
+      <item><layout class="QHBoxLayout" name="undoActionHorizontalLayout"><item><widget class="QPushButton" name="undoCommandButton"><property name="text"><string>创建补偿撤销</string></property></widget></item><item><spacer name="undoActionSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property></spacer></item></layout></item>
+     </layout>
     </widget>
-   </item>
+   </widget></item>
   </layout>
  </widget>
  <resources/><connections/>

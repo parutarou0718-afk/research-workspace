@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 import sqlite3
 import sys
@@ -22,7 +23,12 @@ from research_workspace.application.commands.manage_idea import (
     IdeaDependencies, create_idea, restore_idea, soft_delete_idea, update_idea)
 from research_workspace.application.ports.config_store import AppConfig
 from research_workspace.application.commands.manage_paper import (
-    PaperDependencies, create_paper, restore_paper, soft_delete_paper, update_paper)
+    PaperDependencies, PaperVersionRef, create_paper, restore_paper,
+    set_current_version, soft_delete_paper, update_paper)
+from research_workspace.application.commands.review_relation import (
+    RelationLifecycleRecord, confirm_candidate, reconsider_candidate,
+    reject_candidate, retract_relation)
+from research_workspace.application.commands.undo_command import plan_compensating_undo
 from research_workspace.application.commands.manage_submission import (
     SubmissionVersionRef,
     create_submission,
@@ -38,7 +44,7 @@ from research_workspace.application.queries.get_monitoring import GetMonitoringD
 from research_workspace.application.queries.get_papers import GetPapersQuery
 from research_workspace.application.queries.get_submissions import GetSubmissionsQuery
 from research_workspace.application.queries.get_version_candidates import (
-    GetVersionCandidates,
+    GetSafeUndoQuery, GetVersionCandidates, build_decision_review_bundle,
 )
 from research_workspace.application.commands.manage_monitoring_root import (
     ManageMonitoringRoot,
@@ -58,13 +64,15 @@ from research_workspace.application.services.operation_dispatcher import (
     ProtectedCommandPipeline,
 )
 from research_workspace.application.services.recovery_points import RecoveryPointService
+from research_workspace.application.services.relation_graph import (
+    ParseContextRef, RetractionDependencies, VersionEdge,
+    change_version_context, retract_version_membership)
 from research_workspace.infrastructure.config.json_config_store import JsonConfigStore
 from research_workspace.infrastructure.db.base import Base
 import research_workspace.infrastructure.db.models  # noqa: F401
 from research_workspace.infrastructure.db.models import (
-    ImportItemModel,
-    PaperVersionModel,
-    SourceDocumentModel,
+    EntityRelationModel, ImportItemModel, PaperModel,
+    PaperVersionModel, ParseArtifactModel, SourceDocumentModel,
     SourceObservationModel,
 )
 from research_workspace.infrastructure.db.repositories import (
@@ -73,6 +81,7 @@ from research_workspace.infrastructure.db.repositories import (
     SqlOverviewRepository,
     SqlPaperReadRepository,
     SqlSubmissionReadRepository,
+    SqlUndoHistoryRepository,
 )
 from research_workspace.infrastructure.db.seed import seed_foundation_data
 from research_workspace.infrastructure.db.session import create_engine_for_path, session_factory
@@ -95,6 +104,9 @@ from research_workspace.presentation.pages.startup_error_page import StartupErro
 from research_workspace.shared.errors import AppError
 from research_workspace.shared.result import Result
 from research_workspace.domain.capabilities import PathScope, PermissionContext
+from research_workspace.domain.enums import PaperStatus
+from research_workspace.domain.entities import Paper
+from research_workspace.domain.versioning import PaperVersionRecord
 
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -129,6 +141,8 @@ class ApplicationServices:
     get_ideas: GetIdeasQuery
     get_submissions: GetSubmissionsQuery
     crud_actions: object
+    get_safe_undo: object
+    decision_actions: object
     monitoring_actions: object
     create_import_request: Callable[[tuple[Path, ...]], ImportRequest]
     engine: Engine
@@ -385,6 +399,259 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+class _SafeUndoQuery:
+    def __init__(self, factory) -> None:
+        self._factory = factory
+
+    def execute(self, *, as_of):
+        with self._factory() as session:
+            return GetSafeUndoQuery(
+                SqlUndoHistoryRepository(session)).execute(as_of=as_of)
+
+
+class _UndoDispatcher:
+    def __init__(self, delegate, original_command_id) -> None:
+        self._delegate, self._original_command_id = delegate, original_command_id
+
+    def prepare(self, *args, **kwargs):
+        return self._delegate.prepare(
+            *args, **kwargs, undo_of_command_id=self._original_command_id)
+
+    def commit_prepared(self, *args, **kwargs):
+        return self._delegate.commit_prepared(*args, **kwargs)
+
+
+class _DecisionActions:
+    """Composition of approved decision/version/undo commands."""
+
+    def __init__(
+        self, pipeline, dispatcher, runner, next_generation,
+        workspace_id, factory, candidates,
+    ) -> None:
+        self._pipeline, self._dispatcher, self._runner = pipeline, dispatcher, runner
+        self._next_generation, self._workspace_id = next_generation, workspace_id
+        self._factory, self._candidates = factory, candidates
+
+    def _candidate(self, identity):
+        return next(
+            (item for item in self._candidates.execute()
+             if item.candidate_id == identity),
+            None,
+        )
+
+    def _start(
+        self, pipeline, command_type, capability, scopes, expected, payload, builder
+    ):
+        command_id = uuid4()
+        envelope = RawCommandEnvelope(
+            command_id, command_type, "1.0", str(command_id), "user",
+            "local-user", self._workspace_id, _now(), rfc8785.dumps(payload))
+        return pipeline.start(
+            envelope, capability=capability, entity_scopes=tuple(scopes),
+            expected_versions=tuple(expected),
+            build_mutations=lambda plan: tuple(builder(plan)),
+        )
+
+    def review(self, candidate_id):
+        candidate = self._candidate(candidate_id)
+        if candidate is None:
+            raise LookupError("CANDIDATE_NOT_FOUND")
+        with self._factory() as session:
+            versions = session.scalars(select(PaperVersionModel).where(
+                PaperVersionModel.source_snapshot_id.in_((
+                    candidate.earlier_snapshot_id,
+                    candidate.later_snapshot_id,
+                ))
+            )).all()
+            version_ids = tuple(row.id for row in versions)
+            relations = (
+                session.scalars(select(EntityRelationModel).where(
+                    EntityRelationModel.relation_type == "version_successor_of",
+                    EntityRelationModel.source_id.in_(version_ids),
+                    EntityRelationModel.target_id.in_(version_ids),
+                )).all()
+                if version_ids else ()
+            )
+        return build_decision_review_bundle(
+            candidate, version_ids, tuple(row.id for row in relations))
+
+    def reject_candidate(self, candidate_id):
+        candidate = self._candidate(candidate_id)
+        return self._candidate_action(
+            candidate, "candidate.reject", reject_candidate)
+
+    def reconsider_candidate(self, candidate_id):
+        candidate = self._candidate(candidate_id)
+        return self._candidate_action(
+            candidate, "candidate.reconsider", reconsider_candidate)
+
+    def _candidate_action(self, candidate, command_type, command):
+        if candidate is None:
+            raise LookupError("CANDIDATE_NOT_FOUND")
+        return self._start(
+            self._pipeline, command_type, "relation.review",
+            (("PaperVersionCandidate", candidate.candidate_id),),
+            (("PaperVersionCandidate", candidate.candidate_id,
+              candidate.row_version),),
+            {"candidate_id": str(candidate.candidate_id)},
+            lambda plan: (command(
+                self._candidate(candidate.candidate_id), plan.command_id, _now()),),
+        )
+
+    def confirm_candidate(
+        self, candidate_id, paper_id, earlier_label, later_label
+    ):
+        candidate = self._candidate(candidate_id)
+        if candidate is None:
+            raise LookupError("CANDIDATE_NOT_FOUND")
+        return self._start(
+            self._pipeline, "candidate.confirm", "relation.review",
+            (("PaperVersionCandidate", candidate_id), ("Paper", paper_id)),
+            (("PaperVersionCandidate", candidate_id, candidate.row_version),),
+            {"candidate_id": str(candidate_id), "paper_id": str(paper_id),
+             "earlier_label": earlier_label, "later_label": later_label},
+            lambda plan: self._confirm(
+                plan, candidate_id, paper_id, earlier_label, later_label),
+        )
+
+    def _confirm(self, plan, candidate_id, paper_id, earlier_label, later_label):
+        candidate = self._candidate(candidate_id)
+        with self._factory() as session:
+            versions = tuple(self._version(row) for row in session.scalars(
+                select(PaperVersionModel)).all())
+            rows = session.scalars(select(EntityRelationModel).where(
+                EntityRelationModel.relation_type == "version_successor_of",
+                EntityRelationModel.lifecycle_state == "active")).all()
+            by_id = {version.id: version for version in versions}
+            edges = tuple(
+                VersionEdge(row.id, by_id[row.source_id].paper_id,
+                            row.source_id, row.target_id)
+                for row in rows
+                if (
+                    row.source_id in by_id
+                    and row.target_id in by_id
+                    and by_id[row.source_id].paper_id == paper_id
+                )
+            )
+        return confirm_candidate(
+            candidate, plan.command_id, paper_id, earlier_label, later_label,
+            versions, edges, uuid4(), uuid4(), uuid4(), _now())
+
+    @staticmethod
+    def _version(row):
+        return PaperVersionRecord(
+            row.id, row.paper_id, row.source_snapshot_id,
+            row.context_parse_artifact_id, row.version_label,
+            row.normalized_version_label, row.lifecycle_state, row.row_version,
+            row.created_at, row.confirmed_by_command_id, row.updated_at,
+            row.updated_by_command_id, row.retracted_at,
+            row.retracted_by_command_id)
+
+    def _version_row(self, identity):
+        with self._factory() as session:
+            row = session.get(PaperVersionModel, identity)
+            return None if row is None else self._version(row)
+
+    def set_current_version(self, version_id):
+        version = self._version_row(version_id)
+        with self._factory() as session:
+            row = session.get(PaperModel, version.paper_id)
+            paper = Paper(
+                row.id, row.title, PaperStatus(row.status), row.current_version_id,
+                row.created_at, row.updated_at, row.deleted_at, row.row_version,
+                row.created_by_command_id, row.updated_by_command_id,
+                row.deleted_by_command_id)
+        return self._start(
+            self._pipeline, "paper.set_current_version", "paper.write",
+            (("Paper", paper.id),), (("Paper", paper.id, paper.row_version),),
+            {"paper_id": str(paper.id), "paper_version_id": str(version_id)},
+            lambda plan: (set_current_version(
+                paper, plan.command_id,
+                PaperVersionRef(version.id, version.paper_id,
+                                version.lifecycle_state), _now()),),
+        )
+
+    def change_version_context(self, version_id, context_id):
+        version = self._version_row(version_id)
+        context = None
+        if context_id is not None:
+            with self._factory() as session:
+                row = session.get(ParseArtifactModel, context_id)
+                if row is not None:
+                    context = ParseContextRef(
+                        row.id, row.source_snapshot_id, row.status)
+        return self._version_action(
+            version, "paper_version.change_context",
+            lambda plan: change_version_context(
+                self._version_row(version_id), plan.command_id, context, _now()),
+            {"context_parse_artifact_id": (
+                str(context_id) if context_id else None)},
+        )
+
+    def retract_version(self, version_id):
+        version = self._version_row(version_id)
+        return self._version_action(
+            version, "paper_version.retract",
+            lambda plan: retract_version_membership(
+                self._version_row(version_id), plan.command_id, _now(),
+                RetractionDependencies()),
+            {},
+        )
+
+    def _version_action(self, version, command_type, builder, payload):
+        return self._start(
+            self._pipeline, command_type, "relation.review",
+            (("PaperVersion", version.id),),
+            (("PaperVersion", version.id, version.row_version),),
+            {"paper_version_id": str(version.id), **payload},
+            lambda plan: (builder(plan),),
+        )
+
+    def retract_relation(self, relation_id):
+        with self._factory() as session:
+            row = session.get(EntityRelationModel, relation_id)
+            relation = RelationLifecycleRecord(
+                row.id, row.relation_type, row.source_type, row.source_id,
+                row.target_type, row.target_id, row.lifecycle_state,
+                row.row_version)
+        return self._start(
+            self._pipeline, "relation.retract", "relation.review",
+            (("EntityRelation", relation.id),),
+            (("EntityRelation", relation.id, relation.row_version),),
+            {"relation_id": str(relation.id)},
+            lambda plan: (retract_relation(
+                relation, plan.command_id, _now()),),
+        )
+
+    def undo(self, original_command_id):
+        with self._factory() as session:
+            record = next(
+                (item for item in SqlUndoHistoryRepository(
+                    session).list_undo_history()
+                 if item.command_id == original_command_id),
+                None,
+            )
+        if record is None:
+            raise LookupError("UNDO_NOT_AVAILABLE")
+        scopes = tuple(
+            (change.entity_type, change.entity_id)
+            for change in record.preflight.changes)
+        expected = tuple(
+            (change.entity_type, change.entity_id,
+             json.loads(change.current_snapshot)["row_version"])
+            for change in record.preflight.changes)
+        pipeline = ProtectedCommandPipeline(
+            _UndoDispatcher(self._dispatcher, original_command_id),
+            self._runner, self._next_generation)
+        return self._start(
+            pipeline, "undo.compensate", "undo.execute", scopes, expected,
+            {"original_command_id": str(original_command_id)},
+            lambda plan: plan_compensating_undo(
+                original_command_id, plan.command_id, _now(),
+                record.preflight),
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class WorkspaceInspection:
     kind: str
@@ -617,14 +884,13 @@ def bootstrap_application() -> BootstrapResult:
         submission_query = GetSubmissionsQuery(
             SqlSubmissionReadRepository(session)
         )
+        command_dispatcher = CommandDispatcher(
+            coordinator, RecoveryPointService(recovery_adapter, coordinator),
+            database_path=database_path,
+            recovery_root=data_directory / "recovery",
+        )
         protected_pipeline = ProtectedCommandPipeline(
-            CommandDispatcher(
-                coordinator,
-                RecoveryPointService(recovery_adapter, coordinator),
-                database_path=database_path,
-                recovery_root=data_directory / "recovery",
-            ),
-            operation_runner,
+            command_dispatcher, operation_runner,
             coordinator.next_recovery_generation,
         )
         crud_actions = _CrudActions(
@@ -635,6 +901,11 @@ def bootstrap_application() -> BootstrapResult:
             idea_query,
             submission_query,
         )
+        candidate_query = GetVersionCandidates(factory)
+        decision_actions = _DecisionActions(
+            protected_pipeline, command_dispatcher, operation_runner,
+            coordinator.next_recovery_generation, coordinator.workspace_id(),
+            factory, candidate_query)
         services = ApplicationServices(
             config=state.config,
             config_store=config_store,
@@ -642,11 +913,13 @@ def bootstrap_application() -> BootstrapResult:
             get_overview=GetOverview(SqlOverviewRepository(session)),
             get_imports=GetImports(lambda: _read_import_records(factory)),
             get_monitoring=GetMonitoringDashboard(factory),
-            get_version_candidates=GetVersionCandidates(factory),
+            get_version_candidates=candidate_query,
             get_papers=paper_query,
             get_ideas=idea_query,
             get_submissions=submission_query,
             crud_actions=crud_actions,
+            get_safe_undo=_SafeUndoQuery(factory),
+            decision_actions=decision_actions,
             monitoring_actions=monitoring_actions,
             create_import_request=lambda paths: _create_import_request(
                 tuple(paths), coordinator.workspace_id()
