@@ -34,7 +34,10 @@ def test_bootstrap_composes_safe_undo_and_decision_actions() -> None:
     assert kwargs["undo_of_command_id"] == original
 
 
-def test_task16_does_not_start_gate3_certification() -> None:
-    assert not (
+def test_task16_ui_boundary_remains_after_gate3_certification() -> None:
+    assert (
         ROOT / "tests/gate3/acceptance/test_gate3_checkpoint.py"
+    ).exists()
+    assert not (
+        ROOT / "src/research_workspace/presentation/pages/data_transfer_page.py"
     ).exists()

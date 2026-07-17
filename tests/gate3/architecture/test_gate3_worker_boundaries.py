@@ -31,7 +31,7 @@ def test_gate3_extends_feature_worker_without_generic_runtime() -> None:
         assert forbidden not in source
 
 
-def test_task16_adds_decision_ui_without_certification() -> None:
+def test_task16_worker_and_ui_boundaries_remain_after_certification() -> None:
     assert (
         ROOT / "tests/gate3/architecture/test_gate3_worker_boundaries.py"
     ).exists()
@@ -41,6 +41,9 @@ def test_task16_adds_decision_ui_without_certification() -> None:
     assert (
         ROOT / "src/research_workspace/presentation/dialogs/relation_review_dialog.py"
     ).exists()
-    assert not (
+    assert (
         ROOT / "tests/gate3/acceptance/test_gate3_checkpoint.py"
+    ).exists()
+    assert not (
+        ROOT / "migrations/versions/0005_gate4_transfer.py"
     ).exists()
