@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import heapq
 from types import MappingProxyType
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
+from bisect import bisect_left
 import re
-from typing import Protocol
+from typing import Iterable, Protocol
 import unicodedata
 from uuid import UUID
 
@@ -115,6 +117,177 @@ class CandidateInput:
         object.__setattr__(self, "observation_ids", observations)
         object.__setattr__(self, "source_continuity", source)
         object.__setattr__(self, "replace_continuity", replacement)
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateNeighbor:
+    snapshot_id: UUID
+    sha256: str
+    first_seen_at: datetime
+    source_observation_ids: tuple[UUID, ...] = ()
+    active_paper_ids: tuple[UUID, ...] = ()
+    filename_lineage_keys: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "source_observation_ids", tuple(self.source_observation_ids)
+        )
+        object.__setattr__(self, "active_paper_ids", tuple(self.active_paper_ids))
+        object.__setattr__(
+            self, "filename_lineage_keys", tuple(self.filename_lineage_keys)
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateComparison:
+    new_snapshot_id: UUID
+    neighbor_snapshot_id: UUID
+    neighborhoods: tuple[str, ...]
+
+
+class _NeighborhoodGroup:
+    def __init__(self, records: Iterable[CandidateNeighbor]) -> None:
+        buckets: dict[datetime, list[CandidateNeighbor]] = {}
+        for record in records:
+            buckets.setdefault(record.first_seen_at, []).append(record)
+        self._times = tuple(sorted(buckets))
+        self._buckets = {
+            timestamp: tuple(
+                sorted(
+                    values,
+                    key=lambda item: (item.sha256, str(item.snapshot_id)),
+                )
+            )
+            for timestamp, values in buckets.items()
+        }
+
+    def nearest(
+        self, target: CandidateNeighbor, limit: int
+    ) -> tuple[CandidateNeighbor, ...]:
+        insertion = bisect_left(self._times, target.first_seen_at)
+        left, right = insertion - 1, insertion
+        selected: list[CandidateNeighbor] = []
+        while len(selected) < limit and (left >= 0 or right < len(self._times)):
+            left_distance = (
+                abs(self._times[left] - target.first_seen_at)
+                if left >= 0
+                else None
+            )
+            right_distance = (
+                abs(self._times[right] - target.first_seen_at)
+                if right < len(self._times)
+                else None
+            )
+            use_left = left_distance is not None and (
+                right_distance is None or left_distance <= right_distance
+            )
+            use_right = right_distance is not None and (
+                left_distance is None or right_distance <= left_distance
+            )
+            buckets = []
+            if use_left:
+                buckets.append(self._buckets[self._times[left]])
+                left -= 1
+            if use_right:
+                buckets.append(self._buckets[self._times[right]])
+                right += 1
+            for record in heapq.merge(
+                *buckets, key=lambda item: (item.sha256, str(item.snapshot_id))
+            ):
+                if record.snapshot_id != target.snapshot_id:
+                    selected.append(record)
+                    if len(selected) == limit:
+                        break
+        return tuple(selected)
+
+
+class CandidateNeighborhoodIndex:
+    """Read-only local indexes; no API can enumerate snapshot pairs."""
+
+    def __init__(self, records: Iterable[CandidateNeighbor]) -> None:
+        source: dict[UUID, list[CandidateNeighbor]] = {}
+        paper: dict[UUID, list[CandidateNeighbor]] = {}
+        filename: dict[str, list[CandidateNeighbor]] = {}
+        for record in records:
+            for key in record.source_observation_ids:
+                source.setdefault(key, []).append(record)
+            for key in record.active_paper_ids:
+                paper.setdefault(key, []).append(record)
+            for key in record.filename_lineage_keys:
+                filename.setdefault(key, []).append(record)
+        self._source = {
+            key: _NeighborhoodGroup(values) for key, values in source.items()
+        }
+        self._paper = {
+            key: _NeighborhoodGroup(values) for key, values in paper.items()
+        }
+        self._filename = {
+            key: _NeighborhoodGroup(values) for key, values in filename.items()
+        }
+
+    def continuity_neighbors(
+        self, target: CandidateNeighbor, limit: int = 2
+    ) -> tuple[CandidateNeighbor, ...]:
+        return self._nearest(
+            self._source, target.source_observation_ids, target, limit
+        )
+
+    def paper_neighbors(
+        self, target: CandidateNeighbor, limit: int = 5
+    ) -> tuple[CandidateNeighbor, ...]:
+        return self._nearest(self._paper, target.active_paper_ids, target, limit)
+
+    def filename_neighbors(
+        self, target: CandidateNeighbor, limit: int = 5
+    ) -> tuple[CandidateNeighbor, ...]:
+        return self._nearest(
+            self._filename, target.filename_lineage_keys, target, limit
+        )
+
+    @staticmethod
+    def _nearest(
+        groups: Mapping[object, _NeighborhoodGroup],
+        keys: tuple[object, ...],
+        target: CandidateNeighbor,
+        limit: int,
+    ) -> tuple[CandidateNeighbor, ...]:
+        unique = {
+            record.snapshot_id: record
+            for key in keys
+            if key in groups
+            for record in groups[key].nearest(target, limit)
+        }
+        return tuple(
+            sorted(
+                unique.values(),
+                key=lambda item: (
+                    abs(item.first_seen_at - target.first_seen_at),
+                    item.sha256,
+                    str(item.snapshot_id),
+                ),
+            )[:limit]
+        )
+
+
+def schedule_candidate_comparisons(
+    target: CandidateNeighbor, index: CandidateNeighborhoodIndex
+) -> tuple[CandidateComparison, ...]:
+    selected: dict[UUID, tuple[CandidateNeighbor, list[str]]] = {}
+    for name, neighbors in (
+        ("source_continuity", index.continuity_neighbors(target, 2)),
+        ("paper_membership", index.paper_neighbors(target, 5)),
+        ("filename_lineage", index.filename_neighbors(target, 5)),
+    ):
+        for neighbor in neighbors:
+            if neighbor.sha256 == target.sha256:
+                continue
+            if neighbor.snapshot_id not in selected:
+                selected[neighbor.snapshot_id] = (neighbor, [])
+            selected[neighbor.snapshot_id][1].append(name)
+    return tuple(
+        CandidateComparison(target.snapshot_id, snapshot_id, tuple(names))
+        for snapshot_id, (_, names) in selected.items()
+    )
 
 
 @dataclass(frozen=True, slots=True)
