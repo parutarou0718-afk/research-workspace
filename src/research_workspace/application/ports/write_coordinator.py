@@ -19,7 +19,7 @@ from research_workspace.application.dto.monitoring_dto import (
     PendingPathCheckDTO,
     RawFileEventDTO,
 )
-from research_workspace.domain.monitoring import MonitoringRootStatus
+from research_workspace.domain.monitoring import MonitoringRootStatus, RawEventCapacity
 
 
 @dataclass(frozen=True)
@@ -116,6 +116,13 @@ class WriteCoordinator(Protocol):
 
     def ingest_raw_file_event(self, event: RawFileEventDTO) -> tuple[UUID, ...]: ...
 
+    def record_monitoring_health(
+        self, monitoring_root_id: UUID, new_status: MonitoringRootStatus,
+        operation_id: UUID, now: datetime,
+    ) -> MonitoringRootStatus: ...
+    def assess_raw_event_capacity(
+        self, monitoring_root_id: UUID, operation_id: UUID, now: datetime
+    ) -> RawEventCapacity: ...
     def begin_pending_import(
         self, pending_path_check_id: UUID, now: datetime
     ) -> PendingPathCheckDTO: ...

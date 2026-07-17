@@ -9,7 +9,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import hashlib
 from pathlib import Path
-from queue import Empty, SimpleQueue
+from queue import Empty, Full, Queue
+from threading import Lock
 from typing import Callable
 from uuid import UUID, uuid4
 
@@ -93,13 +94,31 @@ class _RawEventHandler(FileSystemEventHandler):
 class WatchdogObserver:
     """Own provider observers while exposing only immutable queued events."""
 
-    def __init__(self, *, clock: Clock | None = None) -> None:
+    def __init__(
+        self, *, clock: Clock | None = None, queue_capacity: int = 10_000
+    ) -> None:
+        if queue_capacity < 1:
+            raise ValueError("queue_capacity must be positive")
         self._clock = clock or (lambda: datetime.now(timezone.utc))
-        self._events: SimpleQueue[RawFileEventDTO] = SimpleQueue()
+        self._events: Queue[RawFileEventDTO] = Queue(maxsize=queue_capacity)
+        self._overflowed: dict[UUID, tuple[MonitoringRootPlan, datetime]] = {}
+        self._overflow_lock = Lock()
         self._observers: dict[UUID, Observer] = {}
+        self.queue_policy = "bounded-coalesce-to-overflow"
 
     def _make_handler(self, plan: MonitoringRootPlan) -> FileSystemEventHandler:
-        return _RawEventHandler(plan, self._events.put, self._clock)
+        return _RawEventHandler(
+            plan, lambda event: self._enqueue(plan, event), self._clock
+        )
+
+    def _enqueue(self, plan: MonitoringRootPlan, event: RawFileEventDTO) -> None:
+        try:
+            self._events.put_nowait(event)
+        except Full:
+            with self._overflow_lock:
+                self._overflowed.setdefault(
+                    plan.monitoring_root_id, (plan, event.observed_at)
+                )
 
     def start(self, plan: MonitoringRootPlan) -> None:
         if plan.monitoring_root_id in self._observers:
@@ -131,4 +150,36 @@ class WatchdogObserver:
                 drained.append(self._events.get_nowait())
             except Empty:
                 break
+        remaining = None if limit is None else limit - len(drained)
+        if remaining is None or remaining > 0:
+            with self._overflow_lock:
+                root_ids = sorted(self._overflowed, key=str)
+                if remaining is not None:
+                    root_ids = root_ids[:remaining]
+                overflowed = tuple(self._overflowed.pop(root_id) for root_id in root_ids)
+            for plan, observed_at in overflowed:
+                sequence = rfc8785.dumps({"dropped_notifications": True})
+                framed = rfc8785.dumps(
+                    {
+                        "monitoring_root_id": str(plan.monitoring_root_id),
+                        "watcher_generation": plan.watcher_generation,
+                        "event_type": RawFileEventType.OVERFLOW.value,
+                        "observed_at": observed_at.isoformat(),
+                    }
+                )
+                drained.append(
+                    RawFileEventDTO(
+                        uuid4(),
+                        plan.monitoring_root_id,
+                        "watchdog",
+                        RawFileEventType.OVERFLOW,
+                        None,
+                        None,
+                        observed_at,
+                        self._clock(),
+                        sequence,
+                        None,
+                        hashlib.sha256(framed).hexdigest(),
+                    )
+                )
         return tuple(drained)

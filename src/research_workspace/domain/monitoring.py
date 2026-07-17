@@ -106,3 +106,29 @@ class MonitoringConfiguration:
 
 
 DEFAULT_MONITORING_CONFIG = MonitoringConfiguration()
+
+
+RAW_EVENT_COUNT_WARNING = 1_000_000
+RAW_EVENT_BYTES_WARNING = 2**30
+
+
+@dataclass(frozen=True, slots=True)
+class RawEventCapacity:
+    event_count: int
+    estimated_bytes: int
+    warning: bool
+    reasons: tuple[str, ...]
+
+
+def assess_raw_event_capacity(event_count: int, estimated_bytes: int) -> RawEventCapacity:
+    if event_count < 0 or estimated_bytes < 0:
+        raise ValueError("capacity values must be nonnegative")
+    reasons = tuple(
+        reason
+        for reason, triggered in (
+            ("event_count", event_count >= RAW_EVENT_COUNT_WARNING),
+            ("estimated_bytes", estimated_bytes >= RAW_EVENT_BYTES_WARNING),
+        )
+        if triggered
+    )
+    return RawEventCapacity(event_count, estimated_bytes, bool(reasons), reasons)

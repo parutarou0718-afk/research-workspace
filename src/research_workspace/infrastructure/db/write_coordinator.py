@@ -37,9 +37,11 @@ from research_workspace.application.dto.parsing_dto import (
     PreparedParseAttempt,
 )
 from research_workspace.domain.import_model import FileStat, StagedSource
+from research_workspace.domain import monitoring as monitoring_domain
 from research_workspace.domain.monitoring import (
     MonitoringRootStatus,
     PendingPathState,
+    RawEventCapacity,
     RawFileEventType,
 )
 from research_workspace.domain.parsing import (
@@ -299,6 +301,15 @@ class SqlWriteCoordinator:
                 session.add(raw)
                 session.flush()
 
+                if event.event_type is RawFileEventType.OVERFLOW:
+                    self._apply_monitoring_health(
+                        session,
+                        root,
+                        MonitoringRootStatus.OVERFLOW_RECONCILING,
+                        event.event_id,
+                        event.ingested_at,
+                    )
+
                 config = json.loads(root.config_json)
                 quiet_seconds = int(config["quiet_window_seconds"])
                 pending_ids: list[UUID] = []
@@ -380,6 +391,152 @@ class SqlWriteCoordinator:
             raise
         except (IntegrityError, ValueError, KeyError, UnicodeDecodeError) as exc:
             raise WriteCoordinatorError("DATABASE_CONSTRAINT_VIOLATION") from exc
+
+    def record_monitoring_health(
+        self, monitoring_root_id: UUID, new_status: MonitoringRootStatus,
+        operation_id: UUID, now: datetime,
+    ) -> MonitoringRootStatus:
+        try:
+            with self._factory.begin() as session:
+                root = session.get(MonitoringRootModel, monitoring_root_id)
+                if root is None or root.removed_at is not None:
+                    raise WriteCoordinatorError("MONITOR_ROOT_STATE_CHANGED")
+                self._apply_monitoring_health(session, root, new_status, operation_id, now)
+            return new_status
+        except WriteCoordinatorError:
+            raise
+        except IntegrityError as exc:
+            raise WriteCoordinatorError("DATABASE_CONSTRAINT_VIOLATION") from exc
+
+    def assess_raw_event_capacity(
+        self, monitoring_root_id: UUID, operation_id: UUID, now: datetime
+    ) -> RawEventCapacity:
+        try:
+            with self._factory.begin() as session:
+                root = session.get(MonitoringRootModel, monitoring_root_id)
+                if root is None or root.removed_at is not None:
+                    raise WriteCoordinatorError("MONITOR_ROOT_STATE_CHANGED")
+                events = session.scalars(
+                    select(RawFileEventModel).where(
+                        RawFileEventModel.monitoring_root_id == monitoring_root_id
+                    )
+                ).all()
+                estimated_bytes = sum(
+                    256
+                    + sum(
+                        len(value.encode("utf-8"))
+                        for value in (
+                            item.provider,
+                            item.event_type,
+                            item.source_path,
+                            item.destination_path,
+                            item.raw_sequence_json,
+                            item.correlation_hint,
+                        )
+                        if value
+                    )
+                    for item in events
+                )
+                capacity = monitoring_domain.assess_raw_event_capacity(
+                    len(events), estimated_bytes
+                )
+                if capacity.warning and root.status == MonitoringRootStatus.ACTIVE.value:
+                    self._apply_monitoring_health(
+                        session,
+                        root,
+                        MonitoringRootStatus.DEGRADED,
+                        operation_id,
+                        now,
+                    )
+                return capacity
+        except WriteCoordinatorError:
+            raise
+        except IntegrityError as exc:
+            raise WriteCoordinatorError("DATABASE_CONSTRAINT_VIOLATION") from exc
+
+    def _apply_monitoring_health(
+        self,
+        session: Session,
+        root: MonitoringRootModel,
+        new_status: MonitoringRootStatus,
+        operation_id: UUID,
+        now: datetime,
+    ) -> None:
+        old_status = MonitoringRootStatus(root.status)
+        allowed = {
+            MonitoringRootStatus.ACTIVE: {
+                MonitoringRootStatus.DISCONNECTED,
+                MonitoringRootStatus.DEGRADED,
+                MonitoringRootStatus.OVERFLOW_RECONCILING,
+                MonitoringRootStatus.ERROR,
+            },
+            MonitoringRootStatus.DISCONNECTED: {
+                MonitoringRootStatus.ACTIVE,
+                MonitoringRootStatus.ERROR,
+            },
+            MonitoringRootStatus.DEGRADED: {
+                MonitoringRootStatus.ACTIVE,
+                MonitoringRootStatus.DISCONNECTED,
+                MonitoringRootStatus.OVERFLOW_RECONCILING,
+                MonitoringRootStatus.ERROR,
+            },
+            MonitoringRootStatus.OVERFLOW_RECONCILING: {
+                MonitoringRootStatus.ACTIVE,
+                MonitoringRootStatus.DEGRADED,
+                MonitoringRootStatus.DISCONNECTED,
+                MonitoringRootStatus.ERROR,
+            },
+            MonitoringRootStatus.PAUSED: {MonitoringRootStatus.ERROR},
+            MonitoringRootStatus.ERROR: set(),
+        }
+        if new_status not in allowed[old_status]:
+            raise WriteCoordinatorError("MONITOR_ROOT_STATE_CHANGED")
+
+        workspace_id = self._required_workspace_id(session)
+        permission_context = {
+            "schema_version": "1.0",
+            "actor_type": "system",
+            "actor_id": "monitoring-subsystem",
+            "workspace_id": str(workspace_id),
+            "capabilities": ["source.observe.request"],
+            "scope_refs": [str(root.id)],
+            "path_scopes": [],
+            "network_allowed": False,
+            "granted_at": now.isoformat().replace("+00:00", "Z"),
+            "policy_version": "1.0",
+            "authorization_decision_id": str(operation_id),
+        }
+        plan = {"monitoring_root_id": str(root.id), "old_status": old_status.value,
+                "new_status": new_status.value}
+        session.add(
+            BackgroundOperationModel(
+                id=operation_id,
+                operation_type="source_observe",
+                status="completed",
+                work_plan_fingerprint=hashlib.sha256(rfc8785.dumps(plan)).hexdigest(),
+                permission_context_json=rfc8785.dumps(permission_context).decode("utf-8"),
+                result_summary_json=rfc8785.dumps(plan).decode("utf-8"),
+                error_code=None,
+                created_at=now,
+                started_at=now,
+                finished_at=now,
+                cancel_requested_at=None,
+            )
+        )
+        root.status = new_status.value
+        root.updated_at = max(root.updated_at, now)
+        session.add(
+            self._system_event(
+                event_type="monitoring.root_status_changed",
+                workspace_id=workspace_id,
+                operation_id=operation_id,
+                aggregate_type="MonitoringRoot",
+                aggregate_id=root.id,
+                payload=plan,
+                deduplication_key=f"monitoring.root_status_changed:{operation_id}",
+            )
+        )
+        session.flush()
 
     @staticmethod
     def _event_paths(event: RawFileEventDTO) -> tuple[Path, ...]:
