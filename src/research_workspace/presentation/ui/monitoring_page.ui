@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MonitoringPage</class>
+ <widget class="QWidget" name="monitoringPage">
+  <layout class="QVBoxLayout" name="monitoringRootVerticalLayout">
+   <property name="leftMargin"><number>0</number></property><property name="topMargin"><number>0</number></property><property name="rightMargin"><number>0</number></property><property name="bottomMargin"><number>0</number></property>
+   <item>
+    <widget class="QScrollArea" name="monitoringScrollArea">
+     <property name="widgetResizable"><bool>true</bool></property>
+     <property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOff</enum></property>
+     <property name="verticalScrollBarPolicy"><enum>Qt::ScrollBarAsNeeded</enum></property>
+     <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+     <widget class="QWidget" name="monitoringContentWidget">
+      <property name="minimumSize"><size><width>0</width><height>760</height></size></property>
+      <layout class="QVBoxLayout" name="monitoringContentVerticalLayout">
+       <property name="leftMargin"><number>24</number></property><property name="topMargin"><number>24</number></property><property name="rightMargin"><number>24</number></property><property name="bottomMargin"><number>24</number></property><property name="spacing"><number>14</number></property>
+       <item><widget class="QLabel" name="pageTitleLabel"><property name="text"><string>资料监控</string></property></widget></item>
+       <item><widget class="QLabel" name="monitoringHelpLabel"><property name="text"><string>文件事件只唤醒核验；内容事实由稳定读取和哈希确认。</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+       <item>
+        <layout class="QHBoxLayout" name="monitoringActionsHorizontalLayout">
+         <item><widget class="QPushButton" name="addMonitoringRootButton"><property name="text"><string>添加目录</string></property></widget></item>
+         <item><widget class="QPushButton" name="pauseMonitoringRootButton"><property name="text"><string>暂停</string></property></widget></item>
+         <item><widget class="QPushButton" name="resumeMonitoringRootButton"><property name="text"><string>恢复</string></property></widget></item>
+         <item><widget class="QPushButton" name="removeMonitoringRootButton"><property name="text"><string>移除</string></property></widget></item>
+         <item><spacer name="monitoringActionSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>80</width><height>20</height></size></property></spacer></item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QTableWidget" name="monitoringRootsTable">
+         <property name="minimumSize"><size><width>0</width><height>300</height></size></property>
+         <property name="editTriggers"><set>QAbstractItemView::NoEditTriggers</set></property>
+         <property name="selectionBehavior"><enum>QAbstractItemView::SelectRows</enum></property>
+         <property name="selectionMode"><enum>QAbstractItemView::SingleSelection</enum></property>
+         <property name="columnCount"><number>8</number></property>
+         <column><property name="text"><string>目录</string></property></column>
+         <column><property name="text"><string>状态</string></property></column>
+         <column><property name="text"><string>最后事件</string></property></column>
+         <column><property name="text"><string>等待</string></property></column>
+         <column><property name="text"><string>失败</string></property></column>
+         <column><property name="text"><string>对账进度</string></property></column>
+         <column><property name="text"><string>查看状态</string></property></column>
+         <column><property name="text"><string>最近导入</string></property></column>
+        </widget>
+       </item>
+       <item><widget class="QLabel" name="monitoringDetailLabel"><property name="text"><string>双击一行查看详情。</string></property><property name="wordWrap"><bool>true</bool></property><property name="minimumSize"><size><width>0</width><height>60</height></size></property></widget></item>
+       <item><widget class="QProgressBar" name="reconciliationProgressBar"><property name="value"><number>0</number></property></widget></item>
+       <item><spacer name="monitoringVerticalSpacer"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>100</height></size></property></spacer></item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/><connections/>
+</ui>

@@ -87,6 +87,12 @@ CURRENT_GATE2_PATHS = frozenset(
         "src/research_workspace/infrastructure/monitoring/__init__.py",
         "src/research_workspace/infrastructure/monitoring/reconciliation.py",
         "src/research_workspace/infrastructure/monitoring/watchdog_observer.py",
+        "src/research_workspace/presentation/pages/monitoring_page.py",
+        "src/research_workspace/presentation/pages/version_candidates_page.py",
+        "src/research_workspace/presentation/ui/monitoring_page.ui",
+        "src/research_workspace/presentation/ui/version_candidates_page.ui",
+        "src/research_workspace/presentation/view_models/monitoring.py",
+        "src/research_workspace/presentation/view_models/version_candidates.py",
     }
 )
 
@@ -131,11 +137,7 @@ src/research_workspace/presentation/dialogs/relation_review_dialog.py
 src/research_workspace/presentation/dialogs/backup_dialog.py
 src/research_workspace/presentation/dialogs/restore_dialog.py
 src/research_workspace/presentation/dialogs/export_dialog.py
-src/research_workspace/presentation/pages/monitoring_page.py
-src/research_workspace/presentation/pages/version_candidates_page.py
 src/research_workspace/presentation/pages/data_transfer_page.py
-src/research_workspace/presentation/ui/monitoring_page.ui
-src/research_workspace/presentation/ui/version_candidates_page.ui
 src/research_workspace/presentation/ui/data_transfer_page.ui
 src/research_workspace/presentation/ui/paper_editor_dialog.ui
 src/research_workspace/presentation/ui/idea_editor_dialog.ui
@@ -144,8 +146,6 @@ src/research_workspace/presentation/ui/relation_review_dialog.ui
 src/research_workspace/presentation/ui/backup_dialog.ui
 src/research_workspace/presentation/ui/restore_dialog.ui
 src/research_workspace/presentation/ui/export_dialog.ui
-src/research_workspace/presentation/view_models/monitoring.py
-src/research_workspace/presentation/view_models/version_candidates.py
 src/research_workspace/presentation/view_models/papers.py
 src/research_workspace/presentation/view_models/ideas.py
 src/research_workspace/presentation/view_models/submissions.py

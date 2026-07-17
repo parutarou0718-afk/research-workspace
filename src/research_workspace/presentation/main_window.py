@@ -7,10 +7,14 @@ from research_workspace.presentation.pages.conferences_page import ConferencesPa
 from research_workspace.presentation.pages.grants_page import GrantsPage
 from research_workspace.presentation.pages.ideas_page import IdeasPage
 from research_workspace.presentation.pages.imports_page import ImportsPage
+from research_workspace.presentation.pages.monitoring_page import MonitoringPage
 from research_workspace.presentation.pages.overview_page import OverviewPage
 from research_workspace.presentation.pages.papers_page import PapersPage
 from research_workspace.presentation.pages.settings_page import SettingsPage
 from research_workspace.presentation.pages.submissions_page import SubmissionsPage
+from research_workspace.presentation.pages.version_candidates_page import (
+    VersionCandidatesPage,
+)
 
 
 PAGE_TYPES = {
@@ -19,6 +23,8 @@ PAGE_TYPES = {
     "ideas": IdeasPage,
     "submissions": SubmissionsPage,
     "imports": ImportsPage,
+    "monitoring": MonitoringPage,
+    "version_candidates": VersionCandidatesPage,
     "conferences": ConferencesPage,
     "grants": GrantsPage,
     "settings": SettingsPage,
@@ -41,7 +47,11 @@ class MainWindow(QMainWindow):
         self.page_stack = require_child(self, QStackedWidget, "pageStack")
         self.pages = {key: page_type(services) for key, page_type in PAGE_TYPES.items()}
         self.navigation_buttons = {
-            key: require_child(self, QPushButton, f"nav{key.title()}Button")
+            key: require_child(
+                self,
+                QPushButton,
+                f"nav{''.join(part.title() for part in key.split('_'))}Button",
+            )
             for key in PAGE_TYPES
         }
         for key, page in self.pages.items():

@@ -24,7 +24,8 @@ def _token_stylesheet() -> str:
 QWidget {{ color: {colors['textMain']}; font-family: '{font_family}'; font-size: {body_points:g}pt; }}
 QWidget#overviewPage, QWidget#papersPage, QWidget#ideasPage,
 QWidget#submissionsPage, QWidget#conferencesPage, QWidget#grantsPage,
-QWidget#importsPage, QWidget#settingsPage, QWidget#startupErrorPage,
+QWidget#importsPage, QWidget#monitoringPage, QWidget#versionCandidatesPage,
+QWidget#settingsPage, QWidget#startupErrorPage,
 QDialog#importBatchDialog {{ background: {colors['background']}; }}
 QFrame[card="true"] {{ background: {colors['surface']}; border: 1px solid {colors['border']}; border-radius: {radius['card']}px; }}
 QLabel#pageTitleLabel {{ font-size: {title_points:g}pt; font-weight: 700; }}

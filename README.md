@@ -5,6 +5,11 @@ recovering research context. It uses Python 3.12, PySide6, SQLite, SQLAlchemy,
 and Alembic. The application starts and initializes its workspace without
 network access.
 
+Gate 2 adds user-selected incremental directory monitoring and a read-only
+version-candidate view. Filesystem events trigger bounded verification rather
+than periodic full scans; candidate confirmation and other Gate 3 decisions
+are not available in this version.
+
 ## Requirements and startup
 
 Install Python 3.12 and `uv`, then create the exact locked environment and start
