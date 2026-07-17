@@ -4,6 +4,7 @@ from PySide6.QtCore import QThread
 from PySide6.QtWidgets import QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QScrollArea, QFrame
 
 from research_workspace.presentation import load_ui_resource, require_child
+from research_workspace.presentation.dialogs.idea_editor_dialog import IdeaEditorDialog
 from research_workspace.presentation.dialogs.paper_editor_dialog import PaperEditorDialog
 from research_workspace.presentation.view_models.papers import PapersViewModel
 
@@ -64,8 +65,26 @@ class PapersPage(CrudPageController):
         self.timeline_text_label = require_child(
             self.widget, QLabel, "paperTimelineTextLabel"
         )
-        self.ai_summary_text_label = require_child(
-            self.widget, QLabel, "paperAiSummaryTextLabel"
+        self.research_analysis_title_label = require_child(
+            self.widget, QLabel, "paperResearchAnalysisTitleLabel"
+        )
+        self.research_analysis_text_label = require_child(
+            self.widget, QLabel, "paperResearchAnalysisTextLabel"
+        )
+        self.analyze_with_ai_button = require_child(
+            self.widget, QPushButton, "paperAnalyzeWithAiButton"
+        )
+        self.research_analysis_milestone_label = require_child(
+            self.widget, QLabel, "paperResearchAnalysisMilestoneLabel"
+        )
+        self.next_step_title_label = require_child(
+            self.widget, QLabel, "paperNextStepTitleLabel"
+        )
+        self.next_step_text_label = require_child(
+            self.widget, QLabel, "paperNextStepTextLabel"
+        )
+        self.create_idea_button = require_child(
+            self.widget, QPushButton, "paperCreateIdeaButton"
         )
         self.related_ideas_text_label = require_child(
             self.widget, QLabel, "paperRelatedIdeasTextLabel"
@@ -86,6 +105,7 @@ class PapersPage(CrudPageController):
         )
         self.new_button.clicked.connect(self.open_new)
         self.empty_action_button.clicked.connect(self.open_new)
+        self.create_idea_button.clicked.connect(self.open_new_idea)
         self.edit_button.clicked.connect(self.open_edit)
         self.delete_button.clicked.connect(self.delete_selected)
         self.restore_button.clicked.connect(self.restore_selected)
@@ -133,6 +153,9 @@ class PapersPage(CrudPageController):
         PaperEditorDialog(self.services, parent=self.widget).exec()
         self.refresh()
 
+    def open_new_idea(self):
+        IdeaEditorDialog(self.services, parent=self.widget).exec()
+
     def open_edit(self):
         row = self._selected()
         if row is not None and "edit" in row.actions:
@@ -178,9 +201,19 @@ class PapersPage(CrudPageController):
         self.abstract_text_label.setText("No abstract captured yet.")
         self.research_notes_text_label.setText("Notes linked to this paper will appear here.")
         self.timeline_text_label.setText("Creation, edits and decisions will appear here.")
-        self.ai_summary_text_label.setText(
-            "AI analysis is not enabled in this build. This panel reserves the future summary slot."
+        self.research_analysis_title_label.setText("Research Analysis")
+        self.research_analysis_text_label.setText(
+            "No analysis yet.\n\n"
+            "Analyze this paper to generate:\n\n"
+            "• Summary\n\n"
+            "• Key claims\n\n"
+            "• Suggested ideas"
         )
+        self.research_analysis_milestone_label.setText(
+            "Available in the next milestone."
+        )
+        self.next_step_title_label.setText("Next Step")
+        self.next_step_text_label.setText("Capture an idea from this paper.")
         self.related_ideas_text_label.setText("No related ideas yet.")
         self.related_papers_text_label.setText("No related papers yet.")
         self.relations_text_label.setText("Known relations and evidence will appear here.")

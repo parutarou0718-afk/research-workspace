@@ -111,14 +111,39 @@
             <item><widget class="QLabel" name="paperResearchNotesTextLabel"><property name="text"><string>Notes linked to this paper will appear here.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
             <item><widget class="QLabel" name="paperTimelineTitleLabel"><property name="text"><string>Timeline</string></property></widget></item>
             <item><widget class="QLabel" name="paperTimelineTextLabel"><property name="text"><string>Creation, edits and decisions will appear here.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
-            <item><widget class="QLabel" name="paperAiSummaryTitleLabel"><property name="text"><string>AI Summary</string></property></widget></item>
-            <item><widget class="QLabel" name="paperAiSummaryTextLabel"><property name="text"><string>AI analysis is not enabled in this build. This panel reserves the future summary slot.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+            <item><widget class="QLabel" name="paperResearchAnalysisTitleLabel"><property name="text"><string>Research Analysis</string></property></widget></item>
+            <item><widget class="QLabel" name="paperResearchAnalysisTextLabel"><property name="text"><string>No analysis yet.
+
+Analyze this paper to generate:
+
+• Summary
+
+• Key claims
+
+• Suggested ideas</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+            <item><widget class="QPushButton" name="paperAnalyzeWithAiButton"><property name="variant"><string>secondary</string></property><property name="informational"><bool>true</bool></property><property name="text"><string>Analyze with AI</string></property></widget></item>
+            <item><widget class="QLabel" name="paperResearchAnalysisMilestoneLabel"><property name="text"><string>Available in the next milestone.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
             <item><widget class="QLabel" name="paperRelatedIdeasTitleLabel"><property name="text"><string>Related Ideas</string></property></widget></item>
             <item><widget class="QLabel" name="paperRelatedIdeasTextLabel"><property name="text"><string>No related ideas yet.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
             <item><widget class="QLabel" name="paperRelatedPapersTitleLabel"><property name="text"><string>Related Papers</string></property></widget></item>
             <item><widget class="QLabel" name="paperRelatedPapersTextLabel"><property name="text"><string>No related papers yet.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
             <item><widget class="QLabel" name="paperRelationsTitleLabel"><property name="text"><string>Relations</string></property></widget></item>
             <item><widget class="QLabel" name="paperRelationsTextLabel"><property name="text"><string>Known relations and evidence will appear here.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+            <item>
+             <widget class="QFrame" name="paperNextStepCard">
+              <property name="component"><string>emptyState</string></property>
+              <layout class="QVBoxLayout" name="paperNextStepVerticalLayout">
+               <property name="leftMargin"><number>20</number></property>
+               <property name="topMargin"><number>20</number></property>
+               <property name="rightMargin"><number>20</number></property>
+               <property name="bottomMargin"><number>20</number></property>
+               <property name="spacing"><number>8</number></property>
+               <item><widget class="QLabel" name="paperNextStepTitleLabel"><property name="text"><string>Next Step</string></property></widget></item>
+               <item><widget class="QLabel" name="paperNextStepTextLabel"><property name="text"><string>Capture an idea from this paper.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+               <item><widget class="QPushButton" name="paperCreateIdeaButton"><property name="variant"><string>primary</string></property><property name="text"><string>Create Idea</string></property></widget></item>
+              </layout>
+             </widget>
+            </item>
            </layout>
           </widget>
          </item>

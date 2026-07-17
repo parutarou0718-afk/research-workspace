@@ -77,7 +77,13 @@ def test_paper_page_uses_product_layout_not_raw_table():
         "paperAbstractTextLabel",
         "paperResearchNotesTextLabel",
         "paperTimelineTextLabel",
-        "paperAiSummaryTextLabel",
+        "paperResearchAnalysisTitleLabel",
+        "paperResearchAnalysisTextLabel",
+        "paperAnalyzeWithAiButton",
+        "paperResearchAnalysisMilestoneLabel",
+        "paperNextStepTitleLabel",
+        "paperNextStepTextLabel",
+        "paperCreateIdeaButton",
         "paperRelatedIdeasTextLabel",
         "paperRelatedPapersTextLabel",
         "paperRelationsTextLabel",
@@ -115,6 +121,23 @@ def test_paper_page_renders_cards_detail_and_search(qtbot):
     page._update_actions()
     assert page.detail_title_label.text() == "Transformer Survey"
     assert page.status_badge_label.text() == "Active"
+    assert page.research_analysis_title_label.text() == "Research Analysis"
+    assert page.research_analysis_text_label.text() == (
+        "No analysis yet.\n\n"
+        "Analyze this paper to generate:\n\n"
+        "• Summary\n\n"
+        "• Key claims\n\n"
+        "• Suggested ideas"
+    )
+    assert page.analyze_with_ai_button.text() == "Analyze with AI"
+    assert page.analyze_with_ai_button.property("informational") is True
+    assert page.analyze_with_ai_button.receivers("clicked()") == 0
+    assert page.research_analysis_milestone_label.text() == (
+        "Available in the next milestone."
+    )
+    assert page.next_step_title_label.text() == "Next Step"
+    assert page.next_step_text_label.text() == "Capture an idea from this paper."
+    assert page.create_idea_button.text() == "Create Idea"
     assert page.edit_button.isEnabled()
     assert page.delete_button.isEnabled()
     assert not page.restore_button.isEnabled()
@@ -146,3 +169,28 @@ def test_paper_page_visible_actions_keep_existing_crud_path(qtbot):
     page.list_view.setCurrentRow(0)
     qtbot.mouseClick(page.restore_button, Qt.MouseButton.LeftButton)
     assert app_services.crud_actions.restored == [restored.id]
+
+
+def test_paper_detail_create_idea_uses_existing_idea_dialog(qtbot, monkeypatch):
+    opened = []
+
+    class FakeIdeaDialog:
+        def __init__(self, services, parent=None):
+            opened.append((services, parent))
+
+        def exec(self):
+            opened.append("exec")
+
+    monkeypatch.setattr(
+        "research_workspace.presentation.pages.papers_page.IdeaEditorDialog",
+        FakeIdeaDialog,
+    )
+    first = row("Idea Source")
+    app_services = services((first,))
+    page = PapersPage(app_services)
+    qtbot.addWidget(page.widget)
+
+    page.list_view.setCurrentRow(0)
+    qtbot.mouseClick(page.create_idea_button, Qt.MouseButton.LeftButton)
+
+    assert opened == [(app_services, page.widget), "exec"]
