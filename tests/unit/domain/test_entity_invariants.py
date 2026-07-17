@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 import inspect
 import json
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 
@@ -79,7 +80,7 @@ def test_domain_model_entity_fields_match_every_frozen_dataclass_exactly():
     } == {
         **{
             name: contract["gate3_entities"].get(name, fields)
-            if name in {"Paper", "Idea"}
+            if name in {"Paper", "Idea", "Submission"}
             else fields
             for name, fields in contract["entities"].items()
         },
@@ -257,8 +258,8 @@ def test_relation_confidence_is_cached_maximum_without_losing_existing_value():
 
 def test_submission_entity_uses_closed_enum_values():
     submission = Submission(
-        "submission-a", "paper-a", "Venue", SubmissionStatus.READY,
-        None, None, None, NOW, NOW, None,
+        uuid4(), uuid4(), "Venue", SubmissionStatus.READY,
+        None, None, None, NOW, NOW, None, 1, uuid4(), uuid4(), None,
     )
     assert submission.status is SubmissionStatus.READY
 

@@ -17,10 +17,28 @@ _ENTITY_MUTATION_EVENTS = frozenset(
     }
 )
 
+_SUBMISSION_STATUS_EVENT = "submission.status_changed"
+
 
 def validate_user_event_payload(event_type: str, payload: object) -> None:
     """Fail closed for the Task 5 user-event subset; later tasks extend by contract."""
-    if event_type not in _ENTITY_MUTATION_EVENTS or not isinstance(payload, Mapping):
+    if not isinstance(payload, Mapping):
+        raise ValueError("COMMAND_VALIDATION_FAILED")
+    if event_type == _SUBMISSION_STATUS_EVENT:
+        if set(payload) != {
+            "submission_id", "old_status", "new_status", "row_version"
+        }:
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        if (
+            not isinstance(payload["submission_id"], str)
+            or not isinstance(payload["old_status"], str)
+            or not isinstance(payload["new_status"], str)
+            or not isinstance(payload["row_version"], int)
+            or payload["row_version"] < 1
+        ):
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        return
+    if event_type not in _ENTITY_MUTATION_EVENTS:
         raise ValueError("COMMAND_VALIDATION_FAILED")
     if set(payload) != {"entity_id", "row_version", "changed_fields"}:
         raise ValueError("COMMAND_VALIDATION_FAILED")

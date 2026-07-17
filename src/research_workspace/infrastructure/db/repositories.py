@@ -39,9 +39,17 @@ from research_workspace.infrastructure.db.models import (
     SourceSnapshotModel,
 )
 from research_workspace.domain.monitoring import MonitoringRootStatus
-from research_workspace.domain.entities import Idea, Paper
-from research_workspace.domain.enums import IdeaOriginType, IdeaStatus, PaperStatus
+from research_workspace.domain.entities import Idea, Paper, Submission
+from research_workspace.domain.enums import (
+    IdeaOriginType,
+    IdeaStatus,
+    PaperStatus,
+    SubmissionStatus,
+)
 from research_workspace.application.services.command_dispatcher import DomainMutation
+from research_workspace.application.commands.manage_submission import (
+    is_submission_transition_allowed,
+)
 from research_workspace.application.dto.recovery_dto import VerifiedRecoveryPoint
 from research_workspace.infrastructure.db.models import (
     ApplicationCommandModel,
@@ -291,6 +299,45 @@ class SqlIdeaReadRepository:
         return tuple(self._record(row) for row in rows)
 
 
+class SqlSubmissionReadRepository:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    @staticmethod
+    def _record(row: SubmissionModel) -> Submission:
+        return Submission(
+            row.id,
+            row.paper_id,
+            row.venue,
+            SubmissionStatus(row.status),
+            row.submitted_at,
+            row.deadline_at,
+            row.active_version_id,
+            row.created_at,
+            row.updated_at,
+            row.deleted_at,
+            row.row_version,
+            row.created_by_command_id,
+            row.updated_by_command_id,
+            row.deleted_by_command_id,
+        )
+
+    def get_submission(self, submission_id: UUID) -> Submission | None:
+        row = self._session.get(SubmissionModel, submission_id)
+        return None if row is None else self._record(row)
+
+    def list_submissions(
+        self, *, include_deleted: bool = False
+    ) -> tuple[Submission, ...]:
+        statement = select(SubmissionModel)
+        if not include_deleted:
+            statement = statement.where(SubmissionModel.deleted_at.is_(None))
+        rows = self._session.scalars(
+            statement.order_by(SubmissionModel.venue, SubmissionModel.id)
+        ).all()
+        return tuple(self._record(row) for row in rows)
+
+
 class SqlGate1WriteRepository:
     """A session-bound adapter used only inside the write coordinator."""
 
@@ -298,6 +345,9 @@ class SqlGate1WriteRepository:
         self._session = session
 
     def apply_mutation(self, mutation: DomainMutation, command_id: UUID) -> None:
+        if mutation.entity_type == "Submission":
+            self._apply_submission(mutation, command_id)
+            return
         if mutation.entity_type == "Idea":
             self._apply_idea(mutation, command_id)
             return
@@ -386,6 +436,145 @@ class SqlGate1WriteRepository:
         )
         if result.rowcount != 1:
             raise ValueError("CONCURRENT_MODIFICATION")
+
+    def _apply_submission(
+        self, mutation: DomainMutation, command_id: UUID
+    ) -> None:
+        after = (
+            __import__("json").loads(mutation.after_snapshot)
+            if mutation.after_snapshot
+            else None
+        )
+        if after is None:
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        fields = after["fields"]
+        paper_id = UUID(fields["paper_id"])
+        paper = self._session.get(PaperModel, paper_id)
+        if paper is None or paper.deleted_at is not None:
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        version_id = (
+            UUID(fields["active_version_id"])
+            if fields["active_version_id"]
+            else None
+        )
+        if version_id is not None:
+            version = self._session.get(PaperVersionModel, version_id)
+            if (
+                version is None
+                or version.paper_id != paper_id
+                or version.lifecycle_state != "active"
+            ):
+                raise ValueError("INVALID_VERSION_ASSIGNMENT")
+        now = datetime.now(timezone.utc)
+        submitted_at = self._parsed_time(fields["submitted_at"])
+        deadline_at = self._parsed_time(fields["deadline_at"])
+        deleted_at = self._parsed_time(fields["deleted_at"])
+        target_status = SubmissionStatus(fields["status"])
+        pre_submission = {
+            SubmissionStatus.PREPARING,
+            SubmissionStatus.READY,
+        }
+        if (
+            (target_status in pre_submission and submitted_at is not None)
+            or (
+                target_status not in pre_submission
+                and (submitted_at is None or version_id is None)
+            )
+        ):
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        if mutation.operation == "create":
+            self._session.add(
+                SubmissionModel(
+                    id=mutation.entity_id,
+                    paper_id=paper_id,
+                    venue=fields["venue"],
+                    status=fields["status"],
+                    submitted_at=submitted_at,
+                    deadline_at=deadline_at,
+                    active_version_id=version_id,
+                    created_at=now,
+                    updated_at=now,
+                    deleted_at=None,
+                    row_version=1,
+                    created_by_command_id=command_id,
+                    updated_by_command_id=command_id,
+                    deleted_by_command_id=None,
+                )
+            )
+            self._session.flush()
+            return
+        submission = self._session.get(SubmissionModel, mutation.entity_id)
+        if submission is None:
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        if mutation.operation != "reassign_paper" and paper_id != submission.paper_id:
+            raise ValueError("SUBMISSION_REASSIGNMENT_CONFLICT")
+        if submission.submitted_at is not None and submitted_at != submission.submitted_at:
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        if mutation.operation == "transition" and not is_submission_transition_allowed(
+            SubmissionStatus(submission.status), target_status
+        ):
+            raise ValueError("INVALID_SUBMISSION_TRANSITION")
+        if mutation.operation == "reassign_paper":
+            relations = self._active_relation_count("Submission", submission.id)
+            evidence = self._session.scalar(
+                select(func.count(EvidenceRefModel.id)).where(
+                    EvidenceRefModel.entity_type == "Submission",
+                    EvidenceRefModel.entity_id == submission.id,
+                )
+            )
+            if (
+                submission.status not in {"preparing", "ready"}
+                or submission.active_version_id is not None
+                or relations
+                or evidence
+            ):
+                raise ValueError("SUBMISSION_REASSIGNMENT_CONFLICT")
+        result = self._session.execute(
+            update(SubmissionModel)
+            .where(
+                SubmissionModel.id == mutation.entity_id,
+                SubmissionModel.row_version == mutation.expected_row_version,
+            )
+            .values(
+                paper_id=paper_id,
+                venue=fields["venue"],
+                status=fields["status"],
+                submitted_at=submitted_at,
+                deadline_at=deadline_at,
+                active_version_id=version_id,
+                deleted_at=deleted_at,
+                deleted_by_command_id=command_id if deleted_at else None,
+                updated_by_command_id=command_id,
+                updated_at=now,
+                row_version=mutation.expected_row_version + 1,
+            )
+        )
+        if result.rowcount != 1:
+            raise ValueError("CONCURRENT_MODIFICATION")
+
+    @staticmethod
+    def _parsed_time(value: str | None) -> datetime | None:
+        return (
+            datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if value
+            else None
+        )
+
+    def _active_relation_count(self, entity_type: str, entity_id: UUID) -> int:
+        return int(
+            self._session.scalar(
+                select(func.count(EntityRelationModel.id)).where(
+                    EntityRelationModel.lifecycle_state == "active",
+                    or_(
+                        (EntityRelationModel.source_type == entity_type)
+                        & (EntityRelationModel.source_id == entity_id),
+                        (EntityRelationModel.target_type == entity_type)
+                        & (EntityRelationModel.target_id == entity_id),
+                    ),
+                )
+            )
+            or 0
+        )
 
     def _apply_idea(self, mutation: DomainMutation, command_id: UUID) -> None:
         after = __import__("json").loads(mutation.after_snapshot) if mutation.after_snapshot else None

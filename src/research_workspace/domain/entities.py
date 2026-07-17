@@ -265,16 +265,20 @@ class SourceDocument:
 
 @dataclass(frozen=True)
 class Submission:
-    id: str
-    paper_id: str
+    id: UUID
+    paper_id: UUID
     venue: str
     status: SubmissionStatus
     submitted_at: datetime | None
     deadline_at: datetime | None
-    active_version_id: str | None
+    active_version_id: UUID | None
     created_at: datetime
     updated_at: datetime
     deleted_at: datetime | None
+    row_version: int
+    created_by_command_id: UUID
+    updated_by_command_id: UUID
+    deleted_by_command_id: UUID | None
 
 
 @dataclass(frozen=True)
