@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from types import MappingProxyType
+from uuid import UUID
 
 from research_workspace.domain.enums import (
     ActorType,
@@ -198,13 +199,17 @@ def _freeze_mapping_fields(instance: object, *field_names: str) -> None:
 
 @dataclass(frozen=True)
 class Paper:
-    id: str
+    id: UUID
     title: str
     status: PaperStatus
-    current_version_id: str | None
+    current_version_id: UUID | None
     created_at: datetime
     updated_at: datetime
     deleted_at: datetime | None
+    row_version: int
+    created_by_command_id: UUID
+    updated_by_command_id: UUID
+    deleted_by_command_id: UUID | None
 
 
 @dataclass(frozen=True)

@@ -77,7 +77,12 @@ def test_domain_model_entity_fields_match_every_frozen_dataclass_exactly():
         name: [field.name for field in fields(implementation_types[name])]
         for name in approved_names | gate1_names
     } == {
-        **contract["entities"],
+        **{
+            name: contract["gate3_entities"].get(name, fields)
+            if name == "Paper"
+            else fields
+            for name, fields in contract["entities"].items()
+        },
         **{name: contract["gate1_entities"][name] for name in gate1_names},
     }
 

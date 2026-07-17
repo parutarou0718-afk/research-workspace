@@ -15,6 +15,7 @@ from research_workspace.application.dto.monitoring_dto import MonitoringRootReco
 from research_workspace.domain.parsing import ParseArtifactIdentity
 from research_workspace.application.dto.recovery_dto import VerifiedRecoveryPoint
 from research_workspace.application.services.command_dispatcher import DomainMutation
+from research_workspace.application.queries.get_papers import PaperReadRepository
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,4 +67,4 @@ class RecoveryRepository(Protocol):
 
 
 class ProtectedWriteRepository(Protocol):
-    def apply_mutation(self, mutation: DomainMutation) -> None: ...
+    def apply_mutation(self, mutation: DomainMutation, command_id: UUID) -> None: ...

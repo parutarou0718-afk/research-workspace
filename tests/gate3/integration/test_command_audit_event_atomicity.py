@@ -115,7 +115,7 @@ def test_audit_indices_snapshots_and_events_commit_with_repository_fact(tmp_path
         def __init__(self, session):
             self.session = session
 
-        def apply_mutation(self, mutation):
+        def apply_mutation(self, mutation, command_id):
             return None
 
     engine, factory, coordinator = _coordinator(tmp_path, Repo)
@@ -147,7 +147,7 @@ def test_repository_or_event_failure_rolls_back_audit_and_business_event(tmp_pat
         def __init__(self, session):
             pass
 
-        def apply_mutation(self, mutation):
+        def apply_mutation(self, mutation, command_id):
             raise ValueError("CONCURRENT_MODIFICATION")
 
     engine, factory, coordinator = _coordinator(tmp_path, FailingRepo)

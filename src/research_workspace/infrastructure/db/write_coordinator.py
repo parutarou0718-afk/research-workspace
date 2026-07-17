@@ -255,7 +255,7 @@ class SqlWriteCoordinator:
                         after,
                         tuple(mutation.changed_fields),
                     )
-                    repository.apply_mutation(mutation)
+                    repository.apply_mutation(mutation, plan.command_id)
                     before_value = json.loads(before.canonical_bytes) if before else None
                     after_value = json.loads(after.canonical_bytes) if after else None
                     session.add(

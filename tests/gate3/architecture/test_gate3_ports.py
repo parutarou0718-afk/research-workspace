@@ -39,7 +39,7 @@ def test_gate3_provider_contract_exposes_no_framework_or_generic_runtime() -> No
         assert forbidden not in appended
 
 
-def test_checkpoint_c_adds_only_approved_recovery_and_dispatch_boundaries() -> None:
+def test_task6_adds_paper_without_later_gate3_commands() -> None:
     assert (
         ROOT / "src/research_workspace/application/ports/sqlite_backup.py"
     ).exists()
@@ -49,6 +49,9 @@ def test_checkpoint_c_adds_only_approved_recovery_and_dispatch_boundaries() -> N
     assert (
         ROOT / "src/research_workspace/application/services/command_dispatcher.py"
     ).exists()
-    assert not (
+    assert (
         ROOT / "src/research_workspace/application/commands/manage_paper.py"
+    ).exists()
+    assert not (
+        ROOT / "src/research_workspace/application/commands/manage_idea.py"
     ).exists()

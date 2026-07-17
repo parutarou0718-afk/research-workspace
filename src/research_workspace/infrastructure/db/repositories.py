@@ -6,7 +6,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import rfc8785
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from research_workspace.application.dto.import_dto import ImportCommitDTO, SnapshotRegistrationDTO
@@ -24,6 +24,9 @@ from research_workspace.infrastructure.db.models import (
     ConferenceModel,
     GrantModel,
     PaperModel,
+    PaperVersionModel,
+    EntityRelationModel,
+    EvidenceRefModel,
     SubmissionModel,
     ImportItemModel,
     MonitoringRootModel,
@@ -35,6 +38,9 @@ from research_workspace.infrastructure.db.models import (
     SourceSnapshotModel,
 )
 from research_workspace.domain.monitoring import MonitoringRootStatus
+from research_workspace.domain.entities import Paper
+from research_workspace.domain.enums import PaperStatus
+from research_workspace.application.services.command_dispatcher import DomainMutation
 from research_workspace.application.dto.recovery_dto import VerifiedRecoveryPoint
 from research_workspace.infrastructure.db.models import (
     ApplicationCommandModel,
@@ -234,11 +240,123 @@ class SqlRecoveryRepository:
         command.recovery_point_id = point.recovery_point_id
 
 
+class SqlPaperReadRepository:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    @staticmethod
+    def _record(row: PaperModel) -> Paper:
+        return Paper(
+            row.id, row.title, PaperStatus(row.status), row.current_version_id,
+            row.created_at, row.updated_at, row.deleted_at, row.row_version,
+            row.created_by_command_id, row.updated_by_command_id,
+            row.deleted_by_command_id,
+        )
+
+    def get_paper(self, paper_id: UUID) -> Paper | None:
+        row = self._session.get(PaperModel, paper_id)
+        return None if row is None else self._record(row)
+
+    def list_papers(self, *, include_deleted: bool = False) -> tuple[Paper, ...]:
+        statement = select(PaperModel)
+        if not include_deleted:
+            statement = statement.where(PaperModel.deleted_at.is_(None))
+        rows = self._session.scalars(statement.order_by(PaperModel.title, PaperModel.id)).all()
+        return tuple(self._record(row) for row in rows)
+
+
 class SqlGate1WriteRepository:
     """A session-bound adapter used only inside the write coordinator."""
 
     def __init__(self, session: Session) -> None:
         self._session = session
+
+    def apply_mutation(self, mutation: DomainMutation, command_id: UUID) -> None:
+        if mutation.entity_type != "Paper":
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        after = __import__("json").loads(mutation.after_snapshot) if mutation.after_snapshot else None
+        if after is None:
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        fields = after["fields"]
+        now = datetime.now(timezone.utc)
+        if mutation.operation == "create":
+            self._session.add(
+                PaperModel(
+                    id=mutation.entity_id,
+                    title=fields["title"],
+                    status=fields["status"],
+                    current_version_id=None,
+                    created_at=now,
+                    updated_at=now,
+                    deleted_at=None,
+                    row_version=1,
+                    created_by_command_id=command_id,
+                    updated_by_command_id=command_id,
+                    deleted_by_command_id=None,
+                )
+            )
+            self._session.flush()
+            return
+        paper = self._session.get(PaperModel, mutation.entity_id)
+        if paper is None:
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        if mutation.operation == "soft_delete":
+            active_submissions = self._session.scalar(
+                select(func.count(SubmissionModel.id)).where(
+                    SubmissionModel.paper_id == paper.id,
+                    SubmissionModel.deleted_at.is_(None),
+                )
+            )
+            active_relations = self._session.scalar(
+                select(func.count(EntityRelationModel.id)).where(
+                    EntityRelationModel.lifecycle_state == "active",
+                    or_(
+                        (EntityRelationModel.source_type == "Paper")
+                        & (EntityRelationModel.source_id == paper.id),
+                        (EntityRelationModel.target_type == "Paper")
+                        & (EntityRelationModel.target_id == paper.id),
+                    ),
+                )
+            )
+            evidence = self._session.scalar(
+                select(func.count(EvidenceRefModel.id)).where(
+                    EvidenceRefModel.entity_type == "Paper",
+                    EvidenceRefModel.entity_id == paper.id,
+                )
+            )
+            if active_submissions or active_relations or evidence or paper.current_version_id:
+                raise ValueError("DELETE_DEPENDENCY_CONFLICT")
+        current_version_id = fields["current_version_id"]
+        if current_version_id is not None:
+            version = self._session.get(PaperVersionModel, UUID(current_version_id))
+            if (
+                version is None
+                or version.paper_id != paper.id
+                or version.lifecycle_state != "active"
+            ):
+                raise ValueError("INVALID_VERSION_ASSIGNMENT")
+        values = {
+            "title": fields["title"],
+            "status": fields["status"],
+            "current_version_id": UUID(current_version_id) if current_version_id else None,
+            "deleted_at": datetime.fromisoformat(fields["deleted_at"].replace("Z", "+00:00"))
+            if fields["deleted_at"]
+            else None,
+            "deleted_by_command_id": command_id if fields["deleted_at"] else None,
+            "updated_by_command_id": command_id,
+            "updated_at": now,
+            "row_version": mutation.expected_row_version + 1,
+        }
+        result = self._session.execute(
+            update(PaperModel)
+            .where(
+                PaperModel.id == mutation.entity_id,
+                PaperModel.row_version == mutation.expected_row_version,
+            )
+            .values(**values)
+        )
+        if result.rowcount != 1:
+            raise ValueError("CONCURRENT_MODIFICATION")
 
     def register_import(self, result: SnapshotRegistrationDTO) -> ImportCommitDTO:
         existing = self._session.scalar(
