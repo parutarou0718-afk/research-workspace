@@ -2,6 +2,14 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
+APPROVED_IMPLEMENTATION_PLANS = frozenset(
+    {
+        "docs/superpowers/plans/2026-07-16-v0.1-foundation.md",
+        "docs/superpowers/plans/2026-07-16-v0.2-gate1.md",
+        "docs/superpowers/plans/2026-07-17-v0.2-gate2.md",
+        "docs/superpowers/plans/2026-07-17-v0.2-gate3.md",
+    }
+)
 LOCKED_ROOT_FILES = {
     ".gitignore",
     ".python-version",
@@ -102,3 +110,7 @@ def test_foundation_structure_remains_present_during_gate1() -> None:
         if path.is_file() and "__pycache__" not in path.parts
     }
     assert LOCKED_TREE_FILES <= actual_tree
+
+
+def test_approved_implementation_plans_are_present() -> None:
+    assert all((ROOT / path).is_file() for path in APPROVED_IMPLEMENTATION_PLANS)

@@ -87,7 +87,7 @@ def test_background_operation_rejects_unknown_gate2_type() -> None:
 def test_domain_model_locks_gate2_entities_states_and_semantic_defaults() -> None:
     model = json.loads(DOMAIN_MODEL.read_text(encoding="utf-8"))
 
-    assert model["version"] == "0.2-gate2"
+    assert model["version"] in {"0.2-gate2", "0.2-gate3"}
     assert set(model["gate2_entities"]) == {
         "MonitoringRoot",
         "RawFileEvent",
@@ -106,4 +106,3 @@ def test_domain_model_locks_gate2_entities_states_and_semantic_defaults() -> Non
         "backoff_seconds": [2, 5, 15, 30, 60],
         "maximum_candidate_neighbors": 12,
     }
-

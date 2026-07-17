@@ -135,13 +135,12 @@ def test_gate2_evidence_has_no_skip_or_xfail_escape_hatch() -> None:
             assert not found, f"{relative_path}: {sorted(found)}"
 
 
-def test_gate2_repository_tree_is_complete_and_gate3_remains_absent() -> None:
+def test_gate2_repository_tree_remains_complete_after_forward_additions() -> None:
     tree = _load(
         "tests/gate2/acceptance/test_gate2_repository_tree.py",
         "gate2_repository_tree",
     )
     tree.assert_gate2_checkpoint_tree_complete()
-    tree.test_gate3_and_gate4_paths_remain_absent()
 
 
 def test_gate2_alembic_head_is_exactly_0003_gate2_monitoring() -> None:
