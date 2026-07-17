@@ -1,0 +1,84 @@
+"""Designer-owned Paper editor."""
+
+from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import QComboBox, QDialog, QLabel, QLineEdit, QPushButton
+
+from research_workspace.presentation import load_ui_into, require_child
+
+
+class ProtectedEditorDialog(QDialog):
+    """Shared main-thread polling for one protected operation handle."""
+
+    def _bind_operation_widgets(self, save_button, error_label) -> None:
+        self.operation_handle = None
+        self.save_button = save_button
+        self.error_label = error_label
+        self._completion_timer = QTimer(self)
+        self._completion_timer.setInterval(50)
+        self._completion_timer.timeout.connect(self._poll_completion)
+
+    def _track(self, handle) -> None:
+        self.operation_handle = handle
+        if handle is None:
+            self.accept()
+        else:
+            self._completion_timer.start()
+
+    def _poll_completion(self) -> None:
+        if not self.operation_handle.done:
+            return
+        self._completion_timer.stop()
+        self.save_button.setEnabled(True)
+        if self.operation_handle.status == "completed":
+            self.accept()
+        else:
+            self.error_label.setText(f"操作未完成（{self.operation_handle.status}）")
+
+    def reject(self) -> None:
+        if self.operation_handle is not None and not self.operation_handle.done:
+            self.operation_handle.cancel()
+        super().reject()
+
+
+class PaperEditorDialog(ProtectedEditorDialog):
+    def __init__(self, services, record=None, parent=None) -> None:
+        super().__init__(parent)
+        self.services = services
+        self.record = record
+        load_ui_into("paper_editor_dialog.ui", self)
+        self.title_edit = require_child(self, QLineEdit, "paperTitleEdit")
+        self.status_combo = require_child(self, QComboBox, "paperStatusCombo")
+        self.save_button = require_child(self, QPushButton, "savePaperButton")
+        self.cancel_button = require_child(self, QPushButton, "cancelPaperButton")
+        self.recovery_status_label = require_child(
+            self, QLabel, "paperRecoveryStatusLabel"
+        )
+        self.error_label = require_child(self, QLabel, "paperErrorLabel")
+        self._bind_operation_widgets(self.save_button, self.error_label)
+        self.status_combo.addItems(
+            ("active", "paused", "revision", "submitted", "completed", "archived")
+        )
+        if record is not None:
+            self.title_edit.setText(record.title)
+            self.status_combo.setCurrentText(record.status)
+        self.save_button.clicked.connect(self.save)
+        self.cancel_button.clicked.connect(self.reject)
+
+    def save(self) -> None:
+        self.recovery_status_label.setText("正在创建安全恢复点")
+        self.save_button.setEnabled(False)
+        try:
+            if self.record is None:
+                handle = self.services.crud_actions.create_paper(
+                    self.title_edit.text(), self.status_combo.currentText()
+                )
+            else:
+                handle = self.services.crud_actions.update_paper(
+                    self.record.id, self.title_edit.text(),
+                    self.status_combo.currentText(),
+                )
+        except Exception as exc:
+            self.error_label.setText(str(exc))
+            self.save_button.setEnabled(True)
+            return
+        self._track(handle)

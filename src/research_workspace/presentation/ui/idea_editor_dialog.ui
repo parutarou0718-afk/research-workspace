@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>IdeaEditorDialog</class>
+ <widget class="QDialog" name="ideaEditorDialog">
+  <property name="minimumSize"><size><width>520</width><height>440</height></size></property>
+  <property name="windowTitle"><string>想法</string></property>
+  <layout class="QVBoxLayout" name="ideaEditorRootLayout">
+   <item><widget class="QScrollArea" name="ideaEditorScrollArea">
+    <property name="widgetResizable"><bool>true</bool></property>
+    <widget class="QWidget" name="ideaEditorContent">
+     <layout class="QFormLayout" name="ideaEditorFormLayout">
+      <item row="0" column="0"><widget class="QLabel" name="ideaTitleLabel"><property name="text"><string>标题</string></property></widget></item>
+      <item row="0" column="1"><widget class="QLineEdit" name="ideaTitleEdit"><property name="maxLength"><number>500</number></property></widget></item>
+      <item row="1" column="0"><widget class="QLabel" name="ideaStatusLabel"><property name="text"><string>状态</string></property></widget></item>
+      <item row="1" column="1"><widget class="QComboBox" name="ideaStatusCombo"/></item>
+      <item row="2" column="0"><widget class="QLabel" name="ideaContentLabel"><property name="text"><string>Markdown 内容</string></property></widget></item>
+      <item row="2" column="1"><widget class="QPlainTextEdit" name="ideaContentEdit"/></item>
+      <item row="3" column="0" colspan="2"><widget class="QLabel" name="ideaRecoveryStatusLabel"><property name="text"><string/></property></widget></item>
+      <item row="4" column="0" colspan="2"><widget class="QLabel" name="ideaErrorLabel"><property name="text"><string/></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+     </layout>
+    </widget>
+   </widget></item>
+   <item><layout class="QHBoxLayout" name="ideaEditorButtonLayout">
+    <item><spacer name="ideaEditorButtonSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property></spacer></item>
+    <item><widget class="QPushButton" name="cancelIdeaButton"><property name="text"><string>取消</string></property></widget></item>
+    <item><widget class="QPushButton" name="saveIdeaButton"><property name="text"><string>保存</string></property></widget></item>
+   </layout></item>
+  </layout>
+ </widget>
+ <resources/><connections/>
+</ui>

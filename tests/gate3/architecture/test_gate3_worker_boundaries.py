@@ -31,11 +31,13 @@ def test_gate3_extends_feature_worker_without_generic_runtime() -> None:
         assert forbidden not in source
 
 
-def test_task14_does_not_create_gate3_ui() -> None:
+def test_task15_adds_only_crud_ui_not_relation_review_ui() -> None:
     assert (
         ROOT / "tests/gate3/architecture/test_gate3_worker_boundaries.py"
     ).exists()
-    assert not (
+    assert (
         ROOT / "src/research_workspace/presentation/dialogs/paper_editor_dialog.py"
     ).exists()
-
+    assert not (
+        ROOT / "src/research_workspace/presentation/dialogs/relation_review_dialog.py"
+    ).exists()

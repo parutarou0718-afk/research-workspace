@@ -35,11 +35,14 @@ def test_read_models_are_deeply_immutable() -> None:
     assert isinstance(view.actions, tuple)
 
 
-def test_task14_preserves_read_models_without_gate3_ui() -> None:
+def test_task15_preserves_read_models_and_stops_before_decision_ui() -> None:
     assert (ROOT / "tests/gate3/unit/test_gate3_read_models.py").exists()
     assert (
         ROOT / "tests/gate3/architecture/test_gate3_worker_boundaries.py"
     ).exists()
-    assert not (
+    assert (
         ROOT / "src/research_workspace/presentation/dialogs/paper_editor_dialog.py"
+    ).exists()
+    assert not (
+        ROOT / "src/research_workspace/presentation/dialogs/relation_review_dialog.py"
     ).exists()

@@ -26,6 +26,11 @@ PAGE_FILES = {
     "settings_page.ui": "settingsPage",
     "startup_error_page.ui": "startupErrorPage",
 }
+DIALOG_FILES = {
+    "paper_editor_dialog.ui",
+    "idea_editor_dialog.ui",
+    "submission_editor_dialog.ui",
+}
 LOWER_CAMEL = re.compile(r"^[a-z][A-Za-z0-9]*$")
 FORBIDDEN_DEFAULTS = {"pushButton", "label_2", "verticalLayout_3"}
 WIDGET_SUFFIXES = {
@@ -66,6 +71,7 @@ def test_runtime_ui_file_set_is_complete_and_independent():
     assert {path.name for path in UI_DIR.glob("*.ui")} == {
         "main_window.ui",
         "import_batch_dialog.ui",
+        *DIALOG_FILES,
         *PAGE_FILES,
     }
 
