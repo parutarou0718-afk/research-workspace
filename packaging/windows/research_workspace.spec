@@ -19,7 +19,7 @@ a = Analysis(
             "research_workspace/presentation/ui",
         ),
     ],
-    hiddenimports=[],
+    hiddenimports=["logging.config"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

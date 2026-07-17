@@ -46,6 +46,8 @@ def test_spec_collects_only_approved_runtime_resources() -> None:
 
     assert "research_workspace/presentation/ui" in text
     assert "RW_PORTABLE_ICON" in text
+    assert '"logging.config"' in text
+    assert "RW_DIAGNOSTIC" not in text
     assert "tests/gate1/fixtures" not in text
     assert "network" not in text.casefold()
 
