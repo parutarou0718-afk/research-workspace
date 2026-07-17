@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "cases": [
+    {"name": "source_continuity", "expected": "R1_SOURCE_CONTINUITY"},
+    {"name": "replace_continuity", "expected": "R2_REPLACE_CONTINUITY"},
+    {"name": "paper_title_time", "expected": "R3_PAPER_TITLE_TIME"},
+    {"name": "name_title_text", "expected": "R4_NAME_TITLE_TEXT"},
+    {"name": "zero_text_lineage", "expected": "R5_ZERO_TEXT_LINEAGE"},
+    {"name": "same_hash", "expected": null},
+    {"name": "mtime_only", "expected": null},
+    {"name": "same_paper_only", "expected": null},
+    {"name": "ambiguous_direction", "expected": null},
+    {"name": "conflicting_continuity", "expected": null}
+  ]
+}
