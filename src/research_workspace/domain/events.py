@@ -37,6 +37,7 @@ _RELATION_STATE_EVENTS = frozenset({
     "relation.confirmed", "relation.rejected", "relation.reconsidered",
     "relation.retracted", "relation.superseded",
 })
+_UNDO_EVENT = "command.undo_applied"
 
 
 def validate_user_event_payload(event_type: str, payload: object) -> None:
@@ -91,6 +92,14 @@ def validate_user_event_payload(event_type: str, payload: object) -> None:
         }:
             raise ValueError("COMMAND_VALIDATION_FAILED")
         if not isinstance(payload["row_version"], int) or payload["row_version"] < 1:
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        return
+    if event_type == _UNDO_EVENT:
+        if set(payload) != {
+            "undo_command_id", "original_command_id", "affected_entity_ids"
+        }:
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        if not isinstance(payload["affected_entity_ids"], (list, tuple)):
             raise ValueError("COMMAND_VALIDATION_FAILED")
         return
     if event_type not in _ENTITY_MUTATION_EVENTS:

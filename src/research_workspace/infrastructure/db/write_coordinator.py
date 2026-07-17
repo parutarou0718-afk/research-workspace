@@ -204,13 +204,23 @@ class SqlWriteCoordinator:
                         committed_at=None,
                         failed_at=None,
                         recovery_point_id=None,
-                        undo_of_command_id=None,
+                        undo_of_command_id=plan.undo_of_command_id,
                         result_summary_json=None,
                         error_code=None,
                         migration_batch_id=None,
                     )
                 )
         except IntegrityError as exc:
+            if plan.undo_of_command_id is not None:
+                with self._factory() as session:
+                    existing_undo = session.scalar(
+                        select(ApplicationCommandModel.id).where(
+                            ApplicationCommandModel.undo_of_command_id
+                            == plan.undo_of_command_id
+                        )
+                    )
+                if existing_undo is not None:
+                    raise WriteCoordinatorError("UNDO_ALREADY_APPLIED") from exc
             raise WriteCoordinatorError("COMMAND_IDEMPOTENCY_CONFLICT") from exc
 
     def persist_verified_recovery(
@@ -302,6 +312,31 @@ class SqlWriteCoordinator:
                         )
                     )
                 affected = tuple(mutation.entity_id for mutation in mutations)
+                if plan.undo_of_command_id is not None:
+                    payload = {
+                        "undo_command_id": str(plan.command_id),
+                        "original_command_id": str(plan.undo_of_command_id),
+                        "affected_entity_ids": [str(item) for item in affected],
+                    }
+                    validate_user_event_payload("command.undo_applied", payload)
+                    session.add(
+                        DomainEventModel(
+                            id=uuid4(), schema_version="2.0",
+                            event_type="command.undo_applied",
+                            workspace_id=self._required_workspace_id(session),
+                            command_id=plan.command_id, operation_id=None,
+                            aggregate_type="AuditLog",
+                            aggregate_id=plan.command_id,
+                            aggregate_version=None, actor_type=command.actor_type,
+                            payload_json=rfc8785.dumps(payload).decode("utf-8"),
+                            deduplication_key=hashlib.sha256(
+                                f"{plan.command_id}:undo".encode()
+                            ).hexdigest(),
+                            causation_id=plan.undo_of_command_id,
+                            correlation_id=plan.command_id, created_at=now,
+                            occurred_at=now, processed_at=None,
+                        )
+                    )
                 summary = {
                     "affected_entity_ids": [str(item) for item in affected],
                     "affected_count": len(affected),

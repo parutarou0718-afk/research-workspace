@@ -58,6 +58,7 @@ class CommandPlan:
     expected_versions: tuple[tuple[str, UUID, int], ...]
     canonical_request: bytes
     protected: bool
+    undo_of_command_id: UUID | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,6 +146,7 @@ class CommandDispatcher:
         expected_versions: tuple[tuple[str, UUID, int], ...],
         build_mutations: Callable[[CommandPlan], tuple[DomainMutation, ...]],
         cancellation: CancellationToken,
+        undo_of_command_id: UUID | None = None,
     ) -> CommandResult:
         envelope.validate_outer_actor()
         fingerprint = canonical_request_fingerprint(envelope.request_payload)
@@ -184,6 +186,7 @@ class CommandDispatcher:
                 tuple(expected_versions),
                 canonical_request,
                 True,
+                undo_of_command_id,
             )
             self._coordinator.persist_command_envelope(plan)
             recovery = self._recovery_service.create(
