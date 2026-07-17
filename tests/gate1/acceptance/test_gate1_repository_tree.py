@@ -54,8 +54,10 @@ src/research_workspace/presentation/ui/import_batch_dialog.ui
 CURRENT_GATE2_PATHS = frozenset(
     {
         "migrations/versions/0003_gate2_monitoring.py",
+        "src/research_workspace/application/commands/manage_monitoring_root.py",
         "src/research_workspace/application/dto/monitoring_dto.py",
         "src/research_workspace/application/ports/file_observer.py",
+        "src/research_workspace/application/queries/get_monitoring.py",
         "src/research_workspace/domain/monitoring.py",
         "src/research_workspace/domain/versioning.py",
     }
@@ -77,7 +79,6 @@ contracts/backup_manifest.schema.json
 contracts/export_manifest.schema.json
 migrations/versions/0004_gate3_protected_crud.py
 migrations/versions/0005_gate4_transfer.py
-src/research_workspace/application/commands/manage_monitoring_root.py
 src/research_workspace/application/commands/manage_paper.py
 src/research_workspace/application/commands/manage_idea.py
 src/research_workspace/application/commands/manage_submission.py
@@ -89,7 +90,6 @@ src/research_workspace/application/commands/create_export.py
 src/research_workspace/application/dto/recovery_dto.py
 src/research_workspace/application/dto/transfer_dto.py
 src/research_workspace/application/ports/sqlite_backup.py
-src/research_workspace/application/queries/get_monitoring.py
 src/research_workspace/application/queries/get_version_candidates.py
 src/research_workspace/application/queries/get_papers.py
 src/research_workspace/application/queries/get_ideas.py

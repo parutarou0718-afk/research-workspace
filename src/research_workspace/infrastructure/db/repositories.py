@@ -2,13 +2,15 @@
 
 from datetime import datetime, timezone
 import hashlib
-from uuid import uuid4
+from pathlib import Path
+from uuid import UUID, uuid4
 
 import rfc8785
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from research_workspace.application.dto.import_dto import ImportCommitDTO, SnapshotRegistrationDTO
+from research_workspace.application.dto.monitoring_dto import MonitoringRootRecord
 from research_workspace.application.dto.parsing_dto import (
     ParseAttemptSeed,
     ParseFailureDTO,
@@ -24,6 +26,7 @@ from research_workspace.infrastructure.db.models import (
     PaperModel,
     SubmissionModel,
     ImportItemModel,
+    MonitoringRootModel,
     ParseArtifactModel,
     ParseAttemptModel,
     ParsedBlockModel,
@@ -31,6 +34,7 @@ from research_workspace.infrastructure.db.models import (
     SourceDocumentModel,
     SourceSnapshotModel,
 )
+from research_workspace.domain.monitoring import MonitoringRootStatus
 
 
 class SqlOverviewRepository:
@@ -103,6 +107,45 @@ class SqlOverviewRepository:
                 PaperModel.deleted_at.is_(None),
             )
         ) or 0
+
+
+class SqlMonitoringRepository:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    @staticmethod
+    def _record(model: MonitoringRootModel) -> MonitoringRootRecord:
+        return MonitoringRootRecord(
+            model.id,
+            Path(model.original_path),
+            model.normalized_path,
+            model.normalized_path_hash,
+            MonitoringRootStatus(model.status),
+            model.config_fingerprint,
+            model.watcher_generation,
+            model.created_at,
+            model.updated_at,
+            model.removed_at,
+        )
+
+    def list_roots(self) -> tuple[MonitoringRootRecord, ...]:
+        roots = self._session.scalars(
+            select(MonitoringRootModel).order_by(MonitoringRootModel.normalized_path)
+        ).all()
+        return tuple(self._record(root) for root in roots)
+
+    def get_root(self, monitoring_root_id: UUID) -> MonitoringRootRecord | None:
+        root = self._session.get(MonitoringRootModel, monitoring_root_id)
+        return None if root is None else self._record(root)
+
+    def find_active_root_by_path(self, normalized_path: str) -> MonitoringRootRecord | None:
+        root = self._session.scalar(
+            select(MonitoringRootModel).where(
+                MonitoringRootModel.normalized_path == normalized_path,
+                MonitoringRootModel.removed_at.is_(None),
+            )
+        )
+        return None if root is None else self._record(root)
 
 
 class SqlGate1WriteRepository:

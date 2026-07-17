@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from typing import Protocol
+from uuid import UUID
 
 from research_workspace.application.dto.import_dto import ImportCommitDTO, SnapshotRegistrationDTO
 from research_workspace.application.dto.parsing_dto import (
@@ -34,6 +35,8 @@ class OverviewRepository(Protocol):
 
 class MonitoringRepository(Protocol):
     def list_roots(self) -> tuple[MonitoringRootRecord, ...]: ...
+
+    def get_root(self, monitoring_root_id: UUID) -> MonitoringRootRecord | None: ...
 
     def find_active_root_by_path(self, normalized_path: str) -> MonitoringRootRecord | None: ...
 

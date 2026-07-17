@@ -18,6 +18,10 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
 from research_workspace.application.dto.import_dto import ImportCommitDTO, SnapshotRegistrationDTO
+from research_workspace.application.dto.monitoring_dto import (
+    BaselineObservationDTO,
+    MonitoringRootSeed,
+)
 from research_workspace.application.ports.write_coordinator import (
     ImportBatchSeed,
     ParseOperationSeed,
@@ -30,6 +34,7 @@ from research_workspace.application.dto.parsing_dto import (
     PreparedParseAttempt,
 )
 from research_workspace.domain.import_model import FileStat, StagedSource
+from research_workspace.domain.monitoring import MonitoringRootStatus
 from research_workspace.domain.parsing import (
     ParseContractError,
     build_parse_artifact_identity,
@@ -39,10 +44,12 @@ from research_workspace.infrastructure.db.models import (
     DomainEventModel,
     ImportBatchModel,
     ImportItemModel,
+    MonitoringRootModel,
     ParseArtifactModel,
     ParseAttemptModel,
     SnapshotParsePreferenceModel,
     SourceObservationModel,
+    SourceObservationEventModel,
     SourceSnapshotModel,
     WorkspaceMetadataModel,
 )
@@ -83,6 +90,141 @@ class SqlWriteCoordinator:
         if workspace_id is None:
             raise WriteCoordinatorError("WORKSPACE_METADATA_MISSING")
         return workspace_id
+
+    def register_monitoring_root(
+        self, seed: MonitoringRootSeed, baseline: tuple[BaselineObservationDTO, ...]
+    ) -> UUID:
+        try:
+            with self._factory.begin() as session:
+                session.add(
+                    MonitoringRootModel(
+                        id=seed.monitoring_root_id,
+                        original_path=str(seed.original_path),
+                        normalized_path=seed.normalized_path,
+                        normalized_path_hash=seed.normalized_path_hash,
+                        status=MonitoringRootStatus.ACTIVE.value,
+                        recursive=True,
+                        config_json=seed.semantic_config_json.decode("utf-8"),
+                        config_fingerprint=seed.config_fingerprint,
+                        watcher_generation=0,
+                        last_event_at=None,
+                        last_reconciled_at=None,
+                        created_at=seed.created_at,
+                        updated_at=seed.created_at,
+                        removed_at=None,
+                    )
+                )
+                for item in baseline:
+                    if item.entry_type != "file":
+                        raise WriteCoordinatorError("COMMAND_VALIDATION_FAILED")
+                    observation = session.scalar(
+                        select(SourceObservationModel).where(
+                            SourceObservationModel.normalized_path == item.normalized_path
+                        )
+                    )
+                    if observation is None:
+                        observation = SourceObservationModel(
+                            id=item.observation_id,
+                            original_path=str(item.original_path),
+                            normalized_path=item.normalized_path,
+                            normalized_path_hash=item.normalized_path_hash,
+                            original_filename=item.original_filename,
+                            monitoring_root_id=seed.monitoring_root_id,
+                            current_snapshot_id=None,
+                            availability_status="available",
+                            baseline_only=True,
+                            size_bytes=item.size_bytes,
+                            modified_at=item.modified_at,
+                            file_id_hint=item.file_id_hint,
+                            volume_serial_hint=item.volume_serial_hint,
+                            first_seen_at=item.observed_at,
+                            last_seen_at=item.observed_at,
+                            missing_at=None,
+                            row_version=1,
+                        )
+                        session.add(observation)
+                    elif (
+                        observation.monitoring_root_id is not None
+                        and observation.monitoring_root_id != seed.monitoring_root_id
+                    ):
+                        raise WriteCoordinatorError("MONITOR_ROOT_OVERLAP")
+                    else:
+                        observation.monitoring_root_id = seed.monitoring_root_id
+                        observation.last_seen_at = item.observed_at
+                        observation.row_version += 1
+                    session.flush()
+                    facts = {
+                        "entry_type": item.entry_type,
+                        "size_bytes": item.size_bytes,
+                        "modified_at": (
+                            item.modified_at.isoformat().replace("+00:00", "Z")
+                            if item.modified_at is not None
+                            else None
+                        ),
+                        "file_id_hint": item.file_id_hint,
+                        "volume_serial_hint": item.volume_serial_hint,
+                    }
+                    session.add(
+                        SourceObservationEventModel(
+                            id=uuid4(),
+                            source_observation_id=observation.id,
+                            raw_file_event_id=None,
+                            event_type="baseline",
+                            snapshot_id=None,
+                            path_before_hash=None,
+                            path_after_hash=item.normalized_path_hash,
+                            facts_json=rfc8785.dumps(facts).decode("utf-8"),
+                            observed_at=item.observed_at,
+                        )
+                    )
+            return seed.monitoring_root_id
+        except WriteCoordinatorError:
+            raise
+        except IntegrityError as exc:
+            raise WriteCoordinatorError("MONITOR_ROOT_CONFLICT") from exc
+
+    def change_monitoring_root_status(
+        self,
+        monitoring_root_id: UUID,
+        expected_status: MonitoringRootStatus,
+        new_status: MonitoringRootStatus,
+    ) -> int:
+        allowed = {
+            (MonitoringRootStatus.ACTIVE, MonitoringRootStatus.PAUSED),
+            (MonitoringRootStatus.PAUSED, MonitoringRootStatus.ACTIVE),
+        }
+        if (expected_status, new_status) not in allowed:
+            raise WriteCoordinatorError("MONITOR_ROOT_STATE_CHANGED")
+        with self._factory.begin() as session:
+            root = session.get(MonitoringRootModel, monitoring_root_id)
+            if (
+                root is None
+                or root.removed_at is not None
+                or root.status != expected_status.value
+            ):
+                raise WriteCoordinatorError("MONITOR_ROOT_STATE_CHANGED")
+            root.status = new_status.value
+            root.updated_at = datetime.now(timezone.utc)
+            if new_status is MonitoringRootStatus.ACTIVE:
+                root.watcher_generation += 1
+            return root.watcher_generation
+
+    def remove_monitoring_root(
+        self, monitoring_root_id: UUID, expected_status: MonitoringRootStatus
+    ) -> int:
+        with self._factory.begin() as session:
+            root = session.get(MonitoringRootModel, monitoring_root_id)
+            if (
+                root is None
+                or root.removed_at is not None
+                or root.status != expected_status.value
+            ):
+                raise WriteCoordinatorError("MONITOR_ROOT_STATE_CHANGED")
+            now = datetime.now(timezone.utc)
+            root.status = MonitoringRootStatus.PAUSED.value
+            root.removed_at = now
+            root.updated_at = now
+            return root.watcher_generation
 
     def begin_import(self, seed: ImportBatchSeed) -> tuple[PreparedImportItem, ...]:
         now = datetime.now(timezone.utc)
