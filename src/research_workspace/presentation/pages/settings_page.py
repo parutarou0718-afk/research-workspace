@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from research_workspace.application.ports.ai_provider import AISettings
-from research_workspace.presentation import load_ui_resource, require_child
+from research_workspace.presentation import load_ui_resource, require_child, set_feedback
 
 
 # Caller/packager contract: this process code requests a fresh application launch.
@@ -112,27 +112,35 @@ class SettingsPage:
     def save_ai_settings(self) -> None:
         store = self._ai_store()
         if store is None:
-            self.ai_settings_status_label.setText("AI settings storage is unavailable.")
+            set_feedback(
+                self.ai_settings_status_label,
+                "error",
+                "AI settings storage is unavailable.",
+            )
             return
         try:
             store.save(self._current_ai_settings())
         except ValueError as exc:
-            self.ai_settings_status_label.setText(str(exc))
+            set_feedback(self.ai_settings_status_label, "error", str(exc))
             return
-        self.ai_settings_status_label.setText("AI settings saved.")
+        set_feedback(self.ai_settings_status_label, "success", "AI settings saved.")
 
     def test_ai_connection(self) -> None:
         tester = getattr(self.services, "ai_connection_tester", None)
         test_async = getattr(tester, "test_async", None)
         if test_async is None:
-            self.ai_settings_status_label.setText("Connection test is unavailable.")
+            set_feedback(
+                self.ai_settings_status_label,
+                "error",
+                "Connection test is unavailable.",
+            )
             return
         try:
             settings = self._current_ai_settings()
         except ValueError as exc:
-            self.ai_settings_status_label.setText(str(exc))
+            set_feedback(self.ai_settings_status_label, "error", str(exc))
             return
-        self.ai_settings_status_label.setText("Testing connection...")
+        set_feedback(self.ai_settings_status_label, "working", "Testing connection...")
         self.test_ai_connection_button.setEnabled(False)
         self._ai_test_handle = test_async(settings)
         self._ai_test_timer.start()
@@ -144,10 +152,14 @@ class SettingsPage:
         self._ai_test_timer.stop()
         self.test_ai_connection_button.setEnabled(True)
         if handle.error is None:
-            self.ai_settings_status_label.setText("Connection successful.")
+            set_feedback(
+                self.ai_settings_status_label, "success", "Connection successful."
+            )
             return
-        self.ai_settings_status_label.setText(
-            getattr(handle.error, "message", str(handle.error))
+        set_feedback(
+            self.ai_settings_status_label,
+            "error",
+            getattr(handle.error, "message", str(handle.error)),
         )
 
     def choose_directory(self) -> None:

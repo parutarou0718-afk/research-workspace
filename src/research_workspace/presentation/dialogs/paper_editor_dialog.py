@@ -3,7 +3,7 @@
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QComboBox, QDialog, QLabel, QLineEdit, QPushButton
 
-from research_workspace.presentation import load_ui_into, require_child
+from research_workspace.presentation import load_ui_into, require_child, set_feedback
 
 
 class ProtectedEditorDialog(QDialog):
@@ -32,7 +32,11 @@ class ProtectedEditorDialog(QDialog):
         if self.operation_handle.status == "completed":
             self.accept()
         else:
-            self.error_label.setText(f"Operation did not complete: {self.operation_handle.status}")
+            set_feedback(
+                self.error_label,
+                "error",
+                f"Operation did not complete: {self.operation_handle.status}",
+            )
 
     def reject(self) -> None:
         if self.operation_handle is not None and not self.operation_handle.done:
@@ -73,7 +77,11 @@ class PaperEditorDialog(ProtectedEditorDialog):
         self.cancel_button.clicked.connect(self.reject)
 
     def save(self) -> None:
-        self.recovery_status_label.setText("Preparing a safe recovery point...")
+        set_feedback(
+            self.recovery_status_label,
+            "working",
+            "Preparing a safe recovery point...",
+        )
         self.save_button.setEnabled(False)
         status = self.status_combo.currentData()
         try:
@@ -86,7 +94,7 @@ class PaperEditorDialog(ProtectedEditorDialog):
                     self.record.id, self.title_edit.text(), status
                 )
         except Exception as exc:
-            self.error_label.setText(str(exc))
+            set_feedback(self.error_label, "error", str(exc))
             self.save_button.setEnabled(True)
             return
         self._track(handle)
