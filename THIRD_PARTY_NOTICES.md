@@ -1,8 +1,8 @@
 # Research Workspace ? Third-Party Notices
 
-Lockfile timestamp (UTC): `2026-07-16T15:46:39Z`
+Lockfile timestamp (UTC): `2026-07-17T07:10:31Z`
 
-uv.lock SHA-256: `2dcb4d6b779367523362865978adedc030004373bc8ae7994fd57be2edef5522`
+uv.lock SHA-256: `afb0f701263c446e4f48b65ac3f54b6b250c6ee2f7f7d758e58bb53cdb4d99a0`
 
 This document records three different inventories. They are not interchangeable
 and this engineering classification is not legal advice. The first-party
@@ -76,6 +76,7 @@ supply-chain records, not claims that those packages are installed on Windows.
 | six | 1.17.0 | all locked targets | https://pypi.org/simple | MIT License |
 | sqlalchemy | 2.0.51 | all locked targets | https://pypi.org/simple | MIT |
 | typing-extensions | 4.16.0 | all locked targets | https://pypi.org/simple | PSF-2.0 |
+| watchdog | 6.0.0 | all locked targets | https://pypi.org/simple | Apache Software License |
 | wcwidth | 0.8.2 | all locked targets | https://pypi.org/simple | MIT |
 | xlsxwriter | 3.2.9 | all locked targets | https://pypi.org/simple | BSD License |
 
@@ -102,6 +103,22 @@ Excluded by target markers but retained in inventory A:
 
 - macholib | 1.16.4 | macOS only | MIT
 - python-xlib | 0.33 | Linux only | LGPLv2+
+
+## Gate 2 runtime monitoring closure
+
+The Windows/Python 3.12 effective closure rooted at `watchdog` contains exactly
+one distribution:
+
+| Package | Version | Role | License | Project source |
+|---|---:|---|---|---|
+| watchdog | 6.0.0 | Gate 2 runtime monitor | Apache-2.0 | https://github.com/gorakhargosh/watchdog |
+
+The exact installed `LICENSE` text SHA-256 is
+`cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30`.
+The accompanying copyright/Apache notice in `COPYING` has SHA-256
+`39f081828db6f94c70123fa4fb30c1bce3e215a8fdece53a49991fe076a69c08`.
+Both are bound to `watchdog==6.0.0` and the uv.lock hash above. The Apache 2.0
+license text is reproduced in the detailed license inventory below.
 
 ## C. Runtime bundle inventory
 
@@ -134,6 +151,7 @@ locked metadata is recorded explicitly here:
 | prettytable | 3.18.0 | BSD-3-Clause | https://github.com/prettytable/prettytable |
 | wcwidth | 0.8.2 | MIT | https://github.com/jquast/wcwidth |
 | setuptools | 83.0.0 | MIT | https://github.com/pypa/setuptools |
+| watchdog | 6.0.0 | Apache-2.0 | https://github.com/gorakhargosh/watchdog |
 
 | Name                      | Version   | License                                                        | URL                                                            | LicenseText                                                                                              |
 |---------------------------|-----------|----------------------------------------------------------------|----------------------------------------------------------------|----------------------------------------------------------------------------------------------------------|

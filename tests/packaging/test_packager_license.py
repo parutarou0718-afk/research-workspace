@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 PACKAGING_DIRECT = frozenset({"pyinstaller", "pywinauto"})
-LOCK_SHA256 = "2dcb4d6b779367523362865978adedc030004373bc8ae7994fd57be2edef5522"
+LOCK_SHA256 = "afb0f701263c446e4f48b65ac3f54b6b250c6ee2f7f7d758e58bb53cdb4d99a0"
 WINDOWS_EFFECTIVE_CLOSURE = frozenset(
     {
         "altgraph",

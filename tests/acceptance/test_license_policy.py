@@ -15,7 +15,7 @@ PERMISSIVE_TOKENS = {"MIT", "BSD", "Apache", "ISC", "PSF", "Python Software Foun
 DENIED_TOKENS = {"GPL", "AGPL", "UNKNOWN"}
 LGPL_ALLOWLIST = {"PySide6", "PySide6_Addons", "PySide6_Essentials", "shiboken6"}
 ROOT_DISTRIBUTION = "research-workspace"
-LOCK_SHA256 = "2dcb4d6b779367523362865978adedc030004373bc8ae7994fd57be2edef5522"
+LOCK_SHA256 = "afb0f701263c446e4f48b65ac3f54b6b250c6ee2f7f7d758e58bb53cdb4d99a0"
 EXACT_BUILD_TOOL_EXCEPTIONS = {
     "pyinstaller": {
         "version": "6.21.0",
@@ -40,6 +40,15 @@ EXACT_TEST_TOOL_APPROVALS = {
         "license_sha256": "18a999a95b7b23d86c410b4534e44d69f6d8ce13c3a53719b06ab895d8a2e73a",
         "license_expression": "BSD-3-Clause",
         "role": "test_only",
+    }
+}
+EXACT_GATE2_RUNTIME_APPROVALS = {
+    "watchdog": {
+        "version": "6.0.0",
+        "lock_sha256": LOCK_SHA256,
+        "license_sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+        "license_expression": "Apache-2.0",
+        "role": "gate2_runtime_monitor",
     }
 }
 RUNTIME_BUNDLE_PROHIBITED_DISTRIBUTIONS = frozenset(
@@ -72,6 +81,7 @@ LICENSE_FILE_BY_DISTRIBUTION = {
     "pyinstaller": "licenses/COPYING.txt",
     "pyinstaller-hooks-contrib": "licenses/LICENSE",
     "pywinauto": "LICENSE",
+    "watchdog": "LICENSE",
 }
 
 
@@ -305,6 +315,10 @@ def test_locked_dependencies_have_reviewed_commercial_licenses():
     assert rows_by_name["pywinauto"]["Version"] == pywinauto["version"]
     assert distribution_license_sha256("pywinauto") == pywinauto["license_sha256"]
     assert uv_lock_sha256() == pywinauto["lock_sha256"]
+    watchdog = EXACT_GATE2_RUNTIME_APPROVALS["watchdog"]
+    assert rows_by_name["watchdog"]["Version"] == watchdog["version"]
+    assert distribution_license_sha256("watchdog") == watchdog["license_sha256"]
+    assert uv_lock_sha256() == watchdog["lock_sha256"]
     notices = (ROOT / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
     assert "uv run pip-licenses --format=markdown --with-urls --with-license-file" in notices
     assert not re.search(r"^\|\s*research-workspace\s*\|", notices, re.IGNORECASE | re.MULTILINE)
