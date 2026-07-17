@@ -18,6 +18,15 @@ _ENTITY_MUTATION_EVENTS = frozenset(
 )
 
 _SUBMISSION_STATUS_EVENT = "submission.status_changed"
+_PAPER_VERSION_EVENTS = frozenset({
+    "paper_version.confirmed",
+    "paper_version.retracted",
+    "paper_version.context_parse_changed",
+})
+_VERSION_RELATION_EVENTS = frozenset({
+    "paper_version_relation.created",
+    "paper_version_relation.retracted",
+})
 
 
 def validate_user_event_payload(event_type: str, payload: object) -> None:
@@ -36,6 +45,24 @@ def validate_user_event_payload(event_type: str, payload: object) -> None:
             or not isinstance(payload["row_version"], int)
             or payload["row_version"] < 1
         ):
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        return
+    if event_type in _PAPER_VERSION_EVENTS:
+        if set(payload) != {
+            "paper_version_id", "paper_id", "source_snapshot_id", "row_version",
+            "old_context_parse_artifact_id", "new_context_parse_artifact_id",
+        }:
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        if not isinstance(payload["row_version"], int) or payload["row_version"] < 1:
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        return
+    if event_type in _VERSION_RELATION_EVENTS:
+        if set(payload) != {
+            "relation_id", "later_paper_version_id",
+            "earlier_paper_version_id", "row_version",
+        }:
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        if not isinstance(payload["row_version"], int) or payload["row_version"] < 1:
             raise ValueError("COMMAND_VALIDATION_FAILED")
         return
     if event_type not in _ENTITY_MUTATION_EVENTS:

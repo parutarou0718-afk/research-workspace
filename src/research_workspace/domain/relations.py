@@ -21,7 +21,9 @@ from research_workspace.domain.enums import (
 RelationKey: TypeAlias = tuple[str, str, str, str, str]
 
 _SYMMETRIC = frozenset({"contradicts", "related_to"})
-_RELATION_TYPES = frozenset(item.value for item in RelationType)
+_RELATION_TYPES = frozenset(item.value for item in RelationType) | {
+    "version_successor_of"
+}
 _ENTITY_TYPES = frozenset(item.value for item in RelationEntityType)
 _ACTOR_TYPES = frozenset(item.value for item in ActorType)
 _PROVENANCE_TYPES = frozenset(item.value for item in ProvenanceType)
@@ -59,6 +61,7 @@ _ALLOWED_ENDPOINTS: dict[str, frozenset[tuple[str, str]]] = {
     "suggested_for": frozenset({("Idea", "Paper")}),
     "split_from": frozenset({("Paper", "Paper")}),
     "merged_from": frozenset({("Paper", "Paper")}),
+    "version_successor_of": frozenset({("PaperVersion", "PaperVersion")}),
 }
 
 

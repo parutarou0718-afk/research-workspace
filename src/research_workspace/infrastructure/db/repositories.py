@@ -50,6 +50,10 @@ from research_workspace.application.services.command_dispatcher import DomainMut
 from research_workspace.application.commands.manage_submission import (
     is_submission_transition_allowed,
 )
+from research_workspace.application.services.relation_graph import (
+    VersionEdge,
+    create_successor_relation,
+)
 from research_workspace.application.dto.recovery_dto import VerifiedRecoveryPoint
 from research_workspace.infrastructure.db.models import (
     ApplicationCommandModel,
@@ -345,6 +349,12 @@ class SqlGate1WriteRepository:
         self._session = session
 
     def apply_mutation(self, mutation: DomainMutation, command_id: UUID) -> None:
+        if mutation.entity_type == "PaperVersion":
+            self._apply_paper_version(mutation, command_id)
+            return
+        if mutation.entity_type == "EntityRelation":
+            self._apply_version_relation(mutation, command_id)
+            return
         if mutation.entity_type == "Submission":
             self._apply_submission(mutation, command_id)
             return
@@ -436,6 +446,156 @@ class SqlGate1WriteRepository:
         )
         if result.rowcount != 1:
             raise ValueError("CONCURRENT_MODIFICATION")
+
+    def _apply_paper_version(
+        self, mutation: DomainMutation, command_id: UUID
+    ) -> None:
+        after = self._mutation_fields(mutation)
+        paper_id = UUID(after["paper_id"])
+        snapshot_id = UUID(after["source_snapshot_id"])
+        context_id = (
+            UUID(after["context_parse_artifact_id"])
+            if after["context_parse_artifact_id"] else None
+        )
+        paper = self._session.get(PaperModel, paper_id)
+        snapshot = self._session.get(SourceSnapshotModel, snapshot_id)
+        if paper is None or paper.deleted_at is not None or snapshot is None:
+            raise ValueError("INVALID_VERSION_ASSIGNMENT")
+        if context_id is not None:
+            artifact = self._session.get(ParseArtifactModel, context_id)
+            if (
+                artifact is None or artifact.source_snapshot_id != snapshot_id
+                or artifact.status != "succeeded"
+            ):
+                raise ValueError("INVALID_VERSION_ASSIGNMENT")
+        now = datetime.now(timezone.utc)
+        retracted_at = self._parsed_time(after["retracted_at"])
+        if mutation.operation == "confirm":
+            self._session.add(PaperVersionModel(
+                id=mutation.entity_id, paper_id=paper_id,
+                source_snapshot_id=snapshot_id,
+                context_parse_artifact_id=context_id,
+                version_label=after["version_label"],
+                normalized_version_label=after["normalized_version_label"],
+                lifecycle_state="active", row_version=1, created_at=now,
+                confirmed_by_command_id=command_id, updated_at=now,
+                updated_by_command_id=command_id, retracted_at=None,
+                retracted_by_command_id=None,
+            ))
+            self._session.flush()
+            return
+        version = self._session.get(PaperVersionModel, mutation.entity_id)
+        if version is None:
+            raise ValueError("INVALID_VERSION_ASSIGNMENT")
+        if mutation.operation == "retract":
+            active_edges = self._active_version_edge_count(version.id)
+            active_submissions = self._session.scalar(
+                select(func.count(SubmissionModel.id)).where(
+                    SubmissionModel.deleted_at.is_(None),
+                    SubmissionModel.active_version_id == version.id,
+                )
+            )
+            if (
+                paper.current_version_id == version.id
+                or active_edges or active_submissions
+            ):
+                raise ValueError("VERSION_RETRACTION_DEPENDENCY_CONFLICT")
+        result = self._session.execute(
+            update(PaperVersionModel).where(
+                PaperVersionModel.id == version.id,
+                PaperVersionModel.row_version == mutation.expected_row_version,
+            ).values(
+                context_parse_artifact_id=context_id,
+                lifecycle_state=after["lifecycle_state"],
+                row_version=mutation.expected_row_version + 1,
+                updated_at=now, updated_by_command_id=command_id,
+                retracted_at=retracted_at,
+                retracted_by_command_id=command_id if retracted_at else None,
+            )
+        )
+        if result.rowcount != 1:
+            raise ValueError("CONCURRENT_MODIFICATION")
+
+    def _apply_version_relation(
+        self, mutation: DomainMutation, command_id: UUID
+    ) -> None:
+        fields = self._mutation_fields(mutation)
+        if (
+            fields["relation_type"] != "version_successor_of"
+            or fields["source_type"] != "PaperVersion"
+            or fields["target_type"] != "PaperVersion"
+        ):
+            raise ValueError("INVALID_VERSION_RELATION_ENDPOINT")
+        later = self._session.get(PaperVersionModel, UUID(fields["source_id"]))
+        earlier = self._session.get(PaperVersionModel, UUID(fields["target_id"]))
+        if later is None or earlier is None:
+            raise ValueError("INVALID_VERSION_RELATION_ENDPOINT")
+        rows = self._session.scalars(
+            select(EntityRelationModel).where(
+                EntityRelationModel.relation_type == "version_successor_of",
+                EntityRelationModel.lifecycle_state == "active",
+                EntityRelationModel.source_type == "PaperVersion",
+                EntityRelationModel.source_id.in_(
+                    select(PaperVersionModel.id).where(
+                        PaperVersionModel.paper_id == later.paper_id
+                    )
+                ),
+            )
+        ).all()
+        edges = tuple(
+            VersionEdge(row.id, later.paper_id, row.source_id, row.target_id)
+            for row in rows
+        )
+        create_successor_relation(
+            command_id,
+            self._version_record(later),
+            self._version_record(earlier),
+            edges,
+            mutation.entity_id,
+            datetime.now(timezone.utc),
+        )
+        now = datetime.now(timezone.utc)
+        self._session.add(EntityRelationModel(
+            id=mutation.entity_id, source_type="PaperVersion",
+            source_id=later.id, relation_type="version_successor_of",
+            target_type="PaperVersion", target_id=earlier.id, confidence=None,
+            confirmation_state="confirmed", lifecycle_state="active",
+            superseded_by_relation_id=None, created_by_actor_type="user",
+            created_by_actor_id=None, created_by_command_id=command_id,
+            row_version=1, created_at=now, updated_at=now,
+            retracted_at=None, retracted_by_command_id=None,
+        ))
+        self._session.flush()
+
+    @staticmethod
+    def _mutation_fields(mutation: DomainMutation) -> dict[str, object]:
+        if mutation.after_snapshot is None:
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+        return __import__("json").loads(mutation.after_snapshot)["fields"]
+
+    def _active_version_edge_count(self, version_id: UUID) -> int:
+        return int(self._session.scalar(
+            select(func.count(EntityRelationModel.id)).where(
+                EntityRelationModel.relation_type == "version_successor_of",
+                EntityRelationModel.lifecycle_state == "active",
+                or_(
+                    EntityRelationModel.source_id == version_id,
+                    EntityRelationModel.target_id == version_id,
+                ),
+            )
+        ) or 0)
+
+    @staticmethod
+    def _version_record(row: PaperVersionModel):
+        from research_workspace.domain.versioning import PaperVersionRecord
+        return PaperVersionRecord(
+            row.id, row.paper_id, row.source_snapshot_id,
+            row.context_parse_artifact_id, row.version_label,
+            row.normalized_version_label, row.lifecycle_state, row.row_version,
+            row.created_at, row.confirmed_by_command_id, row.updated_at,
+            row.updated_by_command_id, row.retracted_at,
+            row.retracted_by_command_id,
+        )
 
     def _apply_submission(
         self, mutation: DomainMutation, command_id: UUID
