@@ -1,10 +1,135 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<ui version="4.0"><class>PapersPage</class>
- <widget class="QWidget" name="papersPage"><layout class="QVBoxLayout" name="papersRootVerticalLayout"><property name="leftMargin"><number>0</number></property><property name="topMargin"><number>0</number></property><property name="rightMargin"><number>0</number></property><property name="bottomMargin"><number>0</number></property>
-  <item><widget class="QScrollArea" name="papersScrollArea"><property name="widgetResizable"><bool>true</bool></property><property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOff</enum></property><property name="verticalScrollBarPolicy"><enum>Qt::ScrollBarAsNeeded</enum></property><widget class="QWidget" name="papersContentWidget"><property name="minimumSize"><size><width>0</width><height>780</height></size></property><layout class="QVBoxLayout" name="papersContentVerticalLayout">
-   <item><widget class="QLabel" name="pageTitleLabel"><property name="text"><string>论文</string></property></widget></item>
-   <item><widget class="QLabel" name="pageSubtitleLabel"><property name="text"><string>管理论文及其当前版本</string></property></widget></item>
-   <item><layout class="QHBoxLayout" name="papersActionHorizontalLayout"><item><widget class="QPushButton" name="newPaperButton"><property name="text"><string>新建论文</string></property></widget></item><item><widget class="QPushButton" name="editPaperButton"><property name="text"><string>编辑</string></property></widget></item><item><widget class="QPushButton" name="deletePaperButton"><property name="text"><string>移入已删除</string></property></widget></item><item><widget class="QPushButton" name="restorePaperButton"><property name="text"><string>恢复</string></property></widget></item></layout></item>
-   <item><widget class="QTableWidget" name="papersTable"><property name="columnCount"><number>4</number></property><column><property name="text"><string>标题</string></property></column><column><property name="text"><string>状态</string></property></column><column><property name="text"><string>版本</string></property></column><column><property name="text"><string>并发版本</string></property></column></widget></item>
-  </layout></widget></widget></item>
- </layout></widget><resources/><connections/></ui>
+<ui version="4.0">
+ <class>PapersPage</class>
+ <widget class="QWidget" name="papersPage">
+  <layout class="QVBoxLayout" name="papersRootVerticalLayout">
+   <property name="leftMargin"><number>0</number></property>
+   <property name="topMargin"><number>0</number></property>
+   <property name="rightMargin"><number>0</number></property>
+   <property name="bottomMargin"><number>0</number></property>
+   <item>
+    <widget class="QScrollArea" name="papersScrollArea">
+     <property name="widgetResizable"><bool>true</bool></property>
+     <property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOff</enum></property>
+     <property name="verticalScrollBarPolicy"><enum>Qt::ScrollBarAsNeeded</enum></property>
+     <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+     <widget class="QWidget" name="papersContentWidget">
+      <property name="minimumSize"><size><width>0</width><height>920</height></size></property>
+      <layout class="QVBoxLayout" name="papersContentVerticalLayout">
+       <property name="leftMargin"><number>24</number></property>
+       <property name="topMargin"><number>24</number></property>
+       <property name="rightMargin"><number>24</number></property>
+       <property name="bottomMargin"><number>24</number></property>
+       <property name="spacing"><number>20</number></property>
+       <item>
+        <layout class="QHBoxLayout" name="papersHeroHorizontalLayout">
+         <property name="spacing"><number>16</number></property>
+         <item>
+          <layout class="QVBoxLayout" name="papersTitleVerticalLayout">
+           <property name="spacing"><number>4</number></property>
+           <item><widget class="QLabel" name="pageTitleLabel"><property name="text"><string>论文</string></property></widget></item>
+           <item><widget class="QLabel" name="pageSubtitleLabel"><property name="text"><string>管理论文、笔记、关系和后续 AI 分析入口。</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+          </layout>
+         </item>
+         <item><spacer name="papersHeroSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+         <item><widget class="QPushButton" name="newPaperButton"><property name="variant"><string>primary</string></property><property name="text"><string>+ 新增论文</string></property></widget></item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QFrame" name="papersToolbarCard">
+         <property name="component"><string>toolbar</string></property>
+         <layout class="QHBoxLayout" name="papersToolbarHorizontalLayout">
+          <property name="leftMargin"><number>16</number></property>
+          <property name="topMargin"><number>14</number></property>
+          <property name="rightMargin"><number>16</number></property>
+          <property name="bottomMargin"><number>14</number></property>
+          <property name="spacing"><number>10</number></property>
+          <item><widget class="QLineEdit" name="paperSearchLineEdit"><property name="component"><string>search</string></property><property name="placeholderText"><string>搜索论文、作者或标签</string></property></widget></item>
+          <item><widget class="QPushButton" name="paperStatusFilterButton"><property name="variant"><string>secondary</string></property><property name="text"><string>状态</string></property></widget></item>
+          <item><widget class="QPushButton" name="paperYearFilterButton"><property name="variant"><string>secondary</string></property><property name="text"><string>年份</string></property></widget></item>
+          <item><widget class="QPushButton" name="paperTagFilterButton"><property name="variant"><string>secondary</string></property><property name="text"><string>标签</string></property></widget></item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QFrame" name="papersEmptyStateCard">
+         <property name="component"><string>emptyState</string></property>
+         <layout class="QVBoxLayout" name="papersEmptyStateVerticalLayout">
+          <property name="leftMargin"><number>28</number></property>
+          <property name="topMargin"><number>28</number></property>
+          <property name="rightMargin"><number>28</number></property>
+          <property name="bottomMargin"><number>28</number></property>
+          <property name="spacing"><number>10</number></property>
+          <item><widget class="QLabel" name="papersEmptyIconLabel"><property name="text"><string>□</string></property></widget></item>
+          <item><widget class="QLabel" name="papersEmptyTitleLabel"><property name="text"><string>No papers yet.</string></property></widget></item>
+          <item><widget class="QLabel" name="papersEmptyBodyLabel"><property name="text"><string>Import or create your first paper to start building your research workspace.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+          <item><widget class="QPushButton" name="papersEmptyActionButton"><property name="variant"><string>primary</string></property><property name="text"><string>Create Paper</string></property></widget></item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="papersWorkspaceHorizontalLayout">
+         <property name="spacing"><number>16</number></property>
+         <item>
+          <widget class="QFrame" name="papersListCard">
+           <property name="component"><string>card</string></property>
+           <layout class="QVBoxLayout" name="papersListVerticalLayout">
+            <property name="leftMargin"><number>20</number></property>
+            <property name="topMargin"><number>20</number></property>
+            <property name="rightMargin"><number>20</number></property>
+            <property name="bottomMargin"><number>20</number></property>
+            <property name="spacing"><number>12</number></property>
+            <item><widget class="QLabel" name="papersListTitleLabel"><property name="text"><string>Paper List</string></property></widget></item>
+            <item><widget class="QListWidget" name="papersListView"><property name="minimumSize"><size><width>360</width><height>520</height></size></property><property name="selectionMode"><enum>QAbstractItemView::SingleSelection</enum></property></widget></item>
+            <item>
+             <layout class="QHBoxLayout" name="papersActionHorizontalLayout">
+              <property name="spacing"><number>8</number></property>
+              <item><widget class="QPushButton" name="editPaperButton"><property name="variant"><string>secondary</string></property><property name="text"><string>编辑</string></property></widget></item>
+              <item><widget class="QPushButton" name="deletePaperButton"><property name="variant"><string>danger</string></property><property name="text"><string>移入已删除</string></property></widget></item>
+              <item><widget class="QPushButton" name="restorePaperButton"><property name="variant"><string>secondary</string></property><property name="text"><string>恢复</string></property></widget></item>
+             </layout>
+            </item>
+           </layout>
+          </widget>
+         </item>
+         <item>
+          <widget class="QFrame" name="paperDetailCard">
+           <property name="component"><string>card</string></property>
+           <layout class="QVBoxLayout" name="paperDetailVerticalLayout">
+            <property name="leftMargin"><number>20</number></property>
+            <property name="topMargin"><number>20</number></property>
+            <property name="rightMargin"><number>20</number></property>
+            <property name="bottomMargin"><number>20</number></property>
+            <property name="spacing"><number>12</number></property>
+            <item><widget class="QLabel" name="paperDetailTitleLabel"><property name="text"><string>选择一篇论文</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+            <item><widget class="QLabel" name="paperStatusBadgeLabel"><property name="badge"><string>draft</string></property><property name="text"><string>Draft</string></property></widget></item>
+            <item><widget class="QLabel" name="paperMetadataTitleLabel"><property name="text"><string>Metadata</string></property></widget></item>
+            <item><widget class="QLabel" name="paperMetadataTextLabel"><property name="text"><string>Year, authors and version metadata will appear here.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+            <item><widget class="QLabel" name="paperAbstractTitleLabel"><property name="text"><string>Abstract</string></property></widget></item>
+            <item><widget class="QLabel" name="paperAbstractTextLabel"><property name="text"><string>No abstract captured yet.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+            <item><widget class="QLabel" name="paperResearchNotesTitleLabel"><property name="text"><string>Research Notes</string></property></widget></item>
+            <item><widget class="QLabel" name="paperResearchNotesTextLabel"><property name="text"><string>Notes linked to this paper will appear here.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+            <item><widget class="QLabel" name="paperTimelineTitleLabel"><property name="text"><string>Timeline</string></property></widget></item>
+            <item><widget class="QLabel" name="paperTimelineTextLabel"><property name="text"><string>Creation, edits and decisions will appear here.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+            <item><widget class="QLabel" name="paperAiSummaryTitleLabel"><property name="text"><string>AI Summary</string></property></widget></item>
+            <item><widget class="QLabel" name="paperAiSummaryTextLabel"><property name="text"><string>AI analysis is not enabled in this build. This panel reserves the future summary slot.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+            <item><widget class="QLabel" name="paperRelatedIdeasTitleLabel"><property name="text"><string>Related Ideas</string></property></widget></item>
+            <item><widget class="QLabel" name="paperRelatedIdeasTextLabel"><property name="text"><string>No related ideas yet.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+            <item><widget class="QLabel" name="paperRelatedPapersTitleLabel"><property name="text"><string>Related Papers</string></property></widget></item>
+            <item><widget class="QLabel" name="paperRelatedPapersTextLabel"><property name="text"><string>No related papers yet.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+            <item><widget class="QLabel" name="paperRelationsTitleLabel"><property name="text"><string>Relations</string></property></widget></item>
+            <item><widget class="QLabel" name="paperRelationsTextLabel"><property name="text"><string>Known relations and evidence will appear here.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+           </layout>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
