@@ -1,153 +1,289 @@
-# 科研工作台 / Research Workspace
+# Research Workspace
 
-Research Workspace v0.1 is a local-first Windows desktop foundation for
-recovering research context. It uses Python 3.12, PySide6, SQLite, SQLAlchemy,
-and Alembic. The application starts and initializes its workspace without
-network access.
+Research Workspace is a local-first Windows desktop app for turning research
+papers into structured notes, ideas, and follow-up work. The Build Week demo
+focuses on one clear story:
 
-Gate 2 adds user-selected incremental directory monitoring and a read-only
-version-candidate view. Filesystem events trigger bounded verification rather
-than periodic full scans; candidate confirmation and other Gate 3 decisions
-are not available in this version.
+```text
+Create or import a paper
+→ inspect the paper workspace
+→ analyze the paper with an OpenAI-compatible model
+→ turn a suggested idea into a saved research idea
+```
 
-## Requirements and startup
+The project is built with Python 3.12, PySide6, SQLite, SQLAlchemy, Alembic,
+PyInstaller, and an OpenAI-compatible AI provider interface.
 
-Install Python 3.12 and `uv`, then create the exact locked environment and start
-the desktop application:
+## Build Week demo status
+
+The English Build Week branch is:
+
+```text
+build/v0.2-personal-portable
+```
+
+The English demo tag is:
+
+```text
+v0.3-buildweek-en
+```
+
+The Windows portable package is built as a ZIP containing:
+
+```text
+app/ResearchWorkspace.exe
+```
+
+The app does not require a local Python installation after packaging.
+
+Current local English portable build:
+
+```text
+E:\research assistant\portable-output-ai01\ResearchWorkspace-v0.2-personal-win64.zip
+```
+
+SHA-256:
+
+```text
+db2178fc219d78c60d183c2b47cccdac9182d1a781edbd0bf0238049a115db6a
+```
+
+Smoke result:
+
+```text
+ResearchWorkspace.exe started: true
+CloseMainWindow: true
+Exit code: 0
+```
+
+## Features in the demo
+
+- Local SQLite workspace initialization
+- Paper workspace with card/list layout and detail panel
+- Idea Library and Idea Detail views
+- Settings page with OpenAI-compatible AI configuration
+- AI Settings:
+  - provider label
+  - configurable base URL
+  - masked API key
+  - configurable model
+  - Save Settings
+  - Test Connection
+- Paper Detail research analysis states:
+  - not configured
+  - ready
+  - loading
+  - success
+  - failure
+- Structured AI analysis:
+  - Summary
+  - Key Claims
+  - Suggested Ideas
+- Suggested idea handoff into the existing Create Idea dialog
+- No automatic idea saving; the user reviews and saves normally
+
+## How I collaborated with Codex
+
+This project was built through an iterative collaboration with Codex and
+GPT-5.6. Codex was not used as a one-shot code generator. Instead, I treated it
+as a product-engineering partner that could help me move between architecture,
+implementation, UI iteration, packaging, and release preparation while I made
+the key product decisions.
+
+### My role in the collaboration
+
+I directed the product vision and the decision-making. The main product
+direction was:
+
+- build a real research workspace, not a generic chatbot;
+- keep AI as an enhancement layer inside the research workflow;
+- make the demo story understandable in under three minutes;
+- prioritize Paper → AI → Idea over adding many unrelated pages;
+- keep English Build Week and Chinese friend-use builds as separate versions;
+- ship a Windows portable EXE instead of asking judges to run from source.
+
+I also made the major scope decisions throughout the project:
+
+- Gate 1 focused on deterministic import and parsing.
+- Gate 2 focused on monitoring and version candidates.
+- Gate 3 focused on protected CRUD, audit, undo, relations, and UI.
+- Build Week work shifted into Product Mode, where each page or interaction was
+  reviewed visually and committed in small reversible steps.
+- The AI slice was intentionally kept small: no chat UI, no streaming, no RAG,
+  no embeddings, no multi-provider UI, and no automatic idea creation.
+
+### Where Codex accelerated the workflow
+
+Codex accelerated the project in several concrete ways:
+
+1. **Architecture and boundary control**
+
+   Codex helped maintain strict boundaries between Presentation, Application,
+   Infrastructure, Domain, Repository, Migration, Undo, Recovery, and Worker
+   code. When a task risked crossing those boundaries, the workflow paused for a
+   specification stop instead of silently changing the architecture.
+
+2. **Test-driven implementation**
+
+   Most major backend and UI changes were implemented by writing or identifying
+   failing tests first, observing the real RED state, then making the smallest
+   useful GREEN change. This kept the project from turning into uncontrolled
+   “vibe coding.”
+
+3. **Large-scale verification**
+
+   Codex repeatedly ran focused tests, UI regression tests, Gate acceptance
+   tests, full pytest suites, `git diff --check`, and clean `git status`
+   checks. The current AI demo commit passed:
+
+   ```text
+   Focused AI tests: 11 passed
+   Focused UI / Gate3 UI regression: 34 passed
+   Full suite: 1168 passed
+   ```
+
+4. **UI and product iteration**
+
+   Codex helped rapidly iterate from a traditional Qt-looking app into a more
+   polished Research Workspace interface. I reviewed screenshots, rejected
+   layouts that felt too database-like, and redirected the work toward a design
+   system, Paper workspace, Idea Library, and clear “Next Step” guidance.
+
+5. **Packaging and release preparation**
+
+   Codex helped create and validate the PyInstaller portable build path,
+   inspect package contents, produce a ZIP artifact, smoke-test the EXE startup,
+   and push the English Build Week branch and tags to GitHub.
+
+### How GPT-5.6 and Codex contributed to the final result
+
+GPT-5.6 was most useful as the reasoning layer behind Codex. It helped connect
+product intent to concrete engineering steps: for example, translating “the
+demo should be Paper → AI → Idea” into a vendor-neutral AI provider interface,
+settings UI, Paper Detail state machine, structured response validation, and
+existing Idea dialog handoff.
+
+Codex contributed the execution loop:
+
+```text
+product direction
+→ implementation plan
+→ focused tests
+→ code changes
+→ UI screenshots
+→ full regression
+→ commit
+→ stop for review
+```
+
+That loop made it possible to move quickly without losing control of the code
+base. The final Build Week result is not just an AI prompt wrapped in a UI; it
+is a runnable desktop research workspace with persistent local data, a
+structured paper-to-idea workflow, and a minimal AI layer that fits naturally
+into that workflow.
+
+## Architecture overview
+
+The Build Week AI slice follows this boundary:
+
+```text
+Presentation
+→ Application
+→ AIProvider interface
+→ OpenAI-compatible provider implementation
+```
+
+Presentation and Application code do not import OpenAI-specific SDK classes.
+The current implementation uses a small OpenAI-compatible HTTP provider and a
+strict structured response model:
+
+```text
+PaperAnalysis
+- summary
+- key_claims
+- suggested_ideas
+  - title
+  - content
+```
+
+The AI flow does not modify Domain entities, repositories, migrations, undo,
+recovery, submission logic, or relation logic. Suggested ideas are passed into
+the existing Create Idea dialog and are not saved automatically.
+
+## Running from source
+
+Install Python 3.12 and `uv`, then run:
 
 ```powershell
 uv sync --locked
 uv run python app.py
 ```
 
-The project metadata intentionally requires Python `>=3.12,<3.13`.
-
-## Database migrations
-
-The application applies the Alembic migration automatically when it initializes
-a new workspace. To apply the locked migration explicitly from the repository
-root, run:
+Run the full test suite:
 
 ```powershell
-uv run alembic upgrade head
-```
-
-The migration is repeatable. The local data directory can be changed in
-Settings; a successful change becomes active only after restart, while the old
-directory remains untouched.
-
-## Tests
-
-Qt tests run headlessly on Windows with the offscreen platform:
-
-```powershell
-$env:QT_QPA_PLATFORM='offscreen'
 uv run pytest -q
 ```
 
-Run the commercial-license release check separately when reviewing dependency
-changes:
+## Building the Windows portable ZIP
+
+From the repository root:
 
 ```powershell
-uv run pytest tests/acceptance/test_license_policy.py -v
+powershell -ExecutionPolicy Bypass -File packaging\windows\build_portable.ps1 `
+  -OutputRoot "E:\research assistant\portable-output-ai01" `
+  -IconPath "C:\path\to\app-icon.png"
 ```
 
-The check compares the installed inventory with every third-party distribution
-in `uv.lock`, excludes only the first-party `research-workspace` distribution,
-and fails closed for empty, unknown, GPL, AGPL, or unreviewed licenses. LGPL is
-allowed only for the four Qt runtime distributions recorded in
-`THIRD_PARTY_NOTICES.md`.
+The script creates a PyInstaller `onedir` package and a ZIP containing
+`app/ResearchWorkspace.exe`.
 
-## Third-party inventory
+## Project scope and non-goals
 
-Regenerate the inventory from the locked Python 3.12 environment with this exact
-command:
+Included in the Build Week demo:
 
-```powershell
-uv run pip-licenses --format=markdown --with-urls --with-license-file
-```
+- local desktop app;
+- persistent workspace data;
+- Paper and Idea demo flow;
+- OpenAI-compatible paper analysis;
+- suggested idea handoff;
+- Windows portable EXE packaging.
 
-On a Windows console that is not UTF-8, set `PYTHONUTF8=1` or use the tool's
-UTF-8 `--output-file` option. `pip-licenses` omits itself, `prettytable`, and
-`wcwidth`; their locked name, version, license, and URL must remain in the
-supplementary table in `THIRD_PARTY_NOTICES.md`.
+Not included in the Build Week demo:
 
-## v0.1 verification record
+- chat UI;
+- streaming;
+- RAG;
+- embeddings;
+- multi-provider UI;
+- automatic idea saving;
+- Submission workflow expansion;
+- Relation graph expansion;
+- cloud sync;
+- installer;
+- auto-update;
+- digital signing.
 
-The foundation milestone was re-verified on 2026-07-16 with Python 3.12.10,
-pytest 9.1.1, PySide6 6.11.1, and Qt 6.11.1. These commands and results were
-observed from the locked environment:
+## Version plan
 
-```powershell
-uv lock --check
-# PASS: exit 0; 31 locked packages resolved without changing uv.lock
+Two versions are planned:
 
-uv run pytest tests/acceptance/test_environment.py tests/acceptance/test_repository_structure.py tests/contracts -v
-# PASS: 77 passed
+1. **English Build Week version**
+   - branch: `build/v0.2-personal-portable`
+   - tag: `v0.3-buildweek-en`
+   - target: Devpost / judges / demo video
 
-uv run pytest tests/unit tests/integration -v
-# PASS: 415 passed
+2. **Chinese friend-use version**
+   - planned branch: `localization/zh-cn-friend`
+   - target: a separate Chinese portable ZIP
+   - scope: UI text and packaging only, not business logic changes
 
-$env:QT_QPA_PLATFORM='offscreen'
-uv run pytest tests/ui tests/acceptance -v --disable-socket
-# PASS: 52 passed, including the license-policy check
+Keeping these as separate versions avoids mixing Build Week English submission
+requirements with the friend-facing Chinese build.
 
-$env:QT_QPA_PLATFORM='offscreen'
-uv run pytest -q
-# PASS: 542 passed
+## Release note
 
-uv run python -m compileall -q app.py src tests migrations
-git diff --check
-# PASS: both commands exited 0 with no output
-```
-
-The Task 1 SHA-256 capture matched all eight immutable research, design, and UI
-assets. The six Task 2 contract files matched the approved normative content.
-No new reproducible defect was found during this verification.
-
-## Release blocker and scope ledger
-
-- **REL-GATE-001 — Windows mixed-DPI manual release verification**
-  - Type: manual release verification
-  - Status: `BLOCKED_BY_ENVIRONMENT`
-  - Blocks: public packaged release only
-  - Does not block: v0.2 internal development
-
-  Native Windows mixed-monitor visual smoke and
-  screenshots for a live 100%→125%→150%→100% move remain unverified. No
-  packaged development executable or verified multi-scale monitor set was
-  available. Automated offscreen geometry tests passed at 100%, 125%, and
-  150%, but they do not prove native font rasterization or monitor transitions.
-- **Explicit v0.1 non-goals are not bugs:** the capabilities listed below were
-  deliberately excluded from the foundation milestone and must not be logged
-  as reproduced defects.
-- **Technical risks:** no additional evidence-based technical risk was
-  reproduced during this verification.
-
-Complete release readiness is not claimed while the manual mixed-DPI gate is
-unresolved.
-
-## Current v0.2 Gate 1 functions
-
-- Eight reachable desktop destinations: Overview, Papers, Ideas, Submissions,
-  Imports, Conferences, Grants, and Settings.
-- Overview and Imports are backed by application queries.
-- The Imports page creates local immutable snapshots and deterministically
-  parses user-selected DOCX, PDF, and PPTX files outside the UI thread.
-- Papers, Ideas, and Submissions are foundation placeholders.
-- Conference and Grant pages shown as noninteractive coming-soon views.
-- Workspace initialization, repeatable migrations, idempotent seed data, and a
-  restart-safe data-directory preference.
-- Offline startup, schema/contract validation, task policy contracts, and
-  responsive offscreen Qt coverage at 100%, 125%, and 150% scale factors.
-
-## Explicit non-goals
-
-Gate 1 does not implement file monitoring, paper creation forms, Idea editing,
-submission CRUD, version comparison, AI
-providers, context recovery, semantic search, real Agent execution,
-email/calendar integration, OCR, cloud sync, or a public installer. Conference
-and Grant workflows are placeholders, not interactive product functions.
-
-Original research and design files are never overwritten by application or AI
-workflows.
+This is a Build Week demo build, not a public production release. The app is
+intended to be tested as a Windows portable ZIP. Public release readiness,
+installer work, signing, automatic updates, and broader distribution hardening
+remain future work.
