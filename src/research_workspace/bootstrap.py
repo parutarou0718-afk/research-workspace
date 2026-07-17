@@ -20,6 +20,14 @@ from sqlalchemy.orm import Session
 from research_workspace.application.ports.config_store import AppConfig
 from research_workspace.application.dto.import_dto import ImportRequest
 from research_workspace.application.queries.get_imports import GetImports, ImportReadRecord
+from research_workspace.application.queries.get_monitoring import GetMonitoringDashboard
+from research_workspace.application.queries.get_version_candidates import (
+    GetVersionCandidates,
+)
+from research_workspace.application.commands.manage_monitoring_root import (
+    ManageMonitoringRoot,
+    MonitoringRootError,
+)
 from research_workspace.application.queries.get_overview import GetOverview
 from research_workspace.application.services.change_data_directory import (
     ChangeDataDirectory,
@@ -36,7 +44,10 @@ from research_workspace.infrastructure.db.models import (
     SourceDocumentModel,
     SourceObservationModel,
 )
-from research_workspace.infrastructure.db.repositories import SqlOverviewRepository
+from research_workspace.infrastructure.db.repositories import (
+    SqlMonitoringRepository,
+    SqlOverviewRepository,
+)
 from research_workspace.infrastructure.db.seed import seed_foundation_data
 from research_workspace.infrastructure.db.session import create_engine_for_path, session_factory
 from research_workspace.infrastructure.db.write_coordinator import SqlWriteCoordinator
@@ -83,6 +94,9 @@ class ApplicationServices:
     change_data_directory: ChangeDataDirectory
     get_overview: GetOverview
     get_imports: GetImports
+    get_monitoring: GetMonitoringDashboard
+    get_version_candidates: GetVersionCandidates
+    monitoring_actions: object
     create_import_request: Callable[[tuple[Path, ...]], ImportRequest]
     engine: Engine
     session: Session
@@ -101,6 +115,52 @@ class ApplicationServices:
             self.session.close()
             self.engine.dispose()
             self.closed = True
+
+
+class _MonitoringActions:
+    """Local UI composition adapter around the approved application command."""
+
+    def __init__(self, manager, repository, workspace_id) -> None:
+        self._manager = manager
+        self._repository = repository
+        self._workspace_id = workspace_id
+
+    def _context(self, path: Path, root_id) -> PermissionContext:
+        path_hash = normalized_path_hash(path)
+        return PermissionContext(
+            "1.0",
+            "user",
+            "local-user",
+            self._workspace_id,
+            ("source.observe.request",),
+            (path_hash,),
+            (PathScope("monitoring_root", path_hash, root_id, "list", True),),
+            False,
+            datetime.now(timezone.utc),
+            "gate2-local-ui-1.0",
+            uuid4(),
+        )
+
+    def add(self, path: Path) -> None:
+        self._manager.add(path, self._context(path, uuid4()))
+
+    def _existing(self, root_id):
+        root = self._repository.get_root(root_id)
+        if root is None:
+            raise MonitoringRootError("MONITOR_ROOT_NOT_FOUND")
+        return root
+
+    def pause(self, root_id) -> None:
+        root = self._existing(root_id)
+        self._manager.pause(root_id, self._context(root.original_path, root_id))
+
+    def resume(self, root_id) -> None:
+        root = self._existing(root_id)
+        self._manager.resume(root_id, self._context(root.original_path, root_id))
+
+    def remove(self, root_id) -> None:
+        root = self._existing(root_id)
+        self._manager.remove(root_id, self._context(root.original_path, root_id))
 
 
 @dataclass(frozen=True, slots=True)
@@ -319,12 +379,23 @@ def bootstrap_application() -> BootstrapResult:
             operation_runner,
             parsers,
         )
+        monitoring_repository = SqlMonitoringRepository(session)
+        monitoring_actions = _MonitoringActions(
+            ManageMonitoringRoot(
+                data_directory, coordinator, monitoring_repository
+            ),
+            monitoring_repository,
+            coordinator.workspace_id(),
+        )
         services = ApplicationServices(
             config=state.config,
             config_store=config_store,
             change_data_directory=change_data_directory,
             get_overview=GetOverview(SqlOverviewRepository(session)),
             get_imports=GetImports(lambda: _read_import_records(factory)),
+            get_monitoring=GetMonitoringDashboard(factory),
+            get_version_candidates=GetVersionCandidates(factory),
+            monitoring_actions=monitoring_actions,
             create_import_request=lambda paths: _create_import_request(
                 tuple(paths), coordinator.workspace_id()
             ),
