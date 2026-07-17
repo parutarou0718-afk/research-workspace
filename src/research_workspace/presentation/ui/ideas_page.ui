@@ -99,9 +99,9 @@ QListWidget::item:selected { border-color: #4F7DFF; background: #EEF4FF; color: 
             <item>
              <layout class="QHBoxLayout" name="ideasActionHorizontalLayout">
               <property name="spacing"><number>8</number></property>
-              <item><widget class="QPushButton" name="editIdeaButton"><property name="variant"><string>secondary</string></property><property name="text"><string>编辑</string></property></widget></item>
-              <item><widget class="QPushButton" name="deleteIdeaButton"><property name="variant"><string>danger</string></property><property name="text"><string>移入已删除</string></property></widget></item>
-              <item><widget class="QPushButton" name="restoreIdeaButton"><property name="variant"><string>secondary</string></property><property name="text"><string>恢复</string></property></widget></item>
+              <item><widget class="QPushButton" name="editIdeaButton"><property name="variant"><string>secondary</string></property><property name="text"><string>Edit</string></property></widget></item>
+              <item><widget class="QPushButton" name="deleteIdeaButton"><property name="variant"><string>danger</string></property><property name="text"><string>Move to Trash</string></property></widget></item>
+              <item><widget class="QPushButton" name="restoreIdeaButton"><property name="variant"><string>secondary</string></property><property name="text"><string>Restore</string></property></widget></item>
              </layout>
             </item>
            </layout>
@@ -119,7 +119,7 @@ QListWidget::item:selected { border-color: #4F7DFF; background: #EEF4FF; color: 
               <property name="rightMargin"><number>24</number></property>
               <property name="bottomMargin"><number>24</number></property>
               <property name="spacing"><number>8</number></property>
-              <item><widget class="QLabel" name="ideaEmptyDetailTitleLabel"><property name="text"><string>Select an idea</string></property></widget></item>
+              <item><widget class="QLabel" name="ideaEmptyDetailTitleLabel"><property name="text"><string>Idea Detail</string></property></widget></item>
               <item><widget class="QLabel" name="ideaEmptyDetailBodyLabel"><property name="text"><string>Choose an idea from the library to inspect its notes, relations and next step.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
              </layout>
             </widget>

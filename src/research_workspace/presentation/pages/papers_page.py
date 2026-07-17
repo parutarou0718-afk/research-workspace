@@ -1,7 +1,16 @@
 """Thin Paper page controller."""
 
 from PySide6.QtCore import QSize, QThread
-from PySide6.QtWidgets import QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QScrollArea, QFrame
+from PySide6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QPushButton,
+    QScrollArea,
+)
 
 from research_workspace.presentation import load_ui_resource, require_child
 from research_workspace.presentation.dialogs.idea_editor_dialog import IdeaEditorDialog
@@ -46,6 +55,13 @@ class PapersPage(CrudPageController):
         self.empty_action_button = require_child(
             self.widget, QPushButton, "papersEmptyActionButton"
         )
+        self.workspace_layout = self.widget.findChild(
+            QHBoxLayout, "papersWorkspaceHorizontalLayout"
+        )
+        if self.workspace_layout is None:
+            raise RuntimeError("Missing required layout: papersWorkspaceHorizontalLayout")
+        self.workspace_layout.setStretch(0, 4)
+        self.workspace_layout.setStretch(1, 7)
         self.detail_card = require_child(self.widget, QFrame, "paperDetailCard")
         self.detail_title_label = require_child(
             self.widget, QLabel, "paperDetailTitleLabel"
@@ -139,7 +155,7 @@ class PapersPage(CrudPageController):
         for row in rows:
             item = QListWidgetItem(
                 f"{row.title}\n"
-                f"Authors pending | Year pending\n"
+                f"Authors not added | Year not added\n"
                 f"Status: {_status_label(row.status)} | Version {row.row_version}"
             )
             item.setSizeHint(QSize(0, 92))
@@ -188,7 +204,7 @@ class PapersPage(CrudPageController):
     def _update_detail(self) -> None:
         row = self._selected()
         if row is None:
-            self.detail_title_label.setText("选择一篇论文")
+            self.detail_title_label.setText("Select a paper")
             self.status_badge_label.setText("Draft")
             self.status_badge_label.setProperty("badge", "draft")
             self.metadata_text_label.setText("Year, authors and version metadata will appear here.")
@@ -199,18 +215,20 @@ class PapersPage(CrudPageController):
         self.status_badge_label.style().unpolish(self.status_badge_label)
         self.status_badge_label.style().polish(self.status_badge_label)
         self.metadata_text_label.setText(
-            f"Status: {_status_label(row.status)} · Row version: {row.row_version} · Current version: {row.current_version_id or 'None'}"
+            f"Status: {_status_label(row.status)}\n"
+            "Authors not added\n"
+            "Year not added"
         )
         self.abstract_text_label.setText("No abstract captured yet.")
         self.research_notes_text_label.setText("Notes linked to this paper will appear here.")
         self.timeline_text_label.setText("Creation, edits and decisions will appear here.")
         self.research_analysis_title_label.setText("Research Analysis")
         self.research_analysis_text_label.setText(
-            "No analysis yet.\n\n"
-            "Analyze this paper to generate:\n\n"
-            "• Summary\n\n"
-            "• Key claims\n\n"
-            "• Suggested ideas"
+            "No analysis yet.\n"
+            "Analyze this paper to generate:\n"
+            "• Summary\n"
+            "• Key Claims\n"
+            "• Suggested Ideas"
         )
         self.research_analysis_milestone_label.setText(
             "Available in the next milestone."

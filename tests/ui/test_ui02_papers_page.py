@@ -170,11 +170,11 @@ def test_paper_page_renders_cards_detail_and_search(qtbot):
     assert page.status_badge_label.text() == "Active"
     assert page.research_analysis_title_label.text() == "Research Analysis"
     assert page.research_analysis_text_label.text() == (
-        "No analysis yet.\n\n"
-        "Analyze this paper to generate:\n\n"
-        "• Summary\n\n"
-        "• Key claims\n\n"
-        "• Suggested ideas"
+        "No analysis yet.\n"
+        "Analyze this paper to generate:\n"
+        "• Summary\n"
+        "• Key Claims\n"
+        "• Suggested Ideas"
     )
     assert page.analyze_with_ai_button.text() == "Analyze with AI"
     assert page.analyze_with_ai_button.property("informational") is True

@@ -112,7 +112,7 @@ def test_paper_idea_submission_dialogs_call_only_approved_actions(qtbot) -> None
     assert [call[0] for call in services.crud_actions.calls] == [
         "create_paper", "create_idea", "create_submission",
     ]
-    assert paper.recovery_status_label.text() == "正在创建安全恢复点"
+    assert paper.recovery_status_label.text() == "Preparing a safe recovery point..."
 
 
 def test_crud_pages_are_real_lists_without_future_controls(qtbot) -> None:

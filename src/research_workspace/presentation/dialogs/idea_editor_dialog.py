@@ -30,21 +30,29 @@ class IdeaEditorDialog(ProtectedEditorDialog):
         )
         self.error_label = require_child(self, QLabel, "ideaErrorLabel")
         self._bind_operation_widgets(self.save_button, self.error_label)
-        self.status_combo.addItems(("unused", "used", "parked", "archived"))
+        for text, value in (
+            ("Unused", "unused"),
+            ("Used", "used"),
+            ("Parked", "parked"),
+            ("Archived", "archived"),
+        ):
+            self.status_combo.addItem(text, value)
         if record is not None:
             self.title_edit.setText(record.title)
             self.content_edit.setPlainText(record.content)
-            self.status_combo.setCurrentText(record.status)
+            index = self.status_combo.findData(record.status)
+            if index >= 0:
+                self.status_combo.setCurrentIndex(index)
         self.save_button.clicked.connect(self.save)
         self.cancel_button.clicked.connect(self.reject)
 
     def save(self) -> None:
-        self.recovery_status_label.setText("正在创建安全恢复点")
+        self.recovery_status_label.setText("Preparing a safe recovery point...")
         self.save_button.setEnabled(False)
         values = (
             self.title_edit.text(),
             self.content_edit.toPlainText(),
-            self.status_combo.currentText(),
+            self.status_combo.currentData(),
         )
         try:
             if self.record is None:

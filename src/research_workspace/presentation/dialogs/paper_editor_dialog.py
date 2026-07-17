@@ -32,7 +32,7 @@ class ProtectedEditorDialog(QDialog):
         if self.operation_handle.status == "completed":
             self.accept()
         else:
-            self.error_label.setText(f"操作未完成（{self.operation_handle.status}）")
+            self.error_label.setText(f"Operation did not complete: {self.operation_handle.status}")
 
     def reject(self) -> None:
         if self.operation_handle is not None and not self.operation_handle.done:
@@ -55,27 +55,35 @@ class PaperEditorDialog(ProtectedEditorDialog):
         )
         self.error_label = require_child(self, QLabel, "paperErrorLabel")
         self._bind_operation_widgets(self.save_button, self.error_label)
-        self.status_combo.addItems(
-            ("active", "paused", "revision", "submitted", "completed", "archived")
-        )
+        for text, value in (
+            ("Active", "active"),
+            ("Paused", "paused"),
+            ("Revision", "revision"),
+            ("Submitted", "submitted"),
+            ("Completed", "completed"),
+            ("Archived", "archived"),
+        ):
+            self.status_combo.addItem(text, value)
         if record is not None:
             self.title_edit.setText(record.title)
-            self.status_combo.setCurrentText(record.status)
+            index = self.status_combo.findData(record.status)
+            if index >= 0:
+                self.status_combo.setCurrentIndex(index)
         self.save_button.clicked.connect(self.save)
         self.cancel_button.clicked.connect(self.reject)
 
     def save(self) -> None:
-        self.recovery_status_label.setText("正在创建安全恢复点")
+        self.recovery_status_label.setText("Preparing a safe recovery point...")
         self.save_button.setEnabled(False)
+        status = self.status_combo.currentData()
         try:
             if self.record is None:
                 handle = self.services.crud_actions.create_paper(
-                    self.title_edit.text(), self.status_combo.currentText()
+                    self.title_edit.text(), status
                 )
             else:
                 handle = self.services.crud_actions.update_paper(
-                    self.record.id, self.title_edit.text(),
-                    self.status_combo.currentText(),
+                    self.record.id, self.title_edit.text(), status
                 )
         except Exception as exc:
             self.error_label.setText(str(exc))

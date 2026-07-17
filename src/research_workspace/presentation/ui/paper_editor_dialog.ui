@@ -3,15 +3,15 @@
  <class>PaperEditorDialog</class>
  <widget class="QDialog" name="paperEditorDialog">
   <property name="minimumSize"><size><width>480</width><height>360</height></size></property>
-  <property name="windowTitle"><string>论文</string></property>
+  <property name="windowTitle"><string>Create Paper</string></property>
   <layout class="QVBoxLayout" name="paperEditorRootLayout">
    <item><widget class="QScrollArea" name="paperEditorScrollArea">
     <property name="widgetResizable"><bool>true</bool></property>
     <widget class="QWidget" name="paperEditorContent">
      <layout class="QFormLayout" name="paperEditorFormLayout">
-      <item row="0" column="0"><widget class="QLabel" name="paperTitleLabel"><property name="text"><string>标题</string></property></widget></item>
+      <item row="0" column="0"><widget class="QLabel" name="paperTitleLabel"><property name="text"><string>Paper title</string></property></widget></item>
       <item row="0" column="1"><widget class="QLineEdit" name="paperTitleEdit"><property name="maxLength"><number>500</number></property></widget></item>
-      <item row="1" column="0"><widget class="QLabel" name="paperStatusLabel"><property name="text"><string>状态</string></property></widget></item>
+      <item row="1" column="0"><widget class="QLabel" name="paperStatusLabel"><property name="text"><string>Status</string></property></widget></item>
       <item row="1" column="1"><widget class="QComboBox" name="paperStatusCombo"/></item>
       <item row="2" column="0" colspan="2"><widget class="QLabel" name="paperRecoveryStatusLabel"><property name="text"><string/></property></widget></item>
       <item row="3" column="0" colspan="2"><widget class="QLabel" name="paperErrorLabel"><property name="text"><string/></property><property name="wordWrap"><bool>true</bool></property></widget></item>
@@ -20,8 +20,8 @@
    </widget></item>
    <item><layout class="QHBoxLayout" name="paperEditorButtonLayout">
     <item><spacer name="paperEditorButtonSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property></spacer></item>
-    <item><widget class="QPushButton" name="cancelPaperButton"><property name="text"><string>取消</string></property></widget></item>
-    <item><widget class="QPushButton" name="savePaperButton"><property name="text"><string>保存</string></property></widget></item>
+    <item><widget class="QPushButton" name="cancelPaperButton"><property name="text"><string>Cancel</string></property></widget></item>
+    <item><widget class="QPushButton" name="savePaperButton"><property name="text"><string>Save Paper</string></property></widget></item>
    </layout></item>
   </layout>
  </widget>

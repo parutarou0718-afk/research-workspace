@@ -90,7 +90,7 @@ def test_idea_detail_empty_state_has_next_step_context(qtbot):
     qtbot.addWidget(page.widget)
 
     assert not page.empty_detail_card.isHidden()
-    assert page.empty_detail_title_label.text() == "Select an idea"
+    assert page.empty_detail_title_label.text() == "Idea Detail"
     assert page.detail_card.isHidden()
 
 

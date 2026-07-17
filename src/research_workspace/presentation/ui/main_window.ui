@@ -48,24 +48,24 @@ QLabel#localModeStatusLabel { color: #98A2B3; font-size: 12px; }
          <property name="minimumHeight"><number>44</number></property>
         </widget>
        </item>
-       <item><widget class="QPushButton" name="navOverviewButton"><property name="text"><string>总览</string></property><property name="minimumHeight"><number>40</number></property></widget></item>
-       <item><widget class="QPushButton" name="navPapersButton"><property name="text"><string>论文</string></property><property name="minimumHeight"><number>40</number></property></widget></item>
-       <item><widget class="QPushButton" name="navIdeasButton"><property name="text"><string>Idea 库</string></property><property name="minimumHeight"><number>40</number></property></widget></item>
-       <item><widget class="QPushButton" name="navRelationsButton"><property name="text"><string>关系</string></property><property name="minimumHeight"><number>40</number></property></widget></item>
-       <item><widget class="QPushButton" name="navSubmissionsButton"><property name="text"><string>投稿</string></property><property name="minimumHeight"><number>40</number></property></widget></item>
-       <item><widget class="QPushButton" name="navConferencesButton"><property name="text"><string>会议</string></property><property name="minimumHeight"><number>40</number></property></widget></item>
-       <item><widget class="QPushButton" name="navGrantsButton"><property name="text"><string>基金</string></property><property name="minimumHeight"><number>40</number></property></widget></item>
-       <item><widget class="QPushButton" name="navImportsButton"><property name="text"><string>导入资料</string></property><property name="minimumHeight"><number>40</number></property></widget></item>
-       <item><widget class="QPushButton" name="navMonitoringButton"><property name="text"><string>资料监控</string></property><property name="minimumHeight"><number>40</number></property></widget></item>
-       <item><widget class="QPushButton" name="navVersionCandidatesButton"><property name="text"><string>版本候选</string></property><property name="minimumHeight"><number>40</number></property></widget></item>
+       <item><widget class="QPushButton" name="navOverviewButton"><property name="text"><string>Dashboard</string></property><property name="minimumHeight"><number>40</number></property></widget></item>
+       <item><widget class="QPushButton" name="navPapersButton"><property name="text"><string>Papers</string></property><property name="minimumHeight"><number>40</number></property></widget></item>
+       <item><widget class="QPushButton" name="navIdeasButton"><property name="text"><string>Ideas</string></property><property name="minimumHeight"><number>40</number></property></widget></item>
+       <item><widget class="QPushButton" name="navRelationsButton"><property name="text"><string>Relations</string></property><property name="minimumHeight"><number>40</number></property></widget></item>
+       <item><widget class="QPushButton" name="navSubmissionsButton"><property name="text"><string>Submissions</string></property><property name="minimumHeight"><number>40</number></property></widget></item>
+       <item><widget class="QPushButton" name="navConferencesButton"><property name="text"><string>Conferences</string></property><property name="minimumHeight"><number>40</number></property></widget></item>
+       <item><widget class="QPushButton" name="navGrantsButton"><property name="text"><string>Grants</string></property><property name="minimumHeight"><number>40</number></property></widget></item>
+       <item><widget class="QPushButton" name="navImportsButton"><property name="text"><string>Import Sources</string></property><property name="minimumHeight"><number>40</number></property></widget></item>
+       <item><widget class="QPushButton" name="navMonitoringButton"><property name="text"><string>Source Monitoring</string></property><property name="minimumHeight"><number>40</number></property></widget></item>
+       <item><widget class="QPushButton" name="navVersionCandidatesButton"><property name="text"><string>Version Candidates</string></property><property name="minimumHeight"><number>40</number></property></widget></item>
        <item>
         <spacer name="navigationVerticalSpacer">
          <property name="orientation"><enum>Qt::Vertical</enum></property>
          <property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property>
         </spacer>
        </item>
-       <item><widget class="QPushButton" name="navSettingsButton"><property name="text"><string>设置</string></property><property name="minimumHeight"><number>40</number></property></widget></item>
-       <item><widget class="QLabel" name="localModeStatusLabel"><property name="text"><string>本地工作区 · 离线优先</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+       <item><widget class="QPushButton" name="navSettingsButton"><property name="text"><string>Settings</string></property><property name="minimumHeight"><number>40</number></property></widget></item>
+       <item><widget class="QLabel" name="localModeStatusLabel"><property name="text"><string>Local workspace · Offline first</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
       </layout>
      </widget>
     </item>

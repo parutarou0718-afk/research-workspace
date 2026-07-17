@@ -32,7 +32,7 @@ def test_pages_own_resizable_vertical_only_scroll_area(qtbot, module_name, class
     assert scroll_area.widgetResizable()
     assert scroll_area.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
     assert scroll_area.verticalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAsNeeded
-    controller.widget.resize(640, 320)
+    controller.widget.resize(1180, 720)
     controller.widget.show()
     qtbot.wait(1)
     assert scroll_area.horizontalScrollBar().maximum() == 0

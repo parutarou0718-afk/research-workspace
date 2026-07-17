@@ -12,10 +12,10 @@ def _view_model() -> OverviewViewModel:
         ready_count=8,
         upcoming_conference_count=2,
         upcoming_grant_count=1,
-        suggestions=("检查近期截止日期",),
-        submission_rows=("论文 | Venue | revision | 2026-07-20Z",),
-        activities=("初始化工作台",),
-        focus_items=("完成基础设施",),
+        suggestions=("Check upcoming deadlines",),
+        submission_rows=("Paper | Venue | revision | 2026-07-20Z",),
+        activities=("Initialized workspace",),
+        focus_items=("Finish foundation setup",),
         focus_progress=33,
     )
 
@@ -30,11 +30,23 @@ def test_overview_renders_view_model_values(qtbot):
     assert controller.ready_count_label.text() == "8"
     assert controller.upcoming_conference_count_label.text() == "2"
     assert controller.upcoming_grant_count_label.text() == "1"
-    assert [controller.suggestions_list.item(index).text() for index in range(controller.suggestions_list.count())] == ["检查近期截止日期"]
+    assert [
+        controller.suggestions_list.item(index).text()
+        for index in range(controller.suggestions_list.count())
+    ] == ["Check upcoming deadlines"]
     assert controller.submission_table.rowCount() == 1
-    assert [controller.submission_table.item(0, column).text() for column in range(4)] == ["论文", "Venue", "返修中", "2026-07-20"]
-    assert [controller.activities_list.item(index).text() for index in range(controller.activities_list.count())] == ["初始化工作台"]
-    assert [controller.focus_items_list.item(index).text() for index in range(controller.focus_items_list.count())] == ["完成基础设施"]
+    assert [
+        controller.submission_table.item(0, column).text()
+        for column in range(4)
+    ] == ["Paper", "Venue", "Revision", "2026-07-20"]
+    assert [
+        controller.activities_list.item(index).text()
+        for index in range(controller.activities_list.count())
+    ] == ["Initialized workspace"]
+    assert [
+        controller.focus_items_list.item(index).text()
+        for index in range(controller.focus_items_list.count())
+    ] == ["Finish foundation setup"]
     assert controller.focus_progress.value() == 33
 
 

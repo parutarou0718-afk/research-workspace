@@ -87,17 +87,17 @@ def test_ui01_sidebar_order_spacing_and_navigation_visuals():
     ]
 
     expected_text = {
-        "navOverviewButton": "总览",
-        "navPapersButton": "论文",
-        "navIdeasButton": "Idea 库",
-        "navRelationsButton": "关系",
-        "navSubmissionsButton": "投稿",
-        "navConferencesButton": "会议",
-        "navGrantsButton": "基金",
-        "navImportsButton": "导入资料",
-        "navMonitoringButton": "资料监控",
-        "navVersionCandidatesButton": "版本候选",
-        "navSettingsButton": "设置",
+        "navOverviewButton": "Dashboard",
+        "navPapersButton": "Papers",
+        "navIdeasButton": "Ideas",
+        "navRelationsButton": "Relations",
+        "navSubmissionsButton": "Submissions",
+        "navConferencesButton": "Conferences",
+        "navGrantsButton": "Grants",
+        "navImportsButton": "Import Sources",
+        "navMonitoringButton": "Source Monitoring",
+        "navVersionCandidatesButton": "Version Candidates",
+        "navSettingsButton": "Settings",
     }
     for name, text in expected_text.items():
         button = _widget(root, name)
@@ -127,17 +127,17 @@ def test_ui01_overview_has_empty_suggestions_and_polished_submission_table(qtbot
             upcoming_conference_count=0,
             upcoming_grant_count=0,
             suggestions=(),
-            submission_rows=("论文 A | Journal | revision | 2026-07-20Z",),
+            submission_rows=("Paper A | Journal | revision | 2026-07-20Z",),
             activities=(),
             focus_items=(),
             focus_progress=0,
         )
     )
 
-    assert controller.widget.findChild(QLabel, "suggestionsEmptyTitleLabel").text() == "暂无建议"
+    assert controller.widget.findChild(QLabel, "suggestionsEmptyTitleLabel").text() == "No suggestions yet."
     assert (
         controller.widget.findChild(QLabel, "suggestionsEmptyBodyLabel").text()
-        == "导入资料或积累更多研究记录后，这里将显示分析结果。"
+        == "Import papers or capture research notes to see analysis here."
     )
     assert controller.suggestions_list.isHidden()
 
@@ -145,9 +145,9 @@ def test_ui01_overview_has_empty_suggestions_and_polished_submission_table(qtbot
     assert not table.showGrid()
     assert table.rowHeight(0) == 44
     assert [table.item(0, column).text() for column in range(4)] == [
-        "论文 A",
+        "Paper A",
         "Journal",
-        "返修中",
+        "Revision",
         "2026-07-20",
     ]
 
@@ -156,8 +156,8 @@ def test_ui01_quick_record_controls_are_visible_and_actionable(qtbot):
     controller = OverviewPage(services=object())
     qtbot.addWidget(controller.widget)
 
-    assert controller.quick_idea_line_edit.placeholderText() == "记录一个论点、材料或问题……"
+    assert controller.quick_idea_line_edit.placeholderText() == "Capture a research note"
     assert controller.idea_argument_button.isEnabled()
     assert controller.idea_material_button.isEnabled()
     assert controller.idea_question_button.isEnabled()
-    assert controller.save_idea_button.text() == "记录"
+    assert controller.save_idea_button.text() == "Capture"

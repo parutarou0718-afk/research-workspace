@@ -1,4 +1,4 @@
-import re
+﻿import re
 import json
 from pathlib import Path
 from xml.etree import ElementTree
@@ -168,10 +168,10 @@ def test_overview_exposes_every_view_model_binding_and_prototype_region():
         "ideaMaterialCategoryButton",
         "ideaQuestionCategoryButton",
     } <= names
-    assert widget_text(root, "viewAllSuggestionsButton") == "查看全部建议"
-    assert widget_text(root, "ideaArgumentCategoryButton") == "论点"
-    assert widget_text(root, "ideaMaterialCategoryButton") == "材料"
-    assert widget_text(root, "ideaQuestionCategoryButton") == "问题"
+    assert widget_text(root, "viewAllSuggestionsButton") == "View Suggestions"
+    assert widget_text(root, "ideaArgumentCategoryButton") == "Claim"
+    assert widget_text(root, "ideaMaterialCategoryButton") == "Source Note"
+    assert widget_text(root, "ideaQuestionCategoryButton") == "Question"
 
 
 def widget_text(root, object_name):

@@ -53,12 +53,12 @@ QListWidget#papersListView::item:selected {
          <item>
           <layout class="QVBoxLayout" name="papersTitleVerticalLayout">
            <property name="spacing"><number>4</number></property>
-           <item><widget class="QLabel" name="pageTitleLabel"><property name="text"><string>论文</string></property></widget></item>
-           <item><widget class="QLabel" name="pageSubtitleLabel"><property name="text"><string>管理论文、笔记、关系和后续 AI 分析入口。</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+           <item><widget class="QLabel" name="pageTitleLabel"><property name="text"><string>Papers</string></property></widget></item>
+           <item><widget class="QLabel" name="pageSubtitleLabel"><property name="text"><string>Manage papers, notes, relations, and future research analysis.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
           </layout>
          </item>
          <item><spacer name="papersHeroSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
-         <item><widget class="QPushButton" name="newPaperButton"><property name="variant"><string>primary</string></property><property name="text"><string>+ 新增论文</string></property></widget></item>
+         <item><widget class="QPushButton" name="newPaperButton"><property name="variant"><string>primary</string></property><property name="text"><string>+ Create Paper</string></property></widget></item>
         </layout>
        </item>
        <item>
@@ -70,10 +70,10 @@ QListWidget#papersListView::item:selected {
           <property name="rightMargin"><number>16</number></property>
           <property name="bottomMargin"><number>14</number></property>
           <property name="spacing"><number>10</number></property>
-          <item><widget class="QLineEdit" name="paperSearchLineEdit"><property name="component"><string>search</string></property><property name="placeholderText"><string>搜索论文、作者或标签</string></property></widget></item>
-          <item><widget class="QPushButton" name="paperStatusFilterButton"><property name="variant"><string>secondary</string></property><property name="text"><string>状态</string></property></widget></item>
-          <item><widget class="QPushButton" name="paperYearFilterButton"><property name="variant"><string>secondary</string></property><property name="text"><string>年份</string></property></widget></item>
-          <item><widget class="QPushButton" name="paperTagFilterButton"><property name="variant"><string>secondary</string></property><property name="text"><string>标签</string></property></widget></item>
+          <item><widget class="QLineEdit" name="paperSearchLineEdit"><property name="component"><string>search</string></property><property name="placeholderText"><string>Search papers, authors, or tags</string></property></widget></item>
+          <item><widget class="QPushButton" name="paperStatusFilterButton"><property name="variant"><string>secondary</string></property><property name="text"><string>Status</string></property></widget></item>
+          <item><widget class="QPushButton" name="paperYearFilterButton"><property name="variant"><string>secondary</string></property><property name="text"><string>Year</string></property></widget></item>
+          <item><widget class="QPushButton" name="paperTagFilterButton"><property name="variant"><string>secondary</string></property><property name="text"><string>Tags</string></property></widget></item>
          </layout>
         </widget>
        </item>
@@ -97,9 +97,9 @@ QListWidget#papersListView::item:selected {
         <layout class="QHBoxLayout" name="papersWorkspaceHorizontalLayout">
          <property name="spacing"><number>16</number></property>
          <item>
-         <widget class="QFrame" name="papersListCard">
+          <widget class="QFrame" name="papersListCard">
            <property name="component"><string>card</string></property>
-           <property name="minimumWidth"><number>460</number></property>
+           <property name="minimumWidth"><number>380</number></property>
            <property name="maximumWidth"><number>500</number></property>
            <layout class="QVBoxLayout" name="papersListVerticalLayout">
             <property name="leftMargin"><number>20</number></property>
@@ -112,9 +112,9 @@ QListWidget#papersListView::item:selected {
             <item>
              <layout class="QHBoxLayout" name="papersActionHorizontalLayout">
               <property name="spacing"><number>8</number></property>
-              <item><widget class="QPushButton" name="editPaperButton"><property name="variant"><string>secondary</string></property><property name="text"><string>编辑</string></property></widget></item>
-              <item><widget class="QPushButton" name="deletePaperButton"><property name="variant"><string>danger</string></property><property name="text"><string>移入已删除</string></property></widget></item>
-              <item><widget class="QPushButton" name="restorePaperButton"><property name="variant"><string>secondary</string></property><property name="text"><string>恢复</string></property></widget></item>
+              <item><widget class="QPushButton" name="editPaperButton"><property name="variant"><string>secondary</string></property><property name="text"><string>Edit</string></property></widget></item>
+              <item><widget class="QPushButton" name="deletePaperButton"><property name="variant"><string>danger</string></property><property name="text"><string>Move to Trash</string></property></widget></item>
+              <item><widget class="QPushButton" name="restorePaperButton"><property name="variant"><string>secondary</string></property><property name="text"><string>Restore</string></property></widget></item>
              </layout>
             </item>
            </layout>
@@ -123,14 +123,14 @@ QListWidget#papersListView::item:selected {
          <item>
           <widget class="QFrame" name="paperDetailCard">
            <property name="component"><string>card</string></property>
-           <property name="minimumWidth"><number>680</number></property>
+           <property name="minimumWidth"><number>620</number></property>
            <layout class="QVBoxLayout" name="paperDetailVerticalLayout">
             <property name="leftMargin"><number>20</number></property>
             <property name="topMargin"><number>20</number></property>
             <property name="rightMargin"><number>20</number></property>
             <property name="bottomMargin"><number>20</number></property>
             <property name="spacing"><number>12</number></property>
-            <item><widget class="QLabel" name="paperDetailTitleLabel"><property name="text"><string>选择一篇论文</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+            <item><widget class="QLabel" name="paperDetailTitleLabel"><property name="text"><string>Select a paper</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
             <item><widget class="QLabel" name="paperStatusBadgeLabel"><property name="badge"><string>draft</string></property><property name="text"><string>Draft</string></property></widget></item>
             <item><widget class="QLabel" name="paperMetadataTitleLabel"><property name="text"><string>Metadata</string></property></widget></item>
             <item><widget class="QLabel" name="paperMetadataTextLabel"><property name="text"><string>Year, authors and version metadata will appear here.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
@@ -141,6 +141,7 @@ QListWidget#papersListView::item:selected {
               <property name="spacing"><number>12</number></property>
               <item>
                <widget class="QFrame" name="paperResearchAnalysisCard">
+              <property name="maximumHeight"><number>260</number></property>
               <property name="component"><string>emptyState</string></property>
               <layout class="QVBoxLayout" name="paperResearchAnalysisVerticalLayout">
                <property name="leftMargin"><number>20</number></property>
@@ -155,9 +156,9 @@ Analyze this paper to generate:
 
 • Summary
 
-• Key claims
+• Key Claims
 
-• Suggested ideas</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+• Suggested Ideas</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
                <item><widget class="QPushButton" name="paperAnalyzeWithAiButton"><property name="variant"><string>secondary</string></property><property name="informational"><bool>true</bool></property><property name="text"><string>Analyze with AI</string></property></widget></item>
                <item><widget class="QLabel" name="paperResearchAnalysisMilestoneLabel"><property name="text"><string>Available in the next milestone.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
               </layout>
@@ -165,6 +166,7 @@ Analyze this paper to generate:
               </item>
             <item>
              <widget class="QFrame" name="paperNextStepCard">
+              <property name="maximumHeight"><number>260</number></property>
               <property name="component"><string>emptyState</string></property>
               <layout class="QVBoxLayout" name="paperNextStepVerticalLayout">
                <property name="leftMargin"><number>20</number></property>
