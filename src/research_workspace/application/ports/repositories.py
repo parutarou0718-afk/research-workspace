@@ -14,6 +14,7 @@ from research_workspace.application.dto.parsing_dto import (
 from research_workspace.application.dto.monitoring_dto import MonitoringRootRecord
 from research_workspace.domain.parsing import ParseArtifactIdentity
 from research_workspace.application.dto.recovery_dto import VerifiedRecoveryPoint
+from research_workspace.application.services.command_dispatcher import DomainMutation
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,3 +63,7 @@ class RecoveryRepository(Protocol):
     def next_generation(self) -> int: ...
 
     def activate(self, point: VerifiedRecoveryPoint) -> None: ...
+
+
+class ProtectedWriteRepository(Protocol):
+    def apply_mutation(self, mutation: DomainMutation) -> None: ...

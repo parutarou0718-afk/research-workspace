@@ -8,6 +8,31 @@ from uuid import UUID
 from research_workspace.domain.operations import freeze_json
 
 
+_ENTITY_MUTATION_EVENTS = frozenset(
+    {
+        "paper.created", "paper.updated", "paper.deleted", "paper.restored",
+        "idea.created", "idea.updated", "idea.deleted", "idea.restored",
+        "submission.created", "submission.updated", "submission.deleted",
+        "submission.restored",
+    }
+)
+
+
+def validate_user_event_payload(event_type: str, payload: object) -> None:
+    """Fail closed for the Task 5 user-event subset; later tasks extend by contract."""
+    if event_type not in _ENTITY_MUTATION_EVENTS or not isinstance(payload, Mapping):
+        raise ValueError("COMMAND_VALIDATION_FAILED")
+    if set(payload) != {"entity_id", "row_version", "changed_fields"}:
+        raise ValueError("COMMAND_VALIDATION_FAILED")
+    if not isinstance(payload["entity_id"], str):
+        raise ValueError("COMMAND_VALIDATION_FAILED")
+    if not isinstance(payload["row_version"], int) or payload["row_version"] < 1:
+        raise ValueError("COMMAND_VALIDATION_FAILED")
+    fields = payload["changed_fields"]
+    if not isinstance(fields, (list, tuple)) or len(set(fields)) != len(fields):
+        raise ValueError("COMMAND_VALIDATION_FAILED")
+
+
 # v0.1 read compatibility. New writes use DomainEventV2 exclusively.
 DomainEvent = Mapping[str, object]
 

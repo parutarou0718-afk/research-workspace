@@ -26,6 +26,12 @@ from research_workspace.application.dto.monitoring_dto import (
 )
 from research_workspace.domain.monitoring import MonitoringRootStatus, RawEventCapacity
 from research_workspace.application.dto.recovery_dto import VerifiedRecoveryPoint
+from research_workspace.application.services.command_dispatcher import (
+    CommandPlan,
+    CommandResult,
+    DomainMutation,
+    ExistingCommand,
+)
 
 
 @dataclass(frozen=True)
@@ -74,6 +80,20 @@ class WriteCoordinator(Protocol):
     def activate_recovery_point(self, point: VerifiedRecoveryPoint) -> None: ...
 
     def reset_recovery_after_restore(self, workspace_id: UUID) -> None: ...
+
+    def find_command_by_idempotency(self, key: str) -> ExistingCommand | None: ...
+
+    def persist_command_envelope(self, plan: CommandPlan) -> None: ...
+
+    def persist_verified_recovery(
+        self, plan: CommandPlan, recovery: VerifiedRecoveryPoint
+    ) -> None: ...
+
+    def commit_mutations(
+        self, plan: CommandPlan, mutations: tuple[DomainMutation, ...]
+    ) -> CommandResult: ...
+
+    def mark_command_failed(self, command_id: UUID, error_code: str) -> None: ...
 
     def begin_import(self, seed: ImportBatchSeed) -> tuple[PreparedImportItem, ...]: ...
 

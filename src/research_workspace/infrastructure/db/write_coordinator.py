@@ -51,6 +51,14 @@ from research_workspace.domain.monitoring import (
     RawFileEventType,
 )
 from research_workspace.application.dto.recovery_dto import VerifiedRecoveryPoint
+from research_workspace.application.services.command_dispatcher import (
+    CommandPlan,
+    CommandResult,
+    DomainMutation,
+    ExistingCommand,
+)
+from research_workspace.domain.audit import AuditChange, DomainSnapshot
+from research_workspace.domain.events import validate_user_event_payload
 from research_workspace.domain.parsing import (
     ParseContractError,
     build_parse_artifact_identity,
@@ -75,6 +83,8 @@ from research_workspace.infrastructure.db.models import (
     WorkspaceMetadataModel,
     RecoveryPointModel,
     RecoverySlotModel,
+    ApplicationCommandModel,
+    AuditChangeModel,
 )
 from research_workspace.infrastructure.db.repositories import (
     SqlGate1WriteRepository,
@@ -152,6 +162,176 @@ class SqlWriteCoordinator:
                 select(RecoverySlotModel).where(RecoverySlotModel.workspace_id == workspace_id)
             ):
                 session.delete(slot)
+
+    def find_command_by_idempotency(self, key: str) -> ExistingCommand | None:
+        with self._factory() as session:
+            row = session.scalar(
+                select(ApplicationCommandModel).where(
+                    ApplicationCommandModel.idempotency_key == key
+                )
+            )
+            if row is None:
+                return None
+            result = None
+            if row.status == "committed" and row.result_summary_json:
+                summary = json.loads(row.result_summary_json)
+                result = CommandResult(
+                    row.id,
+                    tuple(UUID(item) for item in summary["affected_entity_ids"]),
+                    int(summary["affected_count"]),
+                    False,
+                )
+            return ExistingCommand(row.id, row.request_fingerprint, row.status, result)
+
+    def persist_command_envelope(self, plan: CommandPlan) -> None:
+        permission = json.loads(plan.permission_context)
+        now = datetime.now(timezone.utc)
+        try:
+            with self._factory.begin() as session:
+                session.add(
+                    ApplicationCommandModel(
+                        id=plan.command_id,
+                        command_type=plan.command_type,
+                        contract_version="1.0",
+                        idempotency_key=plan.idempotency_key,
+                        request_fingerprint=plan.request_fingerprint,
+                        actor_type=permission["actor_type"],
+                        actor_id=permission["actor_id"],
+                        permission_context_json=plan.permission_context.decode("utf-8"),
+                        status="running",
+                        requested_at=now,
+                        started_at=now,
+                        committed_at=None,
+                        failed_at=None,
+                        recovery_point_id=None,
+                        undo_of_command_id=None,
+                        result_summary_json=None,
+                        error_code=None,
+                        migration_batch_id=None,
+                    )
+                )
+        except IntegrityError as exc:
+            raise WriteCoordinatorError("COMMAND_IDEMPOTENCY_CONFLICT") from exc
+
+    def persist_verified_recovery(
+        self, plan: CommandPlan, recovery: VerifiedRecoveryPoint
+    ) -> None:
+        if recovery.command_id != plan.command_id:
+            raise WriteCoordinatorError("RECOVERY_POINT_FAILED")
+        self.activate_recovery_point(recovery)
+
+    def commit_mutations(
+        self, plan: CommandPlan, mutations: tuple[DomainMutation, ...]
+    ) -> CommandResult:
+        if not mutations:
+            raise WriteCoordinatorError("COMMAND_VALIDATION_FAILED")
+        now = datetime.now(timezone.utc)
+        try:
+            with self._factory.begin() as session:
+                command = session.get(ApplicationCommandModel, plan.command_id)
+                if (
+                    command is None
+                    or command.status != "running"
+                    or command.recovery_point_id is None
+                ):
+                    raise WriteCoordinatorError("RECOVERY_POINT_FAILED")
+                repository = self._repository_factory(session)
+                for index, mutation in enumerate(mutations):
+                    before = (
+                        DomainSnapshot(mutation.before_snapshot)
+                        if mutation.before_snapshot is not None
+                        else None
+                    )
+                    after = (
+                        DomainSnapshot(mutation.after_snapshot)
+                        if mutation.after_snapshot is not None
+                        else None
+                    )
+                    audit = AuditChange(
+                        mutation.entity_type,
+                        mutation.entity_id,
+                        mutation.operation,
+                        before,
+                        after,
+                        tuple(mutation.changed_fields),
+                    )
+                    repository.apply_mutation(mutation)
+                    before_value = json.loads(before.canonical_bytes) if before else None
+                    after_value = json.loads(after.canonical_bytes) if after else None
+                    session.add(
+                        AuditChangeModel(
+                            id=uuid4(),
+                            command_id=plan.command_id,
+                            change_index=index,
+                            entity_type=audit.entity_type,
+                            entity_id=audit.entity_id,
+                            operation=audit.operation,
+                            before_schema_version="1.0" if before else None,
+                            before_json=before.canonical_bytes.decode("utf-8") if before else None,
+                            after_schema_version="1.0" if after else None,
+                            after_json=after.canonical_bytes.decode("utf-8") if after else None,
+                            changed_fields_json=rfc8785.dumps(list(audit.changed_fields)).decode("utf-8"),
+                            before_row_version=before_value["row_version"] if before_value else None,
+                            after_row_version=after_value["row_version"] if after_value else None,
+                            created_at=now,
+                        )
+                    )
+                    payload = json.loads(mutation.event_payload)
+                    validate_user_event_payload(mutation.event_type, payload)
+                    session.add(
+                        DomainEventModel(
+                            id=uuid4(),
+                            schema_version="2.0",
+                            event_type=mutation.event_type,
+                            workspace_id=self._required_workspace_id(session),
+                            command_id=plan.command_id,
+                            operation_id=None,
+                            aggregate_type=mutation.entity_type,
+                            aggregate_id=mutation.entity_id,
+                            aggregate_version=after_value["row_version"] if after_value else None,
+                            actor_type=command.actor_type,
+                            payload_json=rfc8785.dumps(payload).decode("utf-8"),
+                            deduplication_key=hashlib.sha256(
+                                f"{plan.command_id}:{index}".encode()
+                            ).hexdigest(),
+                            causation_id=plan.command_id,
+                            correlation_id=plan.command_id,
+                            created_at=now,
+                            occurred_at=now,
+                            processed_at=None,
+                        )
+                    )
+                affected = tuple(mutation.entity_id for mutation in mutations)
+                summary = {
+                    "affected_entity_ids": [str(item) for item in affected],
+                    "affected_count": len(affected),
+                    "replayed": False,
+                }
+                command.status = "committed"
+                command.committed_at = now
+                command.result_summary_json = rfc8785.dumps(summary).decode("utf-8")
+                command.error_code = None
+            return CommandResult(plan.command_id, affected, len(affected), False)
+        except WriteCoordinatorError:
+            raise
+        except ValueError as exc:
+            code = str(exc)
+            if not code.isupper():
+                code = "COMMAND_VALIDATION_FAILED"
+            raise WriteCoordinatorError(code) from exc
+        except (IntegrityError, OperationalError) as exc:
+            raise WriteCoordinatorError(self._database_error_code(exc)) from exc
+
+    def mark_command_failed(self, command_id: UUID, error_code: str) -> None:
+        with self._factory.begin() as session:
+            command = session.get(ApplicationCommandModel, command_id)
+            if command is None or command.status == "committed":
+                return
+            command.status = "failed"
+            command.failed_at = datetime.now(timezone.utc)
+            command.committed_at = None
+            command.result_summary_json = None
+            command.error_code = error_code
 
     def register_monitoring_root(
         self, seed: MonitoringRootSeed, baseline: tuple[BaselineObservationDTO, ...]
@@ -1926,6 +2106,15 @@ class SqlWriteCoordinator:
         if operation is None or operation.status != "running":
             raise ValueError("COMMAND_VALIDATION_FAILED")
         return operation
+
+    @staticmethod
+    def _database_error_code(exc: IntegrityError | OperationalError) -> str:
+        if isinstance(exc, IntegrityError):
+            return "DATABASE_CONSTRAINT_VIOLATION"
+        sqlite_errorcode = getattr(exc.orig, "sqlite_errorcode", None)
+        if sqlite_errorcode in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED}:
+            return "SQLITE_BUSY"
+        return "DATABASE_OPERATION_FAILED"
 
     @staticmethod
     def _system_event(
