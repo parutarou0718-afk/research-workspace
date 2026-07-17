@@ -11,7 +11,7 @@
   "properties": {
     "schema_version": {"const": "1.0"},
     "operation_id": {"$ref": "#/$defs/uuid"},
-    "operation_type": {"enum": ["snapshot_import", "document_parse", "material_verify"]},
+    "operation_type": {"enum": ["snapshot_import", "document_parse", "material_verify", "source_observe", "monitor_reconcile", "version_candidate_detect"]},
     "status": {"enum": ["planned", "running", "retry_wait", "completed", "failed", "cancelled", "manual_attention"]},
     "work_plan_fingerprint": {"$ref": "#/$defs/sha256"},
     "permission_context": {"$ref": "#/$defs/permissionContext"},
@@ -48,7 +48,7 @@
         "actor_type": {"enum": ["user", "system"]},
         "actor_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 255},
         "workspace_id": {"$ref": "#/$defs/uuid"},
-        "capabilities": {"type": "array", "uniqueItems": true, "items": {"enum": ["source.observe.request", "source.snapshot_import.request", "document.parse.request", "maintenance.verify.request"]}},
+        "capabilities": {"type": "array", "uniqueItems": true, "items": {"enum": ["source.observe.request", "source.snapshot_import.request", "document.parse.request", "version_candidate.detect.request", "maintenance.verify.request"]}},
         "scope_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 255}},
         "path_scopes": {"type": "array", "items": {"$ref": "#/$defs/pathScope"}},
         "network_allowed": {"const": false},
@@ -62,7 +62,7 @@
       "type": "object",
       "required": ["scope_type", "normalized_path_hash", "root_id", "access_mode", "recursive"],
       "properties": {
-        "scope_type": {"enum": ["import_source", "snapshot_read", "workspace_staging"]},
+        "scope_type": {"enum": ["import_source", "snapshot_read", "workspace_staging", "monitoring_root"]},
         "normalized_path_hash": {"$ref": "#/$defs/sha256"},
         "root_id": {"$ref": "#/$defs/uuid"},
         "access_mode": {"enum": ["read", "list", "copy", "create_only"]},

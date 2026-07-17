@@ -1,5 +1,5 @@
 {
-  "version": "0.2-gate1",
+  "version": "0.2-gate2",
   "entities": {
     "Paper": ["id", "title", "status", "current_version_id", "created_at", "updated_at", "deleted_at"],
     "PaperVersion": ["id", "paper_id", "source_document_id", "version_label", "parent_version_id", "is_current", "created_at"],
@@ -31,6 +31,37 @@
     "SourceDocument": ["id", "parse_artifact_id", "title", "metadata_json", "language", "block_count", "warnings_json", "created_at"],
     "ParsedBlock": ["id", "source_document_id", "parse_artifact_id", "block_index", "kind", "text", "locator_json", "metadata_json", "block_hash"],
     "DomainEvent": ["id", "schema_version", "workspace_id", "event_type", "aggregate_type", "aggregate_id", "aggregate_version", "actor_type", "command_id", "operation_id", "payload_json", "deduplication_key", "causation_id", "correlation_id", "created_at", "processed_at"]
+  },
+  "gate2_entities": {
+    "MonitoringRoot": ["id", "original_path", "normalized_path", "normalized_path_hash", "status", "recursive", "config_json", "config_fingerprint", "watcher_generation", "last_event_at", "last_reconciled_at", "created_at", "updated_at", "removed_at"],
+    "RawFileEvent": ["id", "monitoring_root_id", "provider", "event_type", "source_path", "destination_path", "source_path_hash", "destination_path_hash", "observed_at", "ingested_at", "raw_sequence_json", "correlation_hint", "deduplication_key"],
+    "RawEventPendingLink": ["raw_file_event_id", "pending_path_check_id", "linked_at"],
+    "PendingPathCheck": ["id", "monitoring_root_id", "normalized_path", "normalized_path_hash", "first_event_at", "last_event_at", "merged_event_types_json", "state", "stability_attempt_count", "next_check_at", "last_failure_code", "source_observation_id", "row_version"],
+    "ReconciliationRun": ["id", "monitoring_root_id", "operation_id", "reason", "status", "checkpoint_json", "items_seen", "items_estimated", "items_suspected_changed", "started_at", "finished_at"],
+    "PaperVersionCandidate": ["id", "earlier_snapshot_id", "later_snapshot_id", "detector_id", "detector_version", "rule_id", "rule_config_fingerprint", "direction_rationale_json", "signals_json", "input_observation_ids_json", "status", "superseded_by_candidate_id", "row_version", "created_at", "decided_at", "decided_by_command_id"]
+  },
+  "gate2_contracts": {
+    "root_statuses": ["active", "paused", "disconnected", "degraded", "overflow_reconciling", "error"],
+    "raw_event_types": ["created", "modified", "moved", "deleted", "overflow", "root_state"],
+    "pending_path_states": ["detected", "debouncing", "waiting_for_stability", "importing", "imported", "duplicate_content", "safe_failure", "unstable_source"],
+    "reconciliation_reasons": ["baseline", "disconnect", "overflow", "unclean_shutdown", "user_verify"],
+    "reconciliation_statuses": ["planned", "running", "paused", "completed", "failed", "cancelled"],
+    "monitoring_semantic_defaults": {
+      "stable_stat_observations": 2,
+      "quiet_window_seconds": 2,
+      "maximum_stability_attempts": 5,
+      "backoff_seconds": [2, 5, 15, 30, 60],
+      "maximum_candidate_neighbors": 12
+    },
+    "paper_version_candidate": {
+      "identity": ["earlier_snapshot_id", "later_snapshot_id", "detector_id", "detector_version", "rule_config_fingerprint"],
+      "detector_version": "1.0",
+      "rule_ids": ["R1_SOURCE_CONTINUITY", "R2_REPLACE_CONTINUITY", "R3_PAPER_TITLE_TIME", "R4_NAME_TITLE_TEXT", "R5_ZERO_TEXT_LINEAGE"],
+      "statuses": ["pending", "confirmed", "rejected", "superseded"],
+      "same_hash_excluded": true,
+      "modified_time_alone_is_direction": false,
+      "maximum_neighbors_per_snapshot": 12
+    }
   },
   "relation_types": [
     "belongs_to",
