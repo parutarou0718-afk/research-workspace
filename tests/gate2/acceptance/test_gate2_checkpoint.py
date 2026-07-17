@@ -150,8 +150,9 @@ def test_gate2_alembic_head_is_exactly_0003_gate2_monitoring() -> None:
     revision = script.get_revision("0003")
     assert revision.revision == "0003"
     assert revision.down_revision == "0002"
-    assert script.get_heads() == ["0003"]
-    assert script.get_current_head() == "0003"
+    assert script.get_revision("0004").down_revision == "0003"
+    assert script.get_heads() == ["0004"]
+    assert script.get_current_head() == "0004"
 
 
 def test_watchdog_lock_license_and_notices_evidence_remains_exact() -> None:

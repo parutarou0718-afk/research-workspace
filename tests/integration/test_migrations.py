@@ -24,7 +24,7 @@ def test_upgrade_head_creates_core_schema(database_path):
         _assert_exact_schema(inspector)
         _assert_exact_constraints(inspector)
         with engine.connect() as connection:
-            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0003"
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0004"
     finally:
         engine.dispose()
 

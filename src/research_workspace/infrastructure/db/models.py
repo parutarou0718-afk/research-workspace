@@ -369,6 +369,9 @@ class PaperVersionCandidateModel(Base):
     row_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     decided_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    decided_by_command_id: Mapped[UUID | None] = mapped_column(
+        UUIDText(), ForeignKey("application_commands.id", ondelete="RESTRICT"), nullable=True
+    )
 
 
 class OperationAttemptModel(Base):
@@ -500,6 +503,105 @@ class ImportItemModel(Base):
     finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
 
 
+class ApplicationCommandModel(Base):
+    __tablename__ = "application_commands"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_application_commands_idempotency_key"),
+        UniqueConstraint("undo_of_command_id", name="uq_application_commands_undo_of"),
+        CheckConstraint("contract_version = '1.0'", name="contract_version"),
+        CheckConstraint("actor_type IN ('user','system')", name="actor_type"),
+        CheckConstraint("status IN ('pending','running','committed','failed','cancelled')", name="status"),
+    )
+    id: Mapped[UUID] = _uuid(primary_key=True)
+    command_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    contract_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(CHAR(64), nullable=False)
+    actor_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    actor_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    permission_context_json: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(64), nullable=False)
+    requested_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    committed_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    failed_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    recovery_point_id: Mapped[UUID | None] = mapped_column(
+        UUIDText(), ForeignKey("recovery_points.id", ondelete="RESTRICT"), nullable=True
+    )
+    undo_of_command_id: Mapped[UUID | None] = mapped_column(
+        UUIDText(), ForeignKey("application_commands.id", ondelete="RESTRICT"), nullable=True
+    )
+    result_summary_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    migration_batch_id: Mapped[UUID | None] = mapped_column(
+        UUIDText(), ForeignKey("migration_batches.id", ondelete="RESTRICT"), nullable=True
+    )
+
+
+class AuditChangeModel(Base):
+    __tablename__ = "audit_changes"
+    __table_args__ = (
+        UniqueConstraint("command_id", "change_index", name="uq_audit_changes_command_index"),
+    )
+    id: Mapped[UUID] = _uuid(primary_key=True)
+    command_id: Mapped[UUID] = mapped_column(
+        UUIDText(), ForeignKey("application_commands.id", ondelete="RESTRICT"), nullable=False
+    )
+    change_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    entity_id: Mapped[UUID] = mapped_column(UUIDText(), nullable=False)
+    operation: Mapped[str] = mapped_column(String(64), nullable=False)
+    before_schema_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    before_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    after_schema_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    after_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    changed_fields_json: Mapped[str] = mapped_column(Text, nullable=False)
+    before_row_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    after_row_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+
+
+class RecoveryPointModel(Base):
+    __tablename__ = "recovery_points"
+    __table_args__ = (
+        UniqueConstraint("command_id", name="uq_recovery_points_command"),
+    )
+    id: Mapped[UUID] = _uuid(primary_key=True)
+    command_id: Mapped[UUID] = mapped_column(
+        UUIDText(), ForeignKey("application_commands.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(String(64), nullable=False)
+    promoted_generation: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    physical_state: Mapped[str] = mapped_column(String(64), nullable=False)
+    database_sha256: Mapped[str] = mapped_column(CHAR(64), nullable=False)
+    schema_revision: Mapped[str] = mapped_column(String(128), nullable=False)
+    snapshot_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    snapshot_manifest_hash: Mapped[str] = mapped_column(CHAR(64), nullable=False)
+    manifest_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    verified_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    promoted_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+
+
+class RecoverySlotModel(Base):
+    __tablename__ = "recovery_slots"
+    __table_args__ = (
+        UniqueConstraint("recovery_point_id", name="uq_recovery_slots_point"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(
+        UUIDText(), ForeignKey("workspace_metadata.workspace_id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    slot_name: Mapped[str] = mapped_column(String(32), primary_key=True)
+    recovery_point_id: Mapped[UUID] = mapped_column(
+        UUIDText(), ForeignKey("recovery_points.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+
+
 class PaperModel(Base):
     __tablename__ = "papers"
     __table_args__ = (
@@ -507,6 +609,8 @@ class PaperModel(Base):
         CheckConstraint("status IN ('active','paused','revision','submitted','completed','archived')", name="status_enum"),
         CheckConstraint("updated_at >= created_at", name="updated_after_created"),
         CheckConstraint("deleted_at IS NULL OR deleted_at >= created_at", name="deleted_after_created"),
+        CheckConstraint("(deleted_at IS NULL) = (deleted_by_command_id IS NULL)", name="delete_pair"),
+        CheckConstraint("row_version >= 1", name="row_version_positive"),
     )
     id: Mapped[UUID] = _uuid(primary_key=True)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -515,22 +619,34 @@ class PaperModel(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    row_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_by_command_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("application_commands.id", ondelete="RESTRICT"), nullable=False)
+    updated_by_command_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("application_commands.id", ondelete="RESTRICT"), nullable=False)
+    deleted_by_command_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("application_commands.id", ondelete="RESTRICT"), nullable=True)
 
 
 class PaperVersionModel(Base):
     __tablename__ = "paper_versions"
     __table_args__ = (
-        UniqueConstraint("paper_id", "version_label", name="uq_paper_versions_paper_label"),
-        CheckConstraint("parent_version_id IS NULL OR parent_version_id <> id", name="parent_not_self"),
-        Index("ux_paper_versions_one_current", "paper_id", unique=True, sqlite_where=text("is_current = 1")),
+        UniqueConstraint("paper_id", "source_snapshot_id", name="uq_paper_versions_snapshot"),
+        UniqueConstraint("paper_id", "normalized_version_label", name="uq_paper_versions_label"),
     )
     id: Mapped[UUID] = _uuid(primary_key=True)
     paper_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("papers.id", ondelete="RESTRICT"), nullable=False)
-    source_document_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("legacy_source_documents_v01.id", name="fk_paper_versions_source_document_id_source_documents", ondelete="RESTRICT"), nullable=False)
-    version_label: Mapped[str] = mapped_column(String(128), nullable=False)
-    parent_version_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("paper_versions.id", ondelete="RESTRICT"), nullable=True)
-    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"))
+    source_snapshot_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("source_snapshots.id", ondelete="RESTRICT"), nullable=False)
+    context_parse_artifact_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("parse_artifacts.id", ondelete="RESTRICT"), nullable=True)
+    version_label: Mapped[str] = mapped_column(String(200), nullable=False)
+    normalized_version_label: Mapped[str] = mapped_column(String(200), nullable=False)
+    lifecycle_state: Mapped[str] = mapped_column(
+        String(64), nullable=False, server_default=text("'active'")
+    )
+    row_version: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    confirmed_by_command_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("application_commands.id", ondelete="RESTRICT"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    updated_by_command_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("application_commands.id", ondelete="RESTRICT"), nullable=False)
+    retracted_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    retracted_by_command_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("application_commands.id", ondelete="RESTRICT"), nullable=True)
 
 
 class IdeaModel(Base):
@@ -541,6 +657,8 @@ class IdeaModel(Base):
         CheckConstraint("status IN ('unused','used','parked','archived')", name="status_enum"),
         CheckConstraint("origin_type IN ('manual','document','note','meeting','chat','book','paper','ai_candidate')", name="origin_enum"),
         CheckConstraint("updated_at >= created_at", name="updated_after_created"),
+        CheckConstraint("(deleted_at IS NULL) = (deleted_by_command_id IS NULL)", name="delete_pair"),
+        CheckConstraint("row_version >= 1", name="row_version_positive"),
     )
     id: Mapped[UUID] = _uuid(primary_key=True)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -550,6 +668,10 @@ class IdeaModel(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    row_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_by_command_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("application_commands.id", ondelete="RESTRICT"), nullable=False)
+    updated_by_command_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("application_commands.id", ondelete="RESTRICT"), nullable=False)
+    deleted_by_command_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("application_commands.id", ondelete="RESTRICT"), nullable=True)
 
 
 class NoteModel(Base):
@@ -562,7 +684,7 @@ class NoteModel(Base):
     id: Mapped[UUID] = _uuid(primary_key=True)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    source_document_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("legacy_source_documents_v01.id", name="fk_notes_source_document_id_source_documents", ondelete="RESTRICT"), nullable=True)
+    source_document_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("source_documents.id", ondelete="RESTRICT"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
@@ -573,6 +695,8 @@ class SubmissionModel(Base):
     __table_args__ = (
         CheckConstraint("length(trim(venue)) > 0", name="venue_nonempty"),
         CheckConstraint("status IN ('preparing','ready','submitted','editorial_review','external_review','revision','accepted','rejected','withdrawn','no_response')", name="status_enum"),
+        CheckConstraint("(deleted_at IS NULL) = (deleted_by_command_id IS NULL)", name="delete_pair"),
+        CheckConstraint("row_version >= 1", name="row_version_positive"),
     )
     id: Mapped[UUID] = _uuid(primary_key=True)
     paper_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("papers.id", ondelete="RESTRICT"), nullable=False)
@@ -584,6 +708,10 @@ class SubmissionModel(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    row_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_by_command_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("application_commands.id", ondelete="RESTRICT"), nullable=False)
+    updated_by_command_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("application_commands.id", ondelete="RESTRICT"), nullable=False)
+    deleted_by_command_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("application_commands.id", ondelete="RESTRICT"), nullable=True)
 
 
 class ConferenceModel(Base):
@@ -634,8 +762,8 @@ class LegacyEvidenceRefV01Model(Base):
     id: Mapped[UUID] = _uuid(primary_key=True)
     entity_type: Mapped[str] = mapped_column(String(64), nullable=False)
     entity_id: Mapped[UUID] = mapped_column(UUIDText(), nullable=False)
-    document_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("legacy_source_documents_v01.id", ondelete="RESTRICT"), nullable=False)
-    version_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("paper_versions.id", ondelete="RESTRICT"), nullable=True)
+    document_id: Mapped[UUID] = mapped_column(UUIDText(), nullable=False)
+    version_id: Mapped[UUID | None] = mapped_column(UUIDText(), nullable=True)
     section: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     page: Mapped[int | None] = mapped_column(Integer, nullable=True)
     slide: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -651,16 +779,81 @@ class LegacyEvidenceRefV01Model(Base):
     preserved_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
 
 
+class LegacyPaperVersionV01Model(Base):
+    __tablename__ = "legacy_paper_versions_v01"
+    __table_args__ = (
+        UniqueConstraint("migration_batch_id", "legacy_row_id", name="uq_legacy_paper_versions_row"),
+        Index("ix_legacy_paper_versions_linkage", "paper_id", "source_document_id", "parent_version_id"),
+    )
+    id: Mapped[UUID] = _uuid(primary_key=True)
+    legacy_row_id: Mapped[UUID] = mapped_column(UUIDText(), nullable=False)
+    original_table: Mapped[str] = mapped_column(String(128), nullable=False)
+    original_row_json: Mapped[str] = mapped_column(Text, nullable=False)
+    paper_id: Mapped[UUID] = mapped_column(UUIDText(), nullable=False)
+    source_document_id: Mapped[UUID] = mapped_column(UUIDText(), nullable=False)
+    parent_version_id: Mapped[UUID | None] = mapped_column(UUIDText(), nullable=True)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    version_label: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    reason_code: Mapped[str] = mapped_column(String(128), nullable=False)
+    migration_batch_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("migration_batches.id", ondelete="RESTRICT"), nullable=False)
+    source_schema_revision: Mapped[str] = mapped_column(String(128), nullable=False)
+    migrated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+
+
+class LegacyDependentRecordV01Model(Base):
+    __tablename__ = "legacy_dependent_records_v01"
+    __table_args__ = (
+        UniqueConstraint(
+            "original_table", "legacy_row_id", "migration_batch_id",
+            name="uq_legacy_dependent_record",
+        ),
+    )
+    id: Mapped[UUID] = _uuid(primary_key=True)
+    original_table: Mapped[str] = mapped_column(String(128), nullable=False)
+    legacy_row_id: Mapped[UUID] = mapped_column(UUIDText(), nullable=False)
+    original_row_json: Mapped[str] = mapped_column(Text, nullable=False)
+    dependency_ids_json: Mapped[str] = mapped_column(Text, nullable=False)
+    reason_code: Mapped[str] = mapped_column(String(128), nullable=False)
+    migration_batch_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("migration_batches.id", ondelete="RESTRICT"), nullable=False)
+    source_schema_revision: Mapped[str] = mapped_column(String(128), nullable=False)
+    migrated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+
+
+class LegacyRelationObservationV01Model(Base):
+    __tablename__ = "legacy_relation_observations_v01"
+    __table_args__ = (Index("ix_legacy_relation_observations_key", "observation_key"),)
+    id: Mapped[UUID] = _uuid(primary_key=True)
+    relation_id: Mapped[UUID] = mapped_column(UUIDText(), nullable=False)
+    observed_by_actor_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    observed_by_actor_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    provenance_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    confidence: Mapped[Decimal | None] = mapped_column(Numeric(6, 5), nullable=True)
+    origin_task_id: Mapped[UUID | None] = mapped_column(UUIDText(), nullable=True)
+    evidence_ref_id: Mapped[UUID | None] = mapped_column(UUIDText(), nullable=True)
+    provider_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    model_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    observation_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    reason_code: Mapped[str] = mapped_column(String(128), nullable=False)
+    migration_batch_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("migration_batches.id", ondelete="RESTRICT"), nullable=False)
+    source_schema_revision: Mapped[str] = mapped_column(String(128), nullable=False)
+    preserved_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+
+
 class EntityRelationModel(Base):
     __tablename__ = "entity_relations"
     __table_args__ = (
-        UniqueConstraint("relation_type", "source_type", "source_id", "target_type", "target_id", name="uq_entity_relations_assertion"),
-        CheckConstraint("source_type IN ('Paper','PaperVersion','Idea','Note','SourceDocument','Submission','Conference','Grant','EvidenceRef')", name="source_type_enum"),
-        CheckConstraint("target_type IN ('Paper','PaperVersion','Idea','Note','SourceDocument','Submission','Conference','Grant','EvidenceRef')", name="target_type_enum"),
-        CheckConstraint("relation_type IN ('belongs_to','derived_from','version_of','used_in','deleted_from','supports','contradicts','extends','related_to','presented_at','submitted_as','reviewed_by','suggested_for','split_from','merged_from')", name="relation_type_enum"),
+        CheckConstraint("relation_type IN ('belongs_to','derived_from','version_of','used_in','deleted_from','supports','contradicts','extends','related_to','presented_at','submitted_as','reviewed_by','suggested_for','split_from','merged_from','version_successor_of')", name="relation_type_enum"),
         CheckConstraint("confidence IS NULL OR (confidence >= 0 AND confidence <= 1)", name="confidence_range"),
         CheckConstraint("confirmation_state IN ('candidate','confirmed','rejected')", name="confirmation_state_enum"),
-        CheckConstraint("created_by_actor_type IN ('user','system','task_executor','agent')", name="actor_type_enum"),
+        CheckConstraint("lifecycle_state IN ('active','retracted','superseded')", name="lifecycle_state_enum"),
+        CheckConstraint("row_version >= 1", name="row_version_positive"),
+        Index(
+            "ux_entity_relations_active_endpoints",
+            "relation_type", "source_type", "source_id", "target_type", "target_id",
+            unique=True, sqlite_where=text("lifecycle_state='active'"),
+        ),
     )
     id: Mapped[UUID] = _uuid(primary_key=True)
     source_type: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -670,23 +863,28 @@ class EntityRelationModel(Base):
     target_id: Mapped[UUID] = mapped_column(UUIDText(), nullable=False)
     confidence: Mapped[Decimal | None] = mapped_column(Numeric(6, 5), nullable=True)
     confirmation_state: Mapped[str] = mapped_column(String(64), nullable=False, server_default=text("'candidate'"))
+    lifecycle_state: Mapped[str] = mapped_column(
+        String(64), nullable=False, server_default=text("'active'")
+    )
+    superseded_by_relation_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("entity_relations.id", ondelete="RESTRICT"), nullable=True)
     created_by_actor_type: Mapped[str] = mapped_column(String(64), nullable=False)
     created_by_actor_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_by_command_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("application_commands.id", ondelete="RESTRICT"), nullable=True)
+    row_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("1")
+    )
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    retracted_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    retracted_by_command_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("application_commands.id", ondelete="RESTRICT"), nullable=True)
 
 
 class RelationObservationModel(Base):
     __tablename__ = "relation_observations"
     __table_args__ = (
         UniqueConstraint("observation_key", name="uq_relation_observations_observation_key"),
-        CheckConstraint("observed_by_actor_type IN ('user','system','task_executor','agent')", name="actor_type_enum"),
-        CheckConstraint("provenance_type IN ('manual','rule','import','ai')", name="provenance_type_enum"),
         CheckConstraint("confidence IS NULL OR (confidence >= 0 AND confidence <= 1)", name="confidence_range"),
-        CheckConstraint("provenance_type NOT IN ('import','ai') OR confidence IS NOT NULL", name="confidence_provenance"),
-        CheckConstraint("observed_by_actor_type NOT IN ('task_executor','agent') OR origin_task_id IS NOT NULL", name="task_actor_origin"),
-        CheckConstraint("provenance_type NOT IN ('import','ai') OR evidence_ref_id IS NOT NULL", name="evidence_provenance"),
-        CheckConstraint("provenance_type <> 'ai' OR (provider_id IS NOT NULL AND model_id IS NOT NULL)", name="ai_provider_model"),
+        CheckConstraint("origin_task_id IS NULL OR origin_operation_id IS NULL", name="origin_exclusive"),
     )
     id: Mapped[UUID] = _uuid(primary_key=True)
     relation_id: Mapped[UUID] = mapped_column(UUIDText(), ForeignKey("entity_relations.id", ondelete="RESTRICT"), nullable=False)
@@ -695,7 +893,8 @@ class RelationObservationModel(Base):
     provenance_type: Mapped[str] = mapped_column(String(64), nullable=False)
     confidence: Mapped[Decimal | None] = mapped_column(Numeric(6, 5), nullable=True)
     origin_task_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("tasks.id", ondelete="RESTRICT"), nullable=True)
-    evidence_ref_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("legacy_evidence_refs_v01.id", name="fk_relation_observations_evidence_ref_id_evidence_refs", ondelete="RESTRICT"), nullable=True)
+    origin_operation_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("background_operations.id", ondelete="RESTRICT"), nullable=True)
+    evidence_ref_id: Mapped[UUID | None] = mapped_column(UUIDText(), ForeignKey("evidence_refs.id", ondelete="RESTRICT"), nullable=True)
     provider_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     model_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
@@ -809,7 +1008,9 @@ class DomainEventModel(Base):
     schema_version: Mapped[str] = mapped_column(String(16), nullable=False)
     event_type: Mapped[str] = mapped_column(String(128), nullable=False)
     workspace_id: Mapped[UUID | None] = mapped_column(UUIDText(), nullable=True)
-    command_id: Mapped[UUID | None] = mapped_column(UUIDText(), nullable=True)
+    command_id: Mapped[UUID | None] = mapped_column(
+        UUIDText(), ForeignKey("application_commands.id", ondelete="RESTRICT"), nullable=True
+    )
     operation_id: Mapped[UUID | None] = mapped_column(UUIDText(), nullable=True)
     aggregate_type: Mapped[str] = mapped_column(String(128), nullable=False)
     aggregate_id: Mapped[UUID] = mapped_column(UUIDText(), nullable=False)

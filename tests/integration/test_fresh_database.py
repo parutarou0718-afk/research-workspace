@@ -8,6 +8,7 @@ from sqlalchemy import event, func, inspect, select
 
 from research_workspace.application.queries.get_overview import GetOverview
 from research_workspace.infrastructure.db.models import (
+    ApplicationCommandModel,
     AuditLogModel,
     ConferenceModel,
     DomainEventModel,
@@ -132,6 +133,11 @@ def test_seed_is_idempotent(migrated_session):
 
 
 def test_seed_completes_a_partially_preexisting_manifest(migrated_session):
+    adoption_command_id = migrated_session.scalar(
+        select(ApplicationCommandModel.id).where(
+            ApplicationCommandModel.command_type == "system.migration_adopt_v01"
+        )
+    )
     migrated_session.add(
         PaperModel(
             id=_id("Paper", "multimodal-alignment"),
@@ -139,6 +145,9 @@ def test_seed_completes_a_partially_preexisting_manifest(migrated_session):
             status="revision",
             created_at=FIXED_TIME,
             updated_at=FIXED_TIME,
+            row_version=1,
+            created_by_command_id=adoption_command_id,
+            updated_by_command_id=adoption_command_id,
         )
     )
     migrated_session.commit()
@@ -277,9 +286,15 @@ def test_sql_overview_counts_and_rows_exclude_soft_deleted_parent_papers(
 ):
     seed_foundation_data(migrated_session)
     deleted_at = datetime(2026, 7, 1, tzinfo=timezone.utc)
+    adoption_command_id = migrated_session.scalar(
+        select(ApplicationCommandModel.id).where(
+            ApplicationCommandModel.command_type == "system.migration_adopt_v01"
+        )
+    )
     for stable_key in ("multimodal-alignment", "temporal-representation"):
         paper = migrated_session.get(PaperModel, _id("Paper", stable_key))
         paper.deleted_at = deleted_at
+        paper.deleted_by_command_id = adoption_command_id
     migrated_session.flush()
 
     view_model = GetOverview(SqlOverviewRepository(migrated_session)).execute()

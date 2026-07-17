@@ -15,6 +15,8 @@ EXPECTED_WORKSPACE_TABLES = frozenset(
     {
         "alembic_version",
         "audit_logs",
+        "audit_changes",
+        "application_commands",
         "background_operations",
         "conferences",
         "domain_events",
@@ -25,6 +27,9 @@ EXPECTED_WORKSPACE_TABLES = frozenset(
         "import_batches",
         "import_items",
         "legacy_evidence_refs_v01",
+        "legacy_dependent_records_v01",
+        "legacy_paper_versions_v01",
+        "legacy_relation_observations_v01",
         "legacy_source_documents_v01",
         "migration_batches",
         "notes",
@@ -37,6 +42,8 @@ EXPECTED_WORKSPACE_TABLES = frozenset(
         "parsed_blocks",
         "relation_observations",
         "reconciliation_runs",
+        "recovery_points",
+        "recovery_slots",
         "raw_event_pending_links",
         "raw_file_events",
         "snapshot_parse_preferences",
@@ -132,17 +139,17 @@ def test_production_inspection_classifies_new_and_exact_prepared_workspace(tmp_p
     assert _table_inventory(prepared_directory / "research_workspace.db") == EXPECTED_WORKSPACE_TABLES
 
 
-def test_production_inspection_accepts_only_exact_gate2_revision(tmp_path):
+def test_production_inspection_accepts_only_exact_gate3_revision(tmp_path):
     service = bootstrap.WorkspaceDataDirectoryService(
         JsonConfigStore(tmp_path / "config.json")
     )
-    valid = (tmp_path / "valid-0003").resolve()
+    valid = (tmp_path / "valid-0004").resolve()
     valid.mkdir()
     bootstrap._run_migrations(valid / "research_workspace.db")
 
     assert service.inspect(valid).kind == "existing"
 
-    for revision in ("0002", "0004", "unknown-future"):
+    for revision in ("0002", "0003", "0005", "unknown-future"):
         candidate = (tmp_path / revision).resolve()
         candidate.mkdir()
         shutil.copy2(valid / "research_workspace.db", candidate / "research_workspace.db")
@@ -151,12 +158,12 @@ def test_production_inspection_accepts_only_exact_gate2_revision(tmp_path):
         assert service.inspect(candidate).kind == "invalid"
 
 
-def test_production_inspection_rejects_partial_0003_inventory(tmp_path):
-    selected = (tmp_path / "partial-0003").resolve()
+def test_production_inspection_rejects_partial_0004_inventory(tmp_path):
+    selected = (tmp_path / "partial-0004").resolve()
     selected.mkdir()
     with sqlite3.connect(selected / "research_workspace.db") as connection:
         connection.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
-        connection.execute("INSERT INTO alembic_version VALUES ('0003')")
+        connection.execute("INSERT INTO alembic_version VALUES ('0004')")
         connection.execute("CREATE TABLE workspace_metadata (workspace_id CHAR(36) PRIMARY KEY)")
 
     service = bootstrap.WorkspaceDataDirectoryService(

@@ -47,7 +47,12 @@ def create_migration_safety_image(
     with sqlite3.connect(backup_path) as verified:
         integrity = verified.execute("PRAGMA integrity_check").fetchone()[0]
         revision_row = verified.execute("SELECT version_num FROM alembic_version").fetchone()
-    if integrity != "ok" or revision_row is None or revision_row[0] != "0001":
+    expected_revision = source_revision.split("_", 1)[0]
+    if (
+        integrity != "ok"
+        or revision_row is None
+        or revision_row[0] != expected_revision
+    ):
         raise RuntimeError("pre-migration SQLite backup verification failed")
 
     database_sha256 = hashlib.sha256(backup_path.read_bytes()).hexdigest()

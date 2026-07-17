@@ -259,8 +259,10 @@ def test_alembic_retains_gate1_revision_in_gate2_chain() -> None:
     config.set_main_option("script_location", str(ROOT / "migrations"))
     script = ScriptDirectory.from_config(config)
     assert script.get_revision("0002").down_revision == "0001"
-    assert script.get_heads() == ["0003"]
-    assert script.get_current_head() == "0003"
+    assert script.get_revision("0003").down_revision == "0002"
+    assert script.get_revision("0004").down_revision == "0003"
+    assert script.get_heads() == ["0004"]
+    assert script.get_current_head() == "0004"
 
 
 def test_all_acceptance_evidence_modules_exist_collect_and_have_no_skip_or_xfail() -> None:

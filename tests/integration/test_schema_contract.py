@@ -25,6 +25,25 @@ GATE2_TABLES = {
     "monitoring_roots", "raw_file_events", "raw_event_pending_links",
     "pending_path_checks", "reconciliation_runs", "paper_version_candidates",
 }
+GATE3_TABLES = {
+    "application_commands",
+    "audit_changes",
+    "recovery_points",
+    "recovery_slots",
+    "legacy_paper_versions_v01",
+    "legacy_dependent_records_v01",
+    "legacy_relation_observations_v01",
+}
+GATE3_REPLACED_TABLES = {
+    "papers",
+    "paper_versions",
+    "ideas",
+    "notes",
+    "submissions",
+    "entity_relations",
+    "relation_observations",
+    "domain_events",
+}
 
 
 EXPECTED_SCHEMA = {
@@ -234,9 +253,9 @@ def test_core_metadata_has_exact_columns(engine):
 
 
 def _assert_exact_schema(inspector):
-    unchanged = set(EXPECTED_SCHEMA) - GATE1_REPLACED_V01_TABLES
+    unchanged = set(EXPECTED_SCHEMA) - GATE1_REPLACED_V01_TABLES - GATE3_REPLACED_TABLES
     assert set(inspector.get_table_names()) - {"alembic_version"} == (
-        unchanged | GATE1_TABLES | GATE2_TABLES
+        unchanged | GATE1_TABLES | GATE2_TABLES | GATE3_TABLES | GATE3_REPLACED_TABLES
     )
     for table in unchanged:
         expected = EXPECTED_SCHEMA[table]
@@ -249,10 +268,15 @@ def _assert_exact_schema(inspector):
 
 def test_relation_assertion_is_unique(engine):
     Base.metadata.create_all(engine)
-    uniques = inspect(engine).get_unique_constraints("entity_relations")
-    assert {tuple(item["column_names"]) for item in uniques} >= {
-        ("relation_type", "source_type", "source_id", "target_type", "target_id"),
-    }
+    indexes = inspect(engine).get_indexes("entity_relations")
+    active = next(
+        item for item in indexes
+        if item["name"] == "ux_entity_relations_active_endpoints"
+    )
+    assert bool(active["unique"]) is True
+    assert tuple(active["column_names"]) == (
+        "relation_type", "source_type", "source_id", "target_type", "target_id"
+    )
 
 
 def test_group_two_foreign_keys(engine):
@@ -268,7 +292,8 @@ def test_group_two_foreign_keys(engine):
         ("evidence_refs", ("parsed_block_id",), "parsed_blocks", "RESTRICT"),
         ("evidence_refs", ("created_by_operation_id",), "background_operations", "RESTRICT"),
         ("relation_observations", ("relation_id",), "entity_relations", "RESTRICT"),
-        ("relation_observations", ("evidence_ref_id",), "legacy_evidence_refs_v01", "RESTRICT"),
+        ("relation_observations", ("evidence_ref_id",), "evidence_refs", "RESTRICT"),
+        ("relation_observations", ("origin_operation_id",), "background_operations", "RESTRICT"),
         ("audit_logs", ("undo_of_audit_id",), "audit_logs", "RESTRICT"),
         ("relation_observations", ("origin_task_id",), "tasks", "RESTRICT"),
         ("audit_logs", ("task_id",), "tasks", "RESTRICT"),
@@ -281,7 +306,7 @@ def test_defaults_checks_foreign_keys_uniques_and_indexes_are_exact(engine):
 
 
 def _assert_exact_constraints(inspector):
-    for table in set(EXPECTED_SCHEMA) - GATE1_REPLACED_V01_TABLES:
+    for table in set(EXPECTED_SCHEMA) - GATE1_REPLACED_V01_TABLES - GATE3_REPLACED_TABLES:
         defaults = {col["name"]: str(col["default"]) for col in inspector.get_columns(table) if col["default"] is not None}
         assert defaults == EXPECTED_DEFAULTS[table]
         primary_key = inspector.get_pk_constraint(table)

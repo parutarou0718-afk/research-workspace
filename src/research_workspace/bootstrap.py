@@ -83,7 +83,7 @@ _DATA_SUBDIRECTORIES = (
     "backups",
     "logs",
 )
-SUPPORTED_SCHEMA_REVISION = "0003"
+SUPPORTED_SCHEMA_REVISION = "0004"
 _EXPECTED_WORKSPACE_TABLES = frozenset((*Base.metadata.tables, "alembic_version"))
 
 

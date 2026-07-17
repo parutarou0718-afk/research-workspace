@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from research_workspace.infrastructure.db.models import (
+    ApplicationCommandModel,
     ConferenceModel,
     GrantModel,
     IdeaModel,
@@ -30,16 +31,31 @@ def _seed_id(entity_type: str, stable_key: str):
 def seed_foundation_data(session: Session) -> None:
     """Insert the exact fixed manifest once, atomically, without audit rows."""
 
+    with session.get_bind().connect() as connection:
+        adoption_command_id = connection.scalar(
+            select(ApplicationCommandModel.id).where(
+                ApplicationCommandModel.command_type == "system.migration_adopt_v01",
+                ApplicationCommandModel.status == "committed",
+            )
+        )
+    if adoption_command_id is None:
+        raise RuntimeError("0004 migration adoption command is required before seeding")
+    command_fields = {
+        "row_version": 1,
+        "created_by_command_id": adoption_command_id,
+        "updated_by_command_id": adoption_command_id,
+    }
     papers = (
-        PaperModel(id=_seed_id("Paper", "multimodal-alignment"), title="多模态对齐方法研究", status="revision", created_at=SEED_TIMESTAMP, updated_at=SEED_TIMESTAMP),
-        PaperModel(id=_seed_id("Paper", "temporal-representation"), title="时序表示学习综述", status="active", created_at=SEED_TIMESTAMP, updated_at=SEED_TIMESTAMP),
-        PaperModel(id=_seed_id("Paper", "research-llm"), title="大模型在科研工作流中的应用", status="active", created_at=SEED_TIMESTAMP, updated_at=SEED_TIMESTAMP),
+        PaperModel(id=_seed_id("Paper", "multimodal-alignment"), title="多模态对齐方法研究", status="revision", created_at=SEED_TIMESTAMP, updated_at=SEED_TIMESTAMP, **command_fields),
+        PaperModel(id=_seed_id("Paper", "temporal-representation"), title="时序表示学习综述", status="active", created_at=SEED_TIMESTAMP, updated_at=SEED_TIMESTAMP, **command_fields),
+        PaperModel(id=_seed_id("Paper", "research-llm"), title="大模型在科研工作流中的应用", status="active", created_at=SEED_TIMESTAMP, updated_at=SEED_TIMESTAMP, **command_fields),
     )
     ideas = tuple(
         IdeaModel(
             id=_seed_id("Idea", key), title=text, content=text,
             status="unused", origin_type="manual",
             created_at=SEED_TIMESTAMP, updated_at=SEED_TIMESTAMP,
+            **command_fields,
         )
         for key, text in (
             ("causal-alignment", "跨模态因果对齐"),
@@ -55,18 +71,21 @@ def seed_foundation_data(session: Session) -> None:
             status="revision", submitted_at=datetime(2026, 6, 10, tzinfo=timezone.utc),
             deadline_at=datetime(2026, 7, 20, tzinfo=timezone.utc),
             created_at=SEED_TIMESTAMP, updated_at=SEED_TIMESTAMP,
+            **command_fields,
         ),
         SubmissionModel(
             id=_seed_id("Submission", "neurips-ready"),
             paper_id=_seed_id("Paper", "temporal-representation"), venue="NeurIPS",
             status="ready", deadline_at=datetime(2026, 7, 31, tzinfo=timezone.utc),
             created_at=SEED_TIMESTAMP, updated_at=SEED_TIMESTAMP,
+            **command_fields,
         ),
         SubmissionModel(
             id=_seed_id("Submission", "acmmm-review"),
             paper_id=_seed_id("Paper", "research-llm"), venue="ACM MM",
             status="external_review", submitted_at=datetime(2026, 6, 15, tzinfo=timezone.utc),
             created_at=SEED_TIMESTAMP, updated_at=SEED_TIMESTAMP,
+            **command_fields,
         ),
     )
     conferences = (
