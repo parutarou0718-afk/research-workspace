@@ -19,13 +19,17 @@ def _token_stylesheet() -> str:
     point_scale = typography["pointScale"]
     body_points = typography["body"] * point_scale
     title_points = typography["title"] * point_scale
-    font_family = typography["fontFamily"].split(",", maxsplit=1)[0]
+    # Qt style sheets do not reliably apply comma-separated fallbacks on all
+    # platforms/plugins. Keep the design-token stack in JSON, but choose the
+    # Windows CJK-safe family for actual rendering so Chinese UI text never
+    # degrades into tofu boxes.
+    font_family = "'Microsoft YaHei UI'"
     return f"""
-QWidget {{ color: {colors['textMain']}; font-family: '{font_family}'; font-size: {body_points:g}pt; }}
+QWidget {{ color: {colors['textMain']}; font-family: {font_family}; font-size: {body_points:g}pt; }}
 QWidget#overviewPage, QWidget#papersPage, QWidget#ideasPage,
 QWidget#submissionsPage, QWidget#conferencesPage, QWidget#grantsPage,
 QWidget#importsPage, QWidget#monitoringPage, QWidget#versionCandidatesPage,
-QWidget#settingsPage, QWidget#startupErrorPage,
+QWidget#relationsPage, QWidget#settingsPage, QWidget#startupErrorPage,
 QDialog#importBatchDialog {{ background: {colors['background']}; }}
 QFrame[card="true"] {{ background: {colors['surface']}; border: 1px solid {colors['border']}; border-radius: {radius['card']}px; }}
 QLabel#pageTitleLabel {{ font-size: {title_points:g}pt; font-weight: 700; }}

@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>RelationsPage</class>
+ <widget class="QWidget" name="relationsPage">
+  <layout class="QVBoxLayout" name="relationsRootVerticalLayout">
+   <property name="leftMargin"><number>0</number></property>
+   <property name="topMargin"><number>0</number></property>
+   <property name="rightMargin"><number>0</number></property>
+   <property name="bottomMargin"><number>0</number></property>
+   <item>
+    <widget class="QScrollArea" name="relationsScrollArea">
+     <property name="widgetResizable"><bool>true</bool></property>
+     <property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOff</enum></property>
+     <property name="verticalScrollBarPolicy"><enum>Qt::ScrollBarAsNeeded</enum></property>
+     <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+     <widget class="QWidget" name="relationsContentWidget">
+      <property name="minimumSize"><size><width>0</width><height>780</height></size></property>
+      <layout class="QVBoxLayout" name="relationsContentVerticalLayout">
+       <property name="leftMargin"><number>24</number></property>
+       <property name="topMargin"><number>24</number></property>
+       <property name="rightMargin"><number>24</number></property>
+       <property name="bottomMargin"><number>24</number></property>
+       <property name="spacing"><number>20</number></property>
+       <item>
+        <widget class="QLabel" name="pageTitleLabel">
+         <property name="text"><string>关系</string></property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="pageSubtitleLabel">
+         <property name="text"><string>查看论文、Idea、版本和证据之间的已记录关系。</string></property>
+         <property name="wordWrap"><bool>true</bool></property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QFrame" name="relationsCard">
+         <property name="card"><bool>true</bool></property>
+         <layout class="QVBoxLayout" name="relationsCardVerticalLayout">
+          <property name="leftMargin"><number>16</number></property>
+          <property name="topMargin"><number>16</number></property>
+          <property name="rightMargin"><number>16</number></property>
+          <property name="bottomMargin"><number>16</number></property>
+          <property name="spacing"><number>12</number></property>
+          <item>
+           <widget class="QLabel" name="relationsSectionTitleLabel">
+            <property name="text"><string>关系列表</string></property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QTableWidget" name="relationsTable">
+            <property name="minimumSize"><size><width>0</width><height>320</height></size></property>
+            <property name="editTriggers"><set>QAbstractItemView::NoEditTriggers</set></property>
+            <property name="selectionBehavior"><enum>QAbstractItemView::SelectRows</enum></property>
+            <property name="horizontalScrollMode"><enum>QAbstractItemView::ScrollPerPixel</enum></property>
+            <property name="showGrid"><bool>false</bool></property>
+            <property name="columnCount"><number>6</number></property>
+            <property name="rowCount"><number>0</number></property>
+            <column><property name="text"><string>来源对象</string></property></column>
+            <column><property name="text"><string>目标对象</string></property></column>
+            <column><property name="text"><string>关系类型</string></property></column>
+            <column><property name="text"><string>Evidence</string></property></column>
+            <column><property name="text"><string>状态</string></property></column>
+            <column><property name="text"><string>决策入口</string></property></column>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="relationsEmptyLabel">
+            <property name="text"><string>暂无关系。确认版本候选或建立研究记录后，这里会显示只读关系概览。</string></property>
+            <property name="wordWrap"><bool>true</bool></property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

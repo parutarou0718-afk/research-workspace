@@ -5,12 +5,19 @@ PAGE_KEYS = (
     "overview",
     "papers",
     "ideas",
+    "relations",
     "submissions",
-    "imports",
     "conferences",
     "grants",
+    "imports",
+    "monitoring",
+    "version_candidates",
     "settings",
 )
+
+
+def _button_name(key: str) -> str:
+    return f"nav{''.join(part.title() for part in key.split('_'))}Button"
 
 
 def test_every_navigation_destination_is_reachable(qtbot):
@@ -22,7 +29,7 @@ def test_every_navigation_destination_is_reachable(qtbot):
     qtbot.addWidget(window)
 
     for key in PAGE_KEYS:
-        button = window.findChild(QPushButton, f"nav{key.title()}Button")
+        button = window.findChild(QPushButton, _button_name(key))
         qtbot.mouseClick(button, Qt.MouseButton.LeftButton)
         assert window.page_stack.currentWidget() is window.pages[key].widget
 

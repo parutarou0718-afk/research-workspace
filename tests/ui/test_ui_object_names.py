@@ -17,6 +17,7 @@ PAGE_FILES = {
     "overview_page.ui": "overviewPage",
     "papers_page.ui": "papersPage",
     "ideas_page.ui": "ideasPage",
+    "relations_page.ui": "relationsPage",
     "submissions_page.ui": "submissionsPage",
     "imports_page.ui": "importsPage",
     "monitoring_page.ui": "monitoringPage",
@@ -94,8 +95,9 @@ def test_main_window_owns_only_navigation_and_page_stack():
     assert root.find("widget").attrib == {"class": "QMainWindow", "name": "mainWindow"}
     assert "pageStack" in names
     assert {f"nav{page}Button" for page in (
-        "Overview", "Papers", "Ideas", "Submissions", "Imports", "Monitoring",
-        "VersionCandidates", "Conferences", "Grants", "Settings"
+        "Overview", "Papers", "Ideas", "Relations", "Submissions",
+        "Conferences", "Grants", "Imports", "Monitoring",
+        "VersionCandidates", "Settings"
     )} <= names
     assert names == {
         "mainWindow",
@@ -107,12 +109,13 @@ def test_main_window_owns_only_navigation_and_page_stack():
         "navOverviewButton",
         "navPapersButton",
         "navIdeasButton",
+        "navRelationsButton",
         "navSubmissionsButton",
+        "navConferencesButton",
+        "navGrantsButton",
         "navImportsButton",
         "navMonitoringButton",
         "navVersionCandidatesButton",
-        "navConferencesButton",
-        "navGrantsButton",
         "navigationVerticalSpacer",
         "navSettingsButton",
         "localModeStatusLabel",

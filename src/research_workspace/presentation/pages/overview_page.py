@@ -14,6 +14,24 @@ from PySide6.QtWidgets import (
 from research_workspace.presentation import load_ui_resource, require_child
 
 
+SUBMISSION_STATUS_TEXT = {
+    "preparing": "准备中",
+    "ready": "待投稿",
+    "submitted": "已投稿",
+    "editorial_review": "编辑审查中",
+    "external_review": "外审中",
+    "revision": "返修中",
+    "accepted": "已接受",
+    "rejected": "已拒稿",
+    "withdrawn": "已撤稿",
+    "no_response": "无回应",
+}
+
+
+def _human_date(value: str) -> str:
+    return value.removesuffix("Z")[:10] if value else ""
+
+
 class OverviewPage:
     def __init__(self, services):
         self.services = services
@@ -35,9 +53,16 @@ class OverviewPage:
         )
         self.grant_help_label = require_child(self.widget, QLabel, "grantHelpLabel")
         self.suggestions_list = require_child(self.widget, QListWidget, "suggestionsListView")
+        self.suggestions_empty_title = require_child(
+            self.widget, QLabel, "suggestionsEmptyTitleLabel"
+        )
+        self.suggestions_empty_body = require_child(
+            self.widget, QLabel, "suggestionsEmptyBodyLabel"
+        )
         self.submission_table = require_child(
             self.widget, QTableWidget, "submissionOverviewTable"
         )
+        self.submission_table.setShowGrid(False)
         self.activities_list = require_child(self.widget, QListWidget, "activitiesListView")
         self.focus_items_list = require_child(self.widget, QListWidget, "focusItemsListView")
         self.focus_progress = require_child(self.widget, QProgressBar, "focusProgressBar")
@@ -70,8 +95,14 @@ class OverviewPage:
         )
         self.upcoming_grant_count_label.setText(str(view_model.upcoming_grant_count))
 
+        self.suggestions_list.clear()
+        self.suggestions_list.addItems(view_model.suggestions)
+        has_suggestions = bool(view_model.suggestions)
+        self.suggestions_list.setVisible(has_suggestions)
+        self.suggestions_empty_title.setVisible(not has_suggestions)
+        self.suggestions_empty_body.setVisible(not has_suggestions)
+
         for widget, values in (
-            (self.suggestions_list, view_model.suggestions),
             (self.activities_list, view_model.activities),
             (self.focus_items_list, view_model.focus_items),
         ):
@@ -83,7 +114,12 @@ class OverviewPage:
             columns = row_value.split(" | ")
             for column_index in range(self.submission_table.columnCount()):
                 value = columns[column_index] if column_index < len(columns) else ""
+                if column_index == 2:
+                    value = SUBMISSION_STATUS_TEXT.get(value, value)
+                elif column_index == 3:
+                    value = _human_date(value)
                 self.submission_table.setItem(
                     row_index, column_index, QTableWidgetItem(value)
                 )
+            self.submission_table.setRowHeight(row_index, 44)
         self.focus_progress.setValue(view_model.focus_progress)

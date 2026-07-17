@@ -10,6 +10,7 @@ from research_workspace.presentation.pages.imports_page import ImportsPage
 from research_workspace.presentation.pages.monitoring_page import MonitoringPage
 from research_workspace.presentation.pages.overview_page import OverviewPage
 from research_workspace.presentation.pages.papers_page import PapersPage
+from research_workspace.presentation.pages.relations_page import RelationsPage
 from research_workspace.presentation.pages.settings_page import SettingsPage
 from research_workspace.presentation.pages.submissions_page import SubmissionsPage
 from research_workspace.presentation.pages.version_candidates_page import (
@@ -21,12 +22,13 @@ PAGE_TYPES = {
     "overview": OverviewPage,
     "papers": PapersPage,
     "ideas": IdeasPage,
+    "relations": RelationsPage,
     "submissions": SubmissionsPage,
+    "conferences": ConferencesPage,
+    "grants": GrantsPage,
     "imports": ImportsPage,
     "monitoring": MonitoringPage,
     "version_candidates": VersionCandidatesPage,
-    "conferences": ConferencesPage,
-    "grants": GrantsPage,
     "settings": SettingsPage,
 }
 

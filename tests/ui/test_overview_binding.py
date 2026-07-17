@@ -32,7 +32,7 @@ def test_overview_renders_view_model_values(qtbot):
     assert controller.upcoming_grant_count_label.text() == "1"
     assert [controller.suggestions_list.item(index).text() for index in range(controller.suggestions_list.count())] == ["检查近期截止日期"]
     assert controller.submission_table.rowCount() == 1
-    assert [controller.submission_table.item(0, column).text() for column in range(4)] == ["论文", "Venue", "revision", "2026-07-20Z"]
+    assert [controller.submission_table.item(0, column).text() for column in range(4)] == ["论文", "Venue", "返修中", "2026-07-20"]
     assert [controller.activities_list.item(index).text() for index in range(controller.activities_list.count())] == ["初始化工作台"]
     assert [controller.focus_items_list.item(index).text() for index in range(controller.focus_items_list.count())] == ["完成基础设施"]
     assert controller.focus_progress.value() == 33

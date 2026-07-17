@@ -32,10 +32,12 @@ src/research_workspace/presentation/dialogs/paper_editor_dialog.py
 src/research_workspace/presentation/dialogs/idea_editor_dialog.py
 src/research_workspace/presentation/dialogs/submission_editor_dialog.py
 src/research_workspace/presentation/dialogs/relation_review_dialog.py
+src/research_workspace/presentation/pages/relations_page.py
 src/research_workspace/presentation/ui/paper_editor_dialog.ui
 src/research_workspace/presentation/ui/idea_editor_dialog.ui
 src/research_workspace/presentation/ui/submission_editor_dialog.ui
 src/research_workspace/presentation/ui/relation_review_dialog.ui
+src/research_workspace/presentation/ui/relations_page.ui
 src/research_workspace/presentation/view_models/papers.py
 src/research_workspace/presentation/view_models/ideas.py
 src/research_workspace/presentation/view_models/submissions.py
@@ -102,4 +104,3 @@ def test_existing_production_paths_are_baseline_or_allowed_gate3_paths() -> None
 
 def test_gate4_paths_remain_absent() -> None:
     assert GATE4_PATHS.isdisjoint(production_files())
-
