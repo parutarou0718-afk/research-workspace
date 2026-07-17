@@ -57,6 +57,10 @@ from research_workspace.application.services.change_data_directory import (
 )
 from research_workspace.application.services.initialize_application import InitializeApplication
 from research_workspace.application.services.import_orchestrator import ImportOrchestrator
+from research_workspace.application.services.paper_ai_analysis import (
+    PaperAIAnalysisService,
+    ThreadedPaperAIAnalysisService,
+)
 from research_workspace.application.services.command_dispatcher import (
     CommandDispatcher, RawCommandEnvelope)
 from research_workspace.application.services.operation_dispatcher import (
@@ -68,6 +72,8 @@ from research_workspace.application.services.relation_graph import (
     ParseContextRef, RetractionDependencies, VersionEdge,
     change_version_context, retract_version_membership)
 from research_workspace.infrastructure.config.json_config_store import JsonConfigStore
+from research_workspace.infrastructure.config.ai_settings_store import JsonAISettingsStore
+from research_workspace.infrastructure.ai.openai_compatible import OpenAICompatibleProvider
 from research_workspace.infrastructure.db.base import Base
 import research_workspace.infrastructure.db.models  # noqa: F401
 from research_workspace.infrastructure.db.models import (
@@ -144,6 +150,9 @@ class ApplicationServices:
     get_safe_undo: object
     decision_actions: object
     monitoring_actions: object
+    ai_settings_store: JsonAISettingsStore
+    paper_ai_analysis: ThreadedPaperAIAnalysisService
+    ai_connection_tester: ThreadedPaperAIAnalysisService
     create_import_request: Callable[[tuple[Path, ...]], ImportRequest]
     engine: Engine
     session: Session
@@ -159,6 +168,7 @@ class ApplicationServices:
                 self.write_coordinator.complete_monitoring_session(
                     datetime.now(timezone.utc)
                 )
+            self.paper_ai_analysis.shutdown()
             self.session.close()
             self.engine.dispose()
             self.closed = True
@@ -906,6 +916,13 @@ def bootstrap_application() -> BootstrapResult:
             protected_pipeline, command_dispatcher, operation_runner,
             coordinator.next_recovery_generation, coordinator.workspace_id(),
             factory, candidate_query)
+        ai_settings_store = JsonAISettingsStore()
+        paper_ai_analysis = ThreadedPaperAIAnalysisService(
+            PaperAIAnalysisService(
+                ai_settings_store.load,
+                OpenAICompatibleProvider(),
+            )
+        )
         services = ApplicationServices(
             config=state.config,
             config_store=config_store,
@@ -921,6 +938,9 @@ def bootstrap_application() -> BootstrapResult:
             get_safe_undo=_SafeUndoQuery(factory),
             decision_actions=decision_actions,
             monitoring_actions=monitoring_actions,
+            ai_settings_store=ai_settings_store,
+            paper_ai_analysis=paper_ai_analysis,
+            ai_connection_tester=paper_ai_analysis,
             create_import_request=lambda paths: _create_import_request(
                 tuple(paths), coordinator.workspace_id()
             ),

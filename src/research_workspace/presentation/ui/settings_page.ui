@@ -1,26 +1,93 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
  <class>SettingsPage</class>
- <widget class="QWidget" name="settingsPage"><layout class="QVBoxLayout" name="settingsRootVerticalLayout">
-  <property name="leftMargin"><number>0</number></property><property name="topMargin"><number>0</number></property><property name="rightMargin"><number>0</number></property><property name="bottomMargin"><number>0</number></property>
-  <item><widget class="QScrollArea" name="settingsScrollArea"><property name="widgetResizable"><bool>true</bool></property><property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOff</enum></property><property name="verticalScrollBarPolicy"><enum>Qt::ScrollBarAsNeeded</enum></property><property name="frameShape"><enum>QFrame::NoFrame</enum></property>
-   <widget class="QWidget" name="settingsContentWidget"><property name="minimumSize"><size><width>0</width><height>900</height></size></property><layout class="QVBoxLayout" name="settingsContentVerticalLayout"><property name="leftMargin"><number>24</number></property><property name="topMargin"><number>24</number></property><property name="rightMargin"><number>24</number></property><property name="bottomMargin"><number>24</number></property><property name="spacing"><number>12</number></property>
-    <item><widget class="QLabel" name="pageTitleLabel"><property name="font"><font><pointsize>18</pointsize><bold>true</bold></font></property><property name="text"><string>设置</string></property></widget></item>
-    <item><widget class="QFrame" name="dataDirectoryCard"><layout class="QVBoxLayout" name="dataDirectoryVerticalLayout">
-     <item><widget class="QLabel" name="dataDirectoryTitleLabel"><property name="font"><font><pointsize>12</pointsize><bold>true</bold></font></property><property name="text"><string>数据目录</string></property></widget></item>
-     <item><widget class="QLabel" name="dataDirectoryHelpLabel"><property name="minimumSize"><size><width>0</width><height>32</height></size></property><property name="text"><string>切换后将使用新目录中的工作台数据；现有数据不会自动迁移或删除。</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
-     <item><widget class="QPushButton" name="chooseDataDirectoryButton"><property name="text"><string>选择数据目录</string></property><property name="minimumSize"><size><width>130</width><height>36</height></size></property></widget></item>
-     <item><widget class="QLabel" name="resolvedPathTitleLabel"><property name="text"><string>解析后的绝对路径</string></property></widget></item>
-     <item><widget class="QLineEdit" name="resolvedDataDirectoryLineEdit"><property name="readOnly"><bool>true</bool></property><property name="placeholderText"><string>尚未选择目录</string></property></widget></item>
-     <item><widget class="QLabel" name="workspaceStatusLabel"><property name="minimumSize"><size><width>0</width><height>32</height></size></property><property name="text"><string>选择目录后将显示现有工作台或新工作台状态。</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
-     <item><widget class="QLabel" name="dataDirectoryErrorLabel"><property name="text"><string/></property><property name="wordWrap"><bool>true</bool></property></widget></item>
-     <item><widget class="QPushButton" name="confirmDataDirectoryButton"><property name="text"><string>验证并在重启后切换</string></property><property name="minimumSize"><size><width>180</width><height>36</height></size></property></widget></item>
-     <item><widget class="QLabel" name="pendingDirectoryStatusLabel"><property name="minimumSize"><size><width>0</width><height>32</height></size></property><property name="text"><string>已验证。重启应用后切换，当前目录保持不变。</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
-     <item><layout class="QHBoxLayout" name="restartActionsHorizontalLayout"><item><widget class="QPushButton" name="restartNowButton"><property name="text"><string>立即重启</string></property><property name="minimumSize"><size><width>100</width><height>36</height></size></property></widget></item><item><widget class="QPushButton" name="laterButton"><property name="text"><string>稍后</string></property><property name="minimumSize"><size><width>90</width><height>36</height></size></property></widget></item><item><spacer name="restartActionsHorizontalSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item></layout></item>
-    </layout></widget></item>
-    <item><spacer name="settingsVerticalSpacer"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>240</height></size></property></spacer></item>
-   </layout></widget>
-  </widget></item>
- </layout></widget>
- <resources/><connections/>
+ <widget class="QWidget" name="settingsPage">
+  <layout class="QVBoxLayout" name="settingsRootVerticalLayout">
+   <property name="leftMargin"><number>0</number></property>
+   <property name="topMargin"><number>0</number></property>
+   <property name="rightMargin"><number>0</number></property>
+   <property name="bottomMargin"><number>0</number></property>
+   <item>
+    <widget class="QScrollArea" name="settingsScrollArea">
+     <property name="widgetResizable"><bool>true</bool></property>
+     <property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOff</enum></property>
+     <property name="verticalScrollBarPolicy"><enum>Qt::ScrollBarAsNeeded</enum></property>
+     <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+     <widget class="QWidget" name="settingsContentWidget">
+      <property name="minimumSize"><size><width>0</width><height>900</height></size></property>
+      <layout class="QVBoxLayout" name="settingsContentVerticalLayout">
+       <property name="leftMargin"><number>24</number></property>
+       <property name="topMargin"><number>24</number></property>
+       <property name="rightMargin"><number>24</number></property>
+       <property name="bottomMargin"><number>24</number></property>
+       <property name="spacing"><number>16</number></property>
+       <item><widget class="QLabel" name="pageTitleLabel"><property name="text"><string>Settings</string></property></widget></item>
+       <item>
+        <widget class="QFrame" name="aiSettingsCard">
+         <property name="component"><string>card</string></property>
+         <layout class="QVBoxLayout" name="aiSettingsVerticalLayout">
+          <property name="leftMargin"><number>20</number></property>
+          <property name="topMargin"><number>20</number></property>
+          <property name="rightMargin"><number>20</number></property>
+          <property name="bottomMargin"><number>20</number></property>
+          <property name="spacing"><number>10</number></property>
+          <item><widget class="QLabel" name="aiSettingsTitleLabel"><property name="text"><string>AI Settings</string></property></widget></item>
+          <item><widget class="QLabel" name="aiProviderLabel"><property name="text"><string>Provider</string></property></widget></item>
+          <item><widget class="QLabel" name="aiProviderValueLabel"><property name="text"><string>OpenAI Compatible</string></property></widget></item>
+          <item><widget class="QLabel" name="aiBaseUrlLabel"><property name="text"><string>Base URL</string></property></widget></item>
+          <item><widget class="QLineEdit" name="aiBaseUrlLineEdit"><property name="placeholderText"><string>https://api.example.com/v1</string></property></widget></item>
+          <item><widget class="QLabel" name="aiApiKeyLabel"><property name="text"><string>API Key</string></property></widget></item>
+          <item><widget class="QLineEdit" name="aiApiKeyLineEdit"><property name="echoMode"><enum>QLineEdit::Password</enum></property><property name="placeholderText"><string>Enter API key</string></property></widget></item>
+          <item><widget class="QLabel" name="aiModelLabel"><property name="text"><string>Model</string></property></widget></item>
+          <item><widget class="QLineEdit" name="aiModelLineEdit"><property name="placeholderText"><string>gpt-4.1-mini</string></property></widget></item>
+          <item>
+           <layout class="QHBoxLayout" name="aiSettingsActionsHorizontalLayout">
+            <property name="spacing"><number>8</number></property>
+            <item><widget class="QPushButton" name="saveAiSettingsButton"><property name="variant"><string>primary</string></property><property name="text"><string>Save Settings</string></property></widget></item>
+            <item><widget class="QPushButton" name="testAiConnectionButton"><property name="variant"><string>secondary</string></property><property name="text"><string>Test Connection</string></property></widget></item>
+            <item><spacer name="aiSettingsActionsSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+           </layout>
+          </item>
+          <item><widget class="QLabel" name="aiSettingsStatusLabel"><property name="text"><string/></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QFrame" name="dataDirectoryCard">
+         <property name="component"><string>card</string></property>
+         <layout class="QVBoxLayout" name="dataDirectoryVerticalLayout">
+          <property name="leftMargin"><number>20</number></property>
+          <property name="topMargin"><number>20</number></property>
+          <property name="rightMargin"><number>20</number></property>
+          <property name="bottomMargin"><number>20</number></property>
+          <property name="spacing"><number>10</number></property>
+          <item><widget class="QLabel" name="dataDirectoryTitleLabel"><property name="text"><string>Data Directory</string></property></widget></item>
+          <item><widget class="QLabel" name="dataDirectoryHelpLabel"><property name="text"><string>Choose where Research Workspace stores your local data. Existing data will not be moved or deleted automatically.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+          <item><widget class="QPushButton" name="chooseDataDirectoryButton"><property name="variant"><string>secondary</string></property><property name="text"><string>Choose Data Directory</string></property><property name="minimumSize"><size><width>150</width><height>36</height></size></property></widget></item>
+          <item><widget class="QLabel" name="resolvedPathTitleLabel"><property name="text"><string>Resolved Path</string></property></widget></item>
+          <item><widget class="QLineEdit" name="resolvedDataDirectoryLineEdit"><property name="readOnly"><bool>true</bool></property><property name="placeholderText"><string>No directory selected</string></property></widget></item>
+          <item><widget class="QLabel" name="workspaceStatusLabel"><property name="minimumSize"><size><width>0</width><height>32</height></size></property><property name="text"><string>Select a directory to inspect its workspace status.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+          <item><widget class="QLabel" name="dataDirectoryErrorLabel"><property name="text"><string/></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+          <item><widget class="QPushButton" name="confirmDataDirectoryButton"><property name="variant"><string>primary</string></property><property name="text"><string>Verify and Use on Restart</string></property><property name="minimumSize"><size><width>190</width><height>36</height></size></property></widget></item>
+          <item><widget class="QLabel" name="pendingDirectoryStatusLabel"><property name="minimumSize"><size><width>0</width><height>32</height></size></property><property name="text"><string/></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+          <item>
+           <layout class="QHBoxLayout" name="restartActionsHorizontalLayout">
+            <property name="spacing"><number>8</number></property>
+            <item><widget class="QPushButton" name="restartNowButton"><property name="variant"><string>secondary</string></property><property name="text"><string>Restart Now</string></property><property name="minimumSize"><size><width>110</width><height>36</height></size></property></widget></item>
+            <item><widget class="QPushButton" name="laterButton"><property name="variant"><string>ghost</string></property><property name="text"><string>Later</string></property><property name="minimumSize"><size><width>90</width><height>36</height></size></property></widget></item>
+            <item><spacer name="restartActionsHorizontalSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item><spacer name="settingsVerticalSpacer"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>160</height></size></property></spacer></item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
 </ui>

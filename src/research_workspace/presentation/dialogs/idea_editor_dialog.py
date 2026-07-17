@@ -15,7 +15,15 @@ from research_workspace.presentation.dialogs.paper_editor_dialog import (
 
 
 class IdeaEditorDialog(ProtectedEditorDialog):
-    def __init__(self, services, record=None, parent=None) -> None:
+    def __init__(
+        self,
+        services,
+        record=None,
+        parent=None,
+        *,
+        initial_title: str = "",
+        initial_content: str = "",
+    ) -> None:
         super().__init__(parent)
         self.services = services
         self.record = record
@@ -43,6 +51,9 @@ class IdeaEditorDialog(ProtectedEditorDialog):
             index = self.status_combo.findData(record.status)
             if index >= 0:
                 self.status_combo.setCurrentIndex(index)
+        else:
+            self.title_edit.setText(initial_title)
+            self.content_edit.setPlainText(initial_content)
         self.save_button.clicked.connect(self.save)
         self.cancel_button.clicked.connect(self.reject)
 

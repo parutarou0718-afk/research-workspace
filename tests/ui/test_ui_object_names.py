@@ -195,9 +195,12 @@ def test_settings_and_startup_error_expose_task9_designer_controls():
         "laterButton",
     } <= settings_names
     assert widget_text(settings, "dataDirectoryHelpLabel") == (
-        "切换后将使用新目录中的工作台数据；现有数据不会自动迁移或删除。"
+        "Choose where Research Workspace stores your local data. Existing data "
+        "will not be moved or deleted automatically."
     )
-    assert widget_text(settings, "confirmDataDirectoryButton") == "验证并在重启后切换"
+    assert widget_text(settings, "confirmDataDirectoryButton") == (
+        "Verify and Use on Restart"
+    )
 
     startup = ElementTree.parse(UI_DIR / "startup_error_page.ui").getroot()
     startup_names = set(object_names(startup))

@@ -1,6 +1,6 @@
 """Thin Paper page controller."""
 
-from PySide6.QtCore import QSize, QThread
+from PySide6.QtCore import QTimer, QSize, QThread
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -10,8 +10,15 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QPushButton,
     QScrollArea,
+    QVBoxLayout,
 )
 
+from research_workspace.application.ports.ai_provider import (
+    AIProviderError,
+    PaperAnalysis,
+    PaperAnalysisRequest,
+    SuggestedIdea,
+)
 from research_workspace.presentation import load_ui_resource, require_child
 from research_workspace.presentation.dialogs.idea_editor_dialog import IdeaEditorDialog
 from research_workspace.presentation.dialogs.paper_editor_dialog import PaperEditorDialog
@@ -91,6 +98,13 @@ class PapersPage(CrudPageController):
         self.analyze_with_ai_button = require_child(
             self.widget, QPushButton, "paperAnalyzeWithAiButton"
         )
+        self.research_analysis_layout = self.widget.findChild(
+            QVBoxLayout, "paperResearchAnalysisVerticalLayout"
+        )
+        if self.research_analysis_layout is None:
+            raise RuntimeError(
+                "Missing required layout: paperResearchAnalysisVerticalLayout"
+            )
         self.research_analysis_milestone_label = require_child(
             self.widget, QLabel, "paperResearchAnalysisMilestoneLabel"
         )
@@ -123,12 +137,18 @@ class PapersPage(CrudPageController):
         self.new_button.clicked.connect(self.open_new)
         self.empty_action_button.clicked.connect(self.open_new)
         self.create_idea_button.clicked.connect(self.open_new_idea)
+        self.analyze_with_ai_button.clicked.connect(self._handle_ai_button)
         self.edit_button.clicked.connect(self.open_edit)
         self.delete_button.clicked.connect(self.delete_selected)
         self.restore_button.clicked.connect(self.restore_selected)
         self.list_view.itemSelectionChanged.connect(self._update_actions)
         self.search_line_edit.textChanged.connect(lambda _text: self._render_rows())
         self._visible_rows = ()
+        self._ai_handle = None
+        self.suggestion_buttons = []
+        self._ai_poll_timer = QTimer(self.widget)
+        self._ai_poll_timer.setInterval(50)
+        self._ai_poll_timer.timeout.connect(self._poll_ai_analysis)
         self.refresh()
 
     def _selected(self):
@@ -180,6 +200,14 @@ class PapersPage(CrudPageController):
     def open_new_idea(self):
         IdeaEditorDialog(self.services, parent=self.widget).exec()
 
+    def _open_suggested_idea(self, suggestion: SuggestedIdea) -> None:
+        IdeaEditorDialog(
+            self.services,
+            parent=self.widget,
+            initial_title=suggestion.title,
+            initial_content=suggestion.content,
+        ).exec()
+
     def open_edit(self):
         row = self._selected()
         if row is not None and "edit" in row.actions:
@@ -212,7 +240,9 @@ class PapersPage(CrudPageController):
             self.detail_title_label.setText("Select a paper")
             self.status_badge_label.setText("Draft")
             self.status_badge_label.setProperty("badge", "draft")
-            self.metadata_text_label.setText("Year, authors and version metadata will appear here.")
+            self.metadata_text_label.setText(
+                "Year, authors and status metadata will appear here."
+            )
             return
         self.detail_title_label.setText(row.title)
         self.status_badge_label.setText(_status_label(row.status))
@@ -228,6 +258,31 @@ class PapersPage(CrudPageController):
         self.research_notes_text_label.setText("Notes linked to this paper will appear here.")
         self.timeline_text_label.setText("Creation, edits and decisions will appear here.")
         self.research_analysis_title_label.setText("Research Analysis")
+        self._render_ai_ready_state()
+        self.next_step_title_label.setText("Next Step")
+        self.next_step_text_label.setText("Capture an idea from this paper.")
+        self.related_ideas_text_label.setText("No related ideas yet.")
+        self.related_papers_text_label.setText("No related papers yet.")
+        self.relations_text_label.setText("Known relations and evidence will appear here.")
+
+    def _ai_service(self):
+        return getattr(self.services, "paper_ai_analysis", None)
+
+    def _ai_is_configured(self) -> bool:
+        service = self._ai_service()
+        is_configured = getattr(service, "is_configured", None)
+        return bool(is_configured()) if is_configured is not None else False
+
+    def _render_ai_ready_state(self) -> None:
+        self._clear_suggestion_buttons()
+        self.analyze_with_ai_button.setEnabled(True)
+        if not self._ai_is_configured():
+            self.research_analysis_text_label.setText("AI is not configured.")
+            self.analyze_with_ai_button.setText("Open AI Settings")
+            self.research_analysis_milestone_label.setText(
+                "Configure AI in Settings to analyze this paper."
+            )
+            return
         self.research_analysis_text_label.setText(
             "No analysis yet.\n"
             "Analyze this paper to generate:\n"
@@ -235,14 +290,92 @@ class PapersPage(CrudPageController):
             "• Key Claims\n"
             "• Suggested Ideas"
         )
-        self.research_analysis_milestone_label.setText(
-            "Available in the next milestone."
+        self.analyze_with_ai_button.setText("Analyze with AI")
+        self.research_analysis_milestone_label.clear()
+
+    def _handle_ai_button(self) -> None:
+        if not self._ai_is_configured():
+            show_page = getattr(self.widget.window(), "show_page", None)
+            if show_page is not None:
+                show_page("settings")
+            return
+        self._start_ai_analysis()
+
+    def _paper_analysis_request(self) -> PaperAnalysisRequest | None:
+        row = self._selected()
+        if row is None:
+            return None
+        return PaperAnalysisRequest(
+            title=row.title,
+            authors="",
+            year="",
+            abstract=self.abstract_text_label.text(),
+            research_notes=self.research_notes_text_label.text(),
         )
-        self.next_step_title_label.setText("Next Step")
-        self.next_step_text_label.setText("Capture an idea from this paper.")
-        self.related_ideas_text_label.setText("No related ideas yet.")
-        self.related_papers_text_label.setText("No related papers yet.")
-        self.relations_text_label.setText("Known relations and evidence will appear here.")
+
+    def _start_ai_analysis(self) -> None:
+        request = self._paper_analysis_request()
+        service = self._ai_service()
+        analyze_async = getattr(service, "analyze_async", None)
+        if request is None or analyze_async is None:
+            return
+        self._clear_suggestion_buttons()
+        self.research_analysis_text_label.setText("Analyzing paper...")
+        self.research_analysis_milestone_label.clear()
+        self.analyze_with_ai_button.setEnabled(False)
+        self._ai_handle = analyze_async(request)
+        self._ai_poll_timer.start()
+
+    def _poll_ai_analysis(self) -> None:
+        handle = self._ai_handle
+        if handle is None or not handle.done:
+            return
+        self._ai_poll_timer.stop()
+        self.analyze_with_ai_button.setEnabled(True)
+        error = handle.error
+        if error is not None:
+            self._render_ai_failure(getattr(error, "message", str(error)))
+            return
+        try:
+            self._render_ai_success(handle.result)
+        except AIProviderError as exc:
+            self._render_ai_failure(exc.message)
+
+    def _render_ai_failure(self, message: str) -> None:
+        self._clear_suggestion_buttons()
+        self.research_analysis_text_label.setText(message)
+        self.analyze_with_ai_button.setText("Try Again")
+        self.research_analysis_milestone_label.clear()
+
+    def _render_ai_success(self, analysis: PaperAnalysis) -> None:
+        self._clear_suggestion_buttons()
+        claims = "\n".join(f"• {claim}" for claim in analysis.key_claims)
+        ideas = "\n".join(f"• {idea.title}" for idea in analysis.suggested_ideas)
+        self.research_analysis_text_label.setText(
+            f"Summary\n{analysis.summary}\n\n"
+            f"Key Claims\n{claims}\n\n"
+            f"Suggested Ideas\n{ideas}"
+        )
+        self.analyze_with_ai_button.setText("Analyze with AI")
+        self.research_analysis_milestone_label.clear()
+        insert_at = self.research_analysis_layout.indexOf(
+            self.research_analysis_milestone_label
+        )
+        for suggestion in analysis.suggested_ideas:
+            button = QPushButton("Create Idea", self.widget)
+            button.setProperty("variant", "primary")
+            button.clicked.connect(
+                lambda checked=False, idea=suggestion: self._open_suggested_idea(idea)
+            )
+            self.research_analysis_layout.insertWidget(insert_at, button)
+            self.suggestion_buttons.append(button)
+            insert_at += 1
+
+    def _clear_suggestion_buttons(self) -> None:
+        for button in self.suggestion_buttons:
+            self.research_analysis_layout.removeWidget(button)
+            button.deleteLater()
+        self.suggestion_buttons = []
 
 
 def _status_label(status: str) -> str:

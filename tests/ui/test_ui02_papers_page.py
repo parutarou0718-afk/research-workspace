@@ -3,7 +3,7 @@ from uuid import uuid4
 from xml.etree import ElementTree
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QLabel, QListWidget, QPushButton, QFrame
+from PySide6.QtWidgets import QLabel, QFrame
 
 from research_workspace.presentation.pages.papers_page import PapersPage
 
@@ -175,18 +175,11 @@ def test_paper_page_renders_cards_detail_and_search(qtbot):
     assert page.detail_title_label.text() == "Transformer Survey"
     assert page.status_badge_label.text() == "Active"
     assert page.research_analysis_title_label.text() == "Research Analysis"
-    assert page.research_analysis_text_label.text() == (
-        "No analysis yet.\n"
-        "Analyze this paper to generate:\n"
-        "• Summary\n"
-        "• Key Claims\n"
-        "• Suggested Ideas"
-    )
-    assert page.analyze_with_ai_button.text() == "Analyze with AI"
-    assert page.analyze_with_ai_button.property("informational") is True
-    assert page.analyze_with_ai_button.receivers("clicked()") == 0
+    assert page.research_analysis_text_label.text() == "AI is not configured."
+    assert page.analyze_with_ai_button.text() == "Open AI Settings"
+    assert page.analyze_with_ai_button.isEnabled()
     assert page.research_analysis_milestone_label.text() == (
-        "Available in the next milestone."
+        "Configure AI in Settings to analyze this paper."
     )
     assert page.next_step_title_label.text() == "Next Step"
     assert page.next_step_text_label.text() == "Capture an idea from this paper."

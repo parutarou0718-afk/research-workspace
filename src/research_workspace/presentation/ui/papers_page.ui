@@ -158,7 +158,7 @@ Analyze this paper to generate:
 • Key Claims
 
 • Suggested Ideas</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
-               <item><widget class="QPushButton" name="paperAnalyzeWithAiButton"><property name="variant"><string>secondary</string></property><property name="informational"><bool>true</bool></property><property name="text"><string>Analyze with AI</string></property></widget></item>
+               <item><widget class="QPushButton" name="paperAnalyzeWithAiButton"><property name="variant"><string>secondary</string></property><property name="text"><string>Analyze with AI</string></property></widget></item>
                <item><widget class="QLabel" name="paperResearchAnalysisMilestoneLabel"><property name="text"><string>Available in the next milestone.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
               </layout>
                </widget>
