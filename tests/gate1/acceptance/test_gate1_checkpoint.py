@@ -80,6 +80,8 @@ CURRENT_GATE2_PATHS = frozenset(
         "src/research_workspace/application/dto/monitoring_dto.py",
         "src/research_workspace/application/ports/file_observer.py",
         "src/research_workspace/application/queries/get_monitoring.py",
+        "src/research_workspace/application/queries/get_version_candidates.py",
+        "src/research_workspace/application/services/candidate_detection.py",
         "src/research_workspace/domain/monitoring.py",
         "src/research_workspace/domain/versioning.py",
         "src/research_workspace/infrastructure/monitoring/__init__.py",
@@ -107,12 +109,10 @@ src/research_workspace/application/commands/create_export.py
 src/research_workspace/application/dto/recovery_dto.py
 src/research_workspace/application/dto/transfer_dto.py
 src/research_workspace/application/ports/sqlite_backup.py
-src/research_workspace/application/queries/get_version_candidates.py
 src/research_workspace/application/queries/get_papers.py
 src/research_workspace/application/queries/get_ideas.py
 src/research_workspace/application/queries/get_submissions.py
 src/research_workspace/application/queries/get_transfer_history.py
-src/research_workspace/application/services/candidate_detection.py
 src/research_workspace/application/services/command_dispatcher.py
 src/research_workspace/application/services/recovery_points.py
 src/research_workspace/application/services/relation_graph.py

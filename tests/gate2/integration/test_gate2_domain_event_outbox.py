@@ -6,12 +6,14 @@ import rfc8785
 from sqlalchemy import func, select
 
 from research_workspace.application.dto.monitoring_dto import MonitoringRootSeed, RawFileEventDTO
+from research_workspace.application.dto.monitoring_dto import CandidateDetectionResult
 from research_workspace.application.dto.monitoring_dto import ReconciliationPlan
 from research_workspace.domain.monitoring import (
     DEFAULT_MONITORING_CONFIG,
     RawFileEventType,
     ReconciliationReason,
 )
+from research_workspace.domain.versioning import VersionRuleId
 from research_workspace.infrastructure.db.models import (
     BackgroundOperationModel,
     DomainEventModel,
@@ -141,3 +143,64 @@ def test_reconciliation_completion_event_collision_rolls_back_page(
         run = session.get(ReconciliationRunModel, plan.reconciliation_run_id)
         assert run.status == "running"
         assert run.items_seen == 0
+
+
+def test_candidate_event_collision_rolls_back_candidate_fact(
+    monitoring_database,
+) -> None:
+    now = datetime(2026, 7, 17, 21, tzinfo=timezone.utc)
+    snapshot_operation = uuid4()
+    earlier_id, later_id = uuid4(), uuid4()
+    from research_workspace.infrastructure.db.models import SourceSnapshotModel
+    with monitoring_database.factory.begin() as session:
+        session.add(
+            BackgroundOperationModel(
+                id=snapshot_operation, operation_type="snapshot_import",
+                status="completed", work_plan_fingerprint="9" * 64,
+                permission_context_json="{}", result_summary_json="{}",
+                error_code=None, created_at=now, started_at=now,
+                finished_at=now, cancel_requested_at=None,
+            )
+        )
+        for snapshot_id, digest in ((earlier_id, "7" * 64), (later_id, "8" * 64)):
+            session.add(
+                SourceSnapshotModel(
+                    id=snapshot_id, sha256=digest, size_bytes=1,
+                    mime_type="application/pdf",
+                    storage_relative_path=f"sources/{digest}.pdf", created_at=now,
+                    created_by_operation_id=snapshot_operation,
+                )
+            )
+    candidate_id, operation_id = uuid4(), uuid4()
+    with monitoring_database.factory.begin() as session:
+        session.add(
+            DomainEventModel(
+                id=uuid4(), schema_version="2.0",
+                event_type="paper_version_candidate.detected",
+                workspace_id=SqlWriteCoordinator(
+                    monitoring_database.factory
+                ).workspace_id(),
+                command_id=None, operation_id=uuid4(),
+                aggregate_type="PaperVersionCandidate", aggregate_id=uuid4(),
+                aggregate_version=1, actor_type="system", payload_json="{}",
+                deduplication_key=f"paper_version_candidate.detected:{candidate_id}",
+                causation_id=None, correlation_id=None, created_at=now,
+                occurred_at=now, processed_at=None,
+            )
+        )
+    result = CandidateDetectionResult(
+        earlier_id, later_id, "paper-version-detector", "1.0",
+        VersionRuleId.R1_SOURCE_CONTINUITY, "6" * 64, b"{}", b"{}", (),
+    )
+    try:
+        SqlWriteCoordinator(
+            monitoring_database.factory
+        ).register_version_candidate(candidate_id, operation_id, result, now)
+    except WriteCoordinatorError:
+        pass
+    else:
+        raise AssertionError("candidate outbox collision must fail closed")
+    from research_workspace.infrastructure.db.models import PaperVersionCandidateModel
+    with monitoring_database.factory() as session:
+        assert session.get(PaperVersionCandidateModel, candidate_id) is None
+        assert session.get(BackgroundOperationModel, operation_id) is None

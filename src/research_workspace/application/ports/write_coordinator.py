@@ -15,6 +15,7 @@ from research_workspace.application.dto.parsing_dto import (
 )
 from research_workspace.application.dto.monitoring_dto import (
     BaselineObservationDTO,
+    CandidateDetectionResult,
     MonitoringRootSeed,
     MonitoringRestartState,
     PendingPathCheckDTO,
@@ -141,6 +142,22 @@ class WriteCoordinator(Protocol):
     def begin_monitoring_session(self, now: datetime) -> MonitoringRestartState: ...
 
     def complete_monitoring_session(self, now: datetime) -> None: ...
+
+    def register_version_candidate(
+        self,
+        candidate_id: UUID,
+        operation_id: UUID,
+        result: CandidateDetectionResult,
+        now: datetime,
+    ) -> UUID: ...
+
+    def supersede_version_candidate(
+        self,
+        candidate_id: UUID,
+        replacement_candidate_id: UUID,
+        operation_id: UUID,
+        now: datetime,
+    ) -> None: ...
     def begin_pending_import(
         self, pending_path_check_id: UUID, now: datetime
     ) -> PendingPathCheckDTO: ...

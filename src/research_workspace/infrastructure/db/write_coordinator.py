@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from research_workspace.application.dto.import_dto import ImportCommitDTO, SnapshotRegistrationDTO
 from research_workspace.application.dto.monitoring_dto import (
     BaselineObservationDTO,
+    CandidateDetectionResult,
     MonitoringRootSeed,
     MonitoringRestartState,
     PendingPathCheckDTO,
@@ -62,6 +63,7 @@ from research_workspace.infrastructure.db.models import (
     PendingPathCheckModel,
     ParseArtifactModel,
     ParseAttemptModel,
+    PaperVersionCandidateModel,
     RawEventPendingLinkModel,
     RawFileEventModel,
     ReconciliationRunModel,
@@ -872,6 +874,231 @@ class SqlWriteCoordinator:
                 raise WriteCoordinatorError("WORKSPACE_METADATA_MISSING")
             metadata.clean_shutdown = True
             metadata.updated_at = now
+
+    def register_version_candidate(
+        self,
+        candidate_id: UUID,
+        operation_id: UUID,
+        result: CandidateDetectionResult,
+        now: datetime,
+    ) -> UUID:
+        rationale = self._canonical_candidate_json(result.direction_rationale)
+        signals = self._canonical_candidate_json(result.signals)
+        observation_ids = rfc8785.dumps(
+            [str(item) for item in result.input_observation_ids]
+        ).decode("utf-8")
+        try:
+            with self._factory.begin() as session:
+                earlier = session.get(SourceSnapshotModel, result.earlier_snapshot_id)
+                later = session.get(SourceSnapshotModel, result.later_snapshot_id)
+                if (
+                    earlier is None
+                    or later is None
+                    or earlier.sha256 == later.sha256
+                    or earlier.mime_type
+                    not in {
+                        "application/pdf",
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    }
+                    or later.mime_type
+                    not in {
+                        "application/pdf",
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    }
+                ):
+                    raise WriteCoordinatorError("CANDIDATE_INPUT_INVALID")
+                existing = session.scalar(
+                    select(PaperVersionCandidateModel).where(
+                        PaperVersionCandidateModel.earlier_snapshot_id
+                        == result.earlier_snapshot_id,
+                        PaperVersionCandidateModel.later_snapshot_id
+                        == result.later_snapshot_id,
+                        PaperVersionCandidateModel.detector_id == result.detector_id,
+                        PaperVersionCandidateModel.detector_version
+                        == result.detector_version,
+                        PaperVersionCandidateModel.rule_config_fingerprint
+                        == result.rule_config_fingerprint,
+                    )
+                )
+                evidence = (
+                    result.rule_id.value,
+                    rationale,
+                    signals,
+                    observation_ids,
+                )
+                if existing is not None:
+                    stored = (
+                        existing.rule_id,
+                        existing.direction_rationale_json,
+                        existing.signals_json,
+                        existing.input_observation_ids_json,
+                    )
+                    if stored != evidence:
+                        raise WriteCoordinatorError("CANDIDATE_IDENTITY_CONFLICT")
+                    return existing.id
+                workspace_id = self._required_workspace_id(session)
+                self._add_candidate_operation(
+                    session, operation_id, workspace_id, result, now
+                )
+                candidate = PaperVersionCandidateModel(
+                    id=candidate_id,
+                    earlier_snapshot_id=result.earlier_snapshot_id,
+                    later_snapshot_id=result.later_snapshot_id,
+                    detector_id=result.detector_id,
+                    detector_version=result.detector_version,
+                    rule_id=result.rule_id.value,
+                    rule_config_fingerprint=result.rule_config_fingerprint,
+                    direction_rationale_json=rationale,
+                    signals_json=signals,
+                    input_observation_ids_json=observation_ids,
+                    status="pending",
+                    superseded_by_candidate_id=None,
+                    row_version=1,
+                    created_at=now,
+                    decided_at=None,
+                )
+                session.add(candidate)
+                session.add(
+                    self._system_event(
+                        event_type="paper_version_candidate.detected",
+                        workspace_id=workspace_id,
+                        operation_id=operation_id,
+                        aggregate_type="PaperVersionCandidate",
+                        aggregate_id=candidate_id,
+                        payload={
+                            "candidate_id": str(candidate_id),
+                            "earlier_snapshot_id": str(result.earlier_snapshot_id),
+                            "later_snapshot_id": str(result.later_snapshot_id),
+                            "rule_id": result.rule_id.value,
+                            "detector_version": result.detector_version,
+                        },
+                        deduplication_key=(
+                            f"paper_version_candidate.detected:{candidate_id}"
+                        ),
+                    )
+                )
+                session.flush()
+                return candidate.id
+        except WriteCoordinatorError:
+            raise
+        except IntegrityError as exc:
+            raise WriteCoordinatorError("DATABASE_CONSTRAINT_VIOLATION") from exc
+
+    def supersede_version_candidate(
+        self,
+        candidate_id: UUID,
+        replacement_candidate_id: UUID,
+        operation_id: UUID,
+        now: datetime,
+    ) -> None:
+        try:
+            with self._factory.begin() as session:
+                candidate = session.get(PaperVersionCandidateModel, candidate_id)
+                replacement = session.get(
+                    PaperVersionCandidateModel, replacement_candidate_id
+                )
+                if (
+                    candidate is None
+                    or replacement is None
+                    or candidate.id == replacement.id
+                    or candidate.status != "pending"
+                    or replacement.status != "pending"
+                ):
+                    raise WriteCoordinatorError("CANDIDATE_STATE_CHANGED")
+                workspace_id = self._required_workspace_id(session)
+                self._add_candidate_operation(
+                    session, operation_id, workspace_id, None, now
+                )
+                old_status = candidate.status
+                candidate.status = "superseded"
+                candidate.superseded_by_candidate_id = replacement.id
+                candidate.row_version += 1
+                session.add(
+                    self._system_event(
+                        event_type="paper_version_candidate.superseded",
+                        workspace_id=workspace_id,
+                        operation_id=operation_id,
+                        aggregate_type="PaperVersionCandidate",
+                        aggregate_id=candidate.id,
+                        payload={
+                            "candidate_id": str(candidate.id),
+                            "old_status": old_status,
+                            "new_status": candidate.status,
+                            "row_version": candidate.row_version,
+                            "replacement_candidate_id": str(replacement.id),
+                        },
+                        deduplication_key=(
+                            f"paper_version_candidate.superseded:{candidate.id}:"
+                            f"{candidate.row_version}"
+                        ),
+                    )
+                )
+                session.flush()
+        except WriteCoordinatorError:
+            raise
+        except IntegrityError as exc:
+            raise WriteCoordinatorError("DATABASE_CONSTRAINT_VIOLATION") from exc
+
+    def _add_candidate_operation(
+        self,
+        session: Session,
+        operation_id: UUID,
+        workspace_id: UUID,
+        result: CandidateDetectionResult | None,
+        now: datetime,
+    ) -> None:
+        plan = {
+            "candidate_id": None,
+            "detector_id": result.detector_id if result is not None else "system",
+            "detector_version": (
+                result.detector_version if result is not None else "1.0"
+            ),
+        }
+        context = {
+            "schema_version": "1.0",
+            "actor_type": "system",
+            "actor_id": "candidate-detector",
+            "workspace_id": str(workspace_id),
+            "capabilities": ["version_candidate.detect.request"],
+            "scope_refs": [],
+            "path_scopes": [],
+            "network_allowed": False,
+            "granted_at": now.isoformat().replace("+00:00", "Z"),
+            "policy_version": "1.0",
+            "authorization_decision_id": str(operation_id),
+        }
+        session.add(
+            BackgroundOperationModel(
+                id=operation_id,
+                operation_type="version_candidate_detect",
+                status="completed",
+                work_plan_fingerprint=hashlib.sha256(
+                    rfc8785.dumps(plan)
+                ).hexdigest(),
+                permission_context_json=rfc8785.dumps(context).decode("utf-8"),
+                result_summary_json=rfc8785.dumps(
+                    {"status": "completed"}
+                ).decode("utf-8"),
+                error_code=None,
+                created_at=now,
+                started_at=now,
+                finished_at=now,
+                cancel_requested_at=None,
+            )
+        )
+
+    @staticmethod
+    def _canonical_candidate_json(value: bytes) -> str:
+        try:
+            parsed = json.loads(value)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise WriteCoordinatorError("CANDIDATE_EVIDENCE_INVALID") from exc
+        canonical = rfc8785.dumps(parsed)
+        if canonical != value:
+            raise WriteCoordinatorError("CANDIDATE_EVIDENCE_INVALID")
+        return canonical.decode("utf-8")
 
     @staticmethod
     def _event_paths(event: RawFileEventDTO) -> tuple[Path, ...]:
