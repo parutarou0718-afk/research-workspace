@@ -25,6 +25,7 @@ from research_workspace.application.ports.write_coordinator import (
     PreparedImportItem,
     WriteCoordinator,
 )
+from research_workspace.domain.capabilities import PermissionContext
 from research_workspace.infrastructure.filesystem.path_safety import (
     SourceFailure,
     normalize_path_text,
@@ -43,6 +44,16 @@ class PreparedImportBatch:
     batch_id: UUID
     request: ImportRequest
     items: tuple[PreparedImportItem, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class MonitoredImportResult:
+    pending_path_check_id: UUID
+    state: str
+    snapshot_id: UUID | None
+    source_observation_id: UUID | None
+    import_item_id: UUID | None
+    error_code: str | None
 
 
 def public_import_outcome(
@@ -155,6 +166,61 @@ class ImportOrchestrator:
 
         return self.finalize(batch, successes, failed, cancelled)
 
+    def execute_pending(
+        self,
+        pending_path_check_id: UUID,
+        permission_context: PermissionContext,
+        *,
+        now: datetime | None = None,
+    ) -> MonitoredImportResult:
+        """Run one due stability attempt through the existing immutable import path."""
+
+        attempted_at = now or datetime.now(timezone.utc)
+        pending = self._coordinator.begin_pending_import(
+            pending_path_check_id, attempted_at
+        )
+        request = ImportRequest((pending.source_path,), permission_context)
+        batch: PreparedImportBatch | None = None
+        item: PreparedImportItem | None = None
+        try:
+            batch = self.prepare(request)
+            if len(batch.items) != 1:
+                raise SourceFailure("COMMAND_VALIDATION_FAILED")
+            item = batch.items[0]
+            source = self.resolve_authorized(item.source_path, request)
+            materialized = self._snapshots.materialize(source, item.item_id)
+            registration = self._registration_dto(batch, item, materialized)
+            committed = self._coordinator.register_monitored_import(
+                pending_path_check_id, registration
+            )
+        except Exception as exc:
+            error_code = getattr(exc, "error_code", "DATABASE_OPERATION_FAILED")
+            if item is not None:
+                self._coordinator.mark_import_item(item.item_id, "failed", error_code)
+            if batch is not None:
+                self.finalize(batch, [], [item.item_id] if item is not None else [], [])
+            failed = self._coordinator.fail_pending_import(
+                pending_path_check_id, error_code, attempted_at
+            )
+            return MonitoredImportResult(
+                pending_path_check_id,
+                failed.state.value,
+                None,
+                failed.source_observation_id,
+                item.item_id if item is not None else None,
+                error_code,
+            )
+
+        self.finalize(batch, [committed], [], [])
+        return MonitoredImportResult(
+            pending_path_check_id,
+            committed.state,
+            committed.snapshot_id,
+            committed.source_observation_id,
+            committed.import_item_id,
+            None,
+        )
+
     def prepare(self, request: ImportRequest) -> PreparedImportBatch:
         self.authorize(request)
         operation_id = uuid4()
@@ -186,22 +252,30 @@ class ImportOrchestrator:
         item: PreparedImportItem,
         materialized: MaterializedSnapshot,
     ) -> ImportCommitDTO:
-        source = self.resolve_authorized(item.source_path, batch.request)
         return self._coordinator.register_import(
-            SnapshotRegistrationDTO(
-                batch.operation_id,
-                batch.batch_id,
-                item.item_id,
-                item.observation_id,
-                uuid4(),
-                source,
-                source.name,
-                materialized.sha256,
-                materialized.size_bytes,
-                _mime_type(source),
-                materialized.storage_relative_path,
-                materialized.physical_file_reused,
-            )
+            self._registration_dto(batch, item, materialized)
+        )
+
+    def _registration_dto(
+        self,
+        batch: PreparedImportBatch,
+        item: PreparedImportItem,
+        materialized: MaterializedSnapshot,
+    ) -> SnapshotRegistrationDTO:
+        source = self.resolve_authorized(item.source_path, batch.request)
+        return SnapshotRegistrationDTO(
+            batch.operation_id,
+            batch.batch_id,
+            item.item_id,
+            item.observation_id,
+            uuid4(),
+            source,
+            source.name,
+            materialized.sha256,
+            materialized.size_bytes,
+            _mime_type(source),
+            materialized.storage_relative_path,
+            materialized.physical_file_reused,
         )
 
     def finalize(

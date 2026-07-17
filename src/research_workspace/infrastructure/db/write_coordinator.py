@@ -22,6 +22,7 @@ from research_workspace.application.dto.import_dto import ImportCommitDTO, Snaps
 from research_workspace.application.dto.monitoring_dto import (
     BaselineObservationDTO,
     MonitoringRootSeed,
+    PendingPathCheckDTO,
     RawFileEventDTO,
 )
 from research_workspace.application.ports.write_coordinator import (
@@ -36,7 +37,11 @@ from research_workspace.application.dto.parsing_dto import (
     PreparedParseAttempt,
 )
 from research_workspace.domain.import_model import FileStat, StagedSource
-from research_workspace.domain.monitoring import MonitoringRootStatus, RawFileEventType
+from research_workspace.domain.monitoring import (
+    MonitoringRootStatus,
+    PendingPathState,
+    RawFileEventType,
+)
 from research_workspace.domain.parsing import (
     ParseContractError,
     build_parse_artifact_identity,
@@ -331,6 +336,12 @@ class SqlWriteCoordinator:
                         session.add(pending)
                         session.flush()
                     else:
+                        begins_new_attempt_series = pending.state in {
+                            PendingPathState.IMPORTED.value,
+                            PendingPathState.DUPLICATE_CONTENT.value,
+                            PendingPathState.SAFE_FAILURE.value,
+                            PendingPathState.UNSTABLE_SOURCE.value,
+                        }
                         merged = set(json.loads(pending.merged_event_types_json))
                         merged.add(event.event_type.value)
                         pending.merged_event_types_json = rfc8785.dumps(
@@ -346,6 +357,9 @@ class SqlWriteCoordinator:
                             seconds=quiet_seconds
                         )
                         pending.state = "debouncing"
+                        if begins_new_attempt_series:
+                            pending.stability_attempt_count = 0
+                            pending.last_failure_code = None
                         pending.row_version += 1
                     session.add(
                         RawEventPendingLinkModel(
@@ -397,6 +411,104 @@ class SqlWriteCoordinator:
             )
         ).all()
         return tuple(sorted(ids, key=str))
+
+    def begin_pending_import(
+        self, pending_path_check_id: UUID, now: datetime
+    ) -> PendingPathCheckDTO:
+        with self._factory.begin() as session:
+            pending = session.get(PendingPathCheckModel, pending_path_check_id)
+            if (
+                pending is None
+                or pending.state
+                not in {
+                    PendingPathState.DEBOUNCING.value,
+                    PendingPathState.WAITING_FOR_STABILITY.value,
+                }
+                or pending.next_check_at is None
+                or pending.next_check_at > now
+            ):
+                raise WriteCoordinatorError("COMMAND_VALIDATION_FAILED")
+            root = session.get(MonitoringRootModel, pending.monitoring_root_id)
+            if (
+                root is None
+                or root.removed_at is not None
+                or root.status != MonitoringRootStatus.ACTIVE.value
+            ):
+                raise WriteCoordinatorError("MONITOR_ROOT_STATE_CHANGED")
+            config = json.loads(root.config_json)
+            if pending.stability_attempt_count >= int(config["max_stability_attempts"]):
+                raise WriteCoordinatorError("COMMAND_VALIDATION_FAILED")
+            pending.state = PendingPathState.IMPORTING.value
+            pending.stability_attempt_count += 1
+            pending.row_version += 1
+            return self._pending_dto(pending)
+
+    def fail_pending_import(
+        self, pending_path_check_id: UUID, error_code: str, now: datetime
+    ) -> PendingPathCheckDTO:
+        retryable = {
+            "SOURCE_BUSY",
+            "SOURCE_CHANGED_DURING_IMPORT",
+            "SOURCE_UNSTABLE",
+        }
+        with self._factory.begin() as session:
+            pending = session.get(PendingPathCheckModel, pending_path_check_id)
+            if pending is None or pending.state != PendingPathState.IMPORTING.value:
+                raise WriteCoordinatorError("COMMAND_VALIDATION_FAILED")
+            root = session.get(MonitoringRootModel, pending.monitoring_root_id)
+            if root is None:
+                raise WriteCoordinatorError("MONITOR_ROOT_STATE_CHANGED")
+            config = json.loads(root.config_json)
+            maximum = int(config["max_stability_attempts"])
+            delays = tuple(int(value) for value in config["backoff_seconds"])
+            pending.last_failure_code = error_code
+            if error_code in retryable:
+                delay = delays[pending.stability_attempt_count - 1]
+                pending.next_check_at = now + timedelta(seconds=delay)
+                pending.state = (
+                    PendingPathState.UNSTABLE_SOURCE.value
+                    if pending.stability_attempt_count >= maximum
+                    else PendingPathState.WAITING_FOR_STABILITY.value
+                )
+            else:
+                pending.state = PendingPathState.SAFE_FAILURE.value
+                pending.next_check_at = None
+            pending.row_version += 1
+            return self._pending_dto(pending)
+
+    def reactivate_pending_check(
+        self, pending_path_check_id: UUID, now: datetime
+    ) -> PendingPathCheckDTO:
+        with self._factory.begin() as session:
+            pending = session.get(PendingPathCheckModel, pending_path_check_id)
+            if pending is None or pending.state != PendingPathState.UNSTABLE_SOURCE.value:
+                raise WriteCoordinatorError("COMMAND_VALIDATION_FAILED")
+            root = session.get(MonitoringRootModel, pending.monitoring_root_id)
+            if root is None or root.removed_at is not None:
+                raise WriteCoordinatorError("MONITOR_ROOT_STATE_CHANGED")
+            config = json.loads(root.config_json)
+            pending.state = PendingPathState.DEBOUNCING.value
+            pending.stability_attempt_count = 0
+            pending.next_check_at = now + timedelta(
+                seconds=int(config["quiet_window_seconds"])
+            )
+            pending.last_failure_code = None
+            pending.row_version += 1
+            return self._pending_dto(pending)
+
+    @staticmethod
+    def _pending_dto(pending: PendingPathCheckModel) -> PendingPathCheckDTO:
+        return PendingPathCheckDTO(
+            pending.id,
+            pending.monitoring_root_id,
+            Path(pending.normalized_path),
+            PendingPathState(pending.state),
+            pending.stability_attempt_count,
+            pending.next_check_at,
+            pending.last_failure_code,
+            pending.source_observation_id,
+            pending.row_version,
+        )
 
     def begin_import(self, seed: ImportBatchSeed) -> tuple[PreparedImportItem, ...]:
         now = datetime.now(timezone.utc)
@@ -485,45 +597,7 @@ class SqlWriteCoordinator:
     def register_import(self, result: SnapshotRegistrationDTO) -> ImportCommitDTO:
         try:
             with self._factory.begin() as session:
-                repository = self._repository_factory(session)
-                committed = repository.register_import(result)
-                workspace_id = session.scalar(select(WorkspaceMetadataModel.workspace_id))
-                if workspace_id is None:
-                    raise WriteCoordinatorError("WORKSPACE_METADATA_MISSING")
-                event_type = (
-                    "source.snapshot_reused"
-                    if committed.state == "duplicate_content"
-                    else "source.snapshot_imported"
-                )
-                payload = {
-                    "snapshot_id": str(committed.snapshot_id),
-                    "source_observation_id": str(committed.source_observation_id),
-                    "import_item_id": str(committed.import_item_id),
-                    "sha256": result.sha256,
-                    "size_bytes": result.size_bytes,
-                }
-                now = datetime.now(timezone.utc)
-                session.add(
-                    DomainEventModel(
-                        id=uuid4(),
-                        schema_version="2.0",
-                        event_type=event_type,
-                        workspace_id=workspace_id,
-                        command_id=None,
-                        operation_id=result.operation_id,
-                        aggregate_type="SourceSnapshot",
-                        aggregate_id=committed.snapshot_id,
-                        aggregate_version=None,
-                        actor_type="system",
-                        payload_json=rfc8785.dumps(payload).decode("utf-8"),
-                        deduplication_key=f"{event_type}:{result.import_item_id}",
-                        causation_id=None,
-                        correlation_id=result.operation_id,
-                        created_at=now,
-                        occurred_at=now,
-                        processed_at=None,
-                    )
-                )
+                committed = self._register_import_fact(session, result)
             return committed
         except WriteCoordinatorError:
             raise
@@ -534,6 +608,131 @@ class SqlWriteCoordinator:
             if sqlite_errorcode in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED}:
                 raise WriteCoordinatorError("SQLITE_BUSY") from exc
             raise WriteCoordinatorError("DATABASE_OPERATION_FAILED") from exc
+
+    def register_monitored_import(
+        self, pending_path_check_id: UUID, result: SnapshotRegistrationDTO
+    ) -> ImportCommitDTO:
+        try:
+            with self._factory.begin() as session:
+                pending = session.get(PendingPathCheckModel, pending_path_check_id)
+                if pending is None or pending.state != PendingPathState.IMPORTING.value:
+                    raise WriteCoordinatorError("COMMAND_VALIDATION_FAILED")
+                committed = self._register_import_fact(session, result)
+                observation = session.get(
+                    SourceObservationModel, committed.source_observation_id
+                )
+                if observation is None:
+                    raise WriteCoordinatorError("COMMAND_VALIDATION_FAILED")
+                observation.monitoring_root_id = pending.monitoring_root_id
+                observation.baseline_only = False
+                pending.source_observation_id = observation.id
+                pending.state = committed.state
+                pending.next_check_at = None
+                pending.last_failure_code = None
+                pending.row_version += 1
+
+                moved = session.scalar(
+                    select(RawFileEventModel)
+                    .join(
+                        RawEventPendingLinkModel,
+                        RawEventPendingLinkModel.raw_file_event_id
+                        == RawFileEventModel.id,
+                    )
+                    .where(
+                        RawEventPendingLinkModel.pending_path_check_id == pending.id,
+                        RawFileEventModel.event_type == RawFileEventType.MOVED.value,
+                    )
+                    .order_by(RawFileEventModel.observed_at.desc())
+                )
+                if (
+                    moved is not None
+                    and moved.source_path is not None
+                    and moved.destination_path is not None
+                    and normalize_path_text(moved.destination_path)
+                    == pending.normalized_path
+                ):
+                    old_observation = session.scalar(
+                        select(SourceObservationModel).where(
+                            SourceObservationModel.normalized_path
+                            == normalize_path_text(moved.source_path)
+                        )
+                    )
+                    if old_observation is not None and old_observation.id != observation.id:
+                        old_observation.availability_status = "missing"
+                        old_observation.missing_at = moved.observed_at
+                        old_observation.row_version += 1
+                    session.add(
+                        SourceObservationEventModel(
+                            id=uuid4(),
+                            source_observation_id=observation.id,
+                            raw_file_event_id=moved.id,
+                            event_type="moved",
+                            snapshot_id=committed.snapshot_id,
+                            path_before_hash=moved.source_path_hash,
+                            path_after_hash=moved.destination_path_hash,
+                            facts_json=rfc8785.dumps(
+                                {
+                                    "continuity": "watchdog_move",
+                                    "verified_sha256": result.sha256,
+                                }
+                            ).decode("utf-8"),
+                            observed_at=moved.observed_at,
+                        )
+                    )
+            return committed
+        except WriteCoordinatorError:
+            raise
+        except IntegrityError as exc:
+            raise WriteCoordinatorError("DATABASE_CONSTRAINT_VIOLATION") from exc
+        except OperationalError as exc:
+            sqlite_errorcode = getattr(exc.orig, "sqlite_errorcode", None)
+            if sqlite_errorcode in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED}:
+                raise WriteCoordinatorError("SQLITE_BUSY") from exc
+            raise WriteCoordinatorError("DATABASE_OPERATION_FAILED") from exc
+
+    def _register_import_fact(
+        self, session: Session, result: SnapshotRegistrationDTO
+    ) -> ImportCommitDTO:
+        repository = self._repository_factory(session)
+        committed = repository.register_import(result)
+        workspace_id = session.scalar(select(WorkspaceMetadataModel.workspace_id))
+        if workspace_id is None:
+            raise WriteCoordinatorError("WORKSPACE_METADATA_MISSING")
+        event_type = (
+            "source.snapshot_reused"
+            if committed.state == "duplicate_content"
+            else "source.snapshot_imported"
+        )
+        payload = {
+            "snapshot_id": str(committed.snapshot_id),
+            "source_observation_id": str(committed.source_observation_id),
+            "import_item_id": str(committed.import_item_id),
+            "sha256": result.sha256,
+            "size_bytes": result.size_bytes,
+        }
+        now = datetime.now(timezone.utc)
+        session.add(
+            DomainEventModel(
+                id=uuid4(),
+                schema_version="2.0",
+                event_type=event_type,
+                workspace_id=workspace_id,
+                command_id=None,
+                operation_id=result.operation_id,
+                aggregate_type="SourceSnapshot",
+                aggregate_id=committed.snapshot_id,
+                aggregate_version=None,
+                actor_type="system",
+                payload_json=rfc8785.dumps(payload).decode("utf-8"),
+                deduplication_key=f"{event_type}:{result.import_item_id}",
+                causation_id=None,
+                correlation_id=result.operation_id,
+                created_at=now,
+                occurred_at=now,
+                processed_at=None,
+            )
+        )
+        return committed
 
     def mark_import_item(self, item_id: UUID, state: str, error_code: str | None) -> None:
         if state not in {"failed", "cancelled"}:

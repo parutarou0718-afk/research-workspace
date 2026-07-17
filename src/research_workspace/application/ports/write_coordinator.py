@@ -1,6 +1,7 @@
 """Framework-free persistent-write boundary."""
 
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 from uuid import UUID
@@ -15,6 +16,7 @@ from research_workspace.application.dto.parsing_dto import (
 from research_workspace.application.dto.monitoring_dto import (
     BaselineObservationDTO,
     MonitoringRootSeed,
+    PendingPathCheckDTO,
     RawFileEventDTO,
 )
 from research_workspace.domain.monitoring import MonitoringRootStatus
@@ -113,3 +115,19 @@ class WriteCoordinator(Protocol):
     ) -> int: ...
 
     def ingest_raw_file_event(self, event: RawFileEventDTO) -> tuple[UUID, ...]: ...
+
+    def begin_pending_import(
+        self, pending_path_check_id: UUID, now: datetime
+    ) -> PendingPathCheckDTO: ...
+
+    def fail_pending_import(
+        self, pending_path_check_id: UUID, error_code: str, now: datetime
+    ) -> PendingPathCheckDTO: ...
+
+    def reactivate_pending_check(
+        self, pending_path_check_id: UUID, now: datetime
+    ) -> PendingPathCheckDTO: ...
+
+    def register_monitored_import(
+        self, pending_path_check_id: UUID, result: SnapshotRegistrationDTO
+    ) -> ImportCommitDTO: ...

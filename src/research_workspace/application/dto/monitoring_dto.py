@@ -9,6 +9,7 @@ from uuid import UUID
 
 from research_workspace.domain.monitoring import (
     MonitoringRootStatus,
+    PendingPathState,
     RawFileEventType,
     ReconciliationReason,
 )
@@ -140,3 +141,16 @@ class BaselineObservationDTO:
     file_id_hint: str | None
     volume_serial_hint: str | None
     observed_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class PendingPathCheckDTO:
+    pending_path_check_id: UUID
+    monitoring_root_id: UUID
+    source_path: Path
+    state: PendingPathState
+    stability_attempt_count: int
+    next_check_at: datetime | None
+    last_failure_code: str | None
+    source_observation_id: UUID | None
+    row_version: int
