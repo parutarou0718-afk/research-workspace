@@ -1,10 +1,115 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<ui version="4.0"><class>IdeasPage</class>
- <widget class="QWidget" name="ideasPage"><layout class="QVBoxLayout" name="ideasRootVerticalLayout"><property name="leftMargin"><number>0</number></property><property name="topMargin"><number>0</number></property><property name="rightMargin"><number>0</number></property><property name="bottomMargin"><number>0</number></property>
-  <item><widget class="QScrollArea" name="ideasScrollArea"><property name="widgetResizable"><bool>true</bool></property><property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOff</enum></property><property name="verticalScrollBarPolicy"><enum>Qt::ScrollBarAsNeeded</enum></property><widget class="QWidget" name="ideasContentWidget"><property name="minimumSize"><size><width>0</width><height>780</height></size></property><layout class="QVBoxLayout" name="ideasContentVerticalLayout">
-   <item><widget class="QLabel" name="pageTitleLabel"><property name="text"><string>想法</string></property></widget></item>
-   <item><widget class="QLabel" name="pageSubtitleLabel"><property name="text"><string>记录和整理研究想法</string></property></widget></item>
-   <item><layout class="QHBoxLayout" name="ideasActionHorizontalLayout"><item><widget class="QPushButton" name="newIdeaButton"><property name="text"><string>新建想法</string></property></widget></item><item><widget class="QPushButton" name="editIdeaButton"><property name="text"><string>编辑</string></property></widget></item><item><widget class="QPushButton" name="deleteIdeaButton"><property name="text"><string>移入已删除</string></property></widget></item><item><widget class="QPushButton" name="restoreIdeaButton"><property name="text"><string>恢复</string></property></widget></item></layout></item>
-   <item><widget class="QTableWidget" name="ideasTable"><property name="columnCount"><number>4</number></property><column><property name="text"><string>标题</string></property></column><column><property name="text"><string>状态</string></property></column><column><property name="text"><string>来源</string></property></column><column><property name="text"><string>并发版本</string></property></column></widget></item>
-  </layout></widget></widget></item>
- </layout></widget><resources/><connections/></ui>
+<ui version="4.0">
+ <class>IdeasPage</class>
+ <widget class="QWidget" name="ideasPage">
+  <layout class="QVBoxLayout" name="ideasRootVerticalLayout">
+   <property name="leftMargin"><number>0</number></property>
+   <property name="topMargin"><number>0</number></property>
+   <property name="rightMargin"><number>0</number></property>
+   <property name="bottomMargin"><number>0</number></property>
+   <item>
+    <widget class="QScrollArea" name="ideasScrollArea">
+     <property name="widgetResizable"><bool>true</bool></property>
+     <property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOff</enum></property>
+     <property name="verticalScrollBarPolicy"><enum>Qt::ScrollBarAsNeeded</enum></property>
+     <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+     <widget class="QWidget" name="ideasContentWidget">
+      <property name="minimumSize"><size><width>0</width><height>920</height></size></property>
+      <layout class="QVBoxLayout" name="ideasContentVerticalLayout">
+       <property name="leftMargin"><number>24</number></property>
+       <property name="topMargin"><number>24</number></property>
+       <property name="rightMargin"><number>24</number></property>
+       <property name="bottomMargin"><number>24</number></property>
+       <property name="spacing"><number>20</number></property>
+       <item>
+        <layout class="QHBoxLayout" name="ideasHeroHorizontalLayout">
+         <property name="spacing"><number>16</number></property>
+         <item>
+          <layout class="QVBoxLayout" name="ideasTitleVerticalLayout">
+           <property name="spacing"><number>4</number></property>
+           <item><widget class="QLabel" name="pageTitleLabel"><property name="text"><string>Ideas</string></property></widget></item>
+           <item><widget class="QLabel" name="pageSubtitleLabel"><property name="text"><string>Capture claims, evidence, questions and research fragments before they become papers.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+          </layout>
+         </item>
+         <item><spacer name="ideasHeroSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+         <item><widget class="QPushButton" name="newIdeaButton"><property name="variant"><string>primary</string></property><property name="text"><string>+ New Idea</string></property></widget></item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QFrame" name="ideasToolbarCard">
+         <property name="component"><string>toolbar</string></property>
+         <layout class="QHBoxLayout" name="ideasToolbarHorizontalLayout">
+          <property name="leftMargin"><number>16</number></property>
+          <property name="topMargin"><number>14</number></property>
+          <property name="rightMargin"><number>16</number></property>
+          <property name="bottomMargin"><number>14</number></property>
+          <property name="spacing"><number>10</number></property>
+          <item><widget class="QLineEdit" name="ideaSearchLineEdit"><property name="component"><string>search</string></property><property name="placeholderText"><string>Search title, type or tag</string></property></widget></item>
+          <item><widget class="QPushButton" name="ideaTypeFilterButton"><property name="variant"><string>secondary</string></property><property name="text"><string>Type</string></property></widget></item>
+          <item><widget class="QPushButton" name="ideaTagFilterButton"><property name="variant"><string>secondary</string></property><property name="text"><string>Tags</string></property></widget></item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QFrame" name="ideasEmptyStateCard">
+         <property name="component"><string>emptyState</string></property>
+         <layout class="QVBoxLayout" name="ideasEmptyStateVerticalLayout">
+          <property name="leftMargin"><number>28</number></property>
+          <property name="topMargin"><number>28</number></property>
+          <property name="rightMargin"><number>28</number></property>
+          <property name="bottomMargin"><number>28</number></property>
+          <property name="spacing"><number>10</number></property>
+          <item><widget class="QLabel" name="ideasEmptyIconLabel"><property name="text"><string>□</string></property></widget></item>
+          <item><widget class="QLabel" name="ideasEmptyTitleLabel"><property name="text"><string>No ideas yet.</string></property></widget></item>
+          <item><widget class="QLabel" name="ideasEmptyBodyLabel"><property name="text"><string>Capture your first research idea.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+          <item><widget class="QPushButton" name="ideasEmptyActionButton"><property name="variant"><string>primary</string></property><property name="text"><string>New Idea</string></property></widget></item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QFrame" name="ideasLibraryCard">
+         <property name="component"><string>card</string></property>
+         <layout class="QVBoxLayout" name="ideasLibraryVerticalLayout">
+          <property name="leftMargin"><number>20</number></property>
+          <property name="topMargin"><number>20</number></property>
+          <property name="rightMargin"><number>20</number></property>
+          <property name="bottomMargin"><number>20</number></property>
+          <property name="spacing"><number>12</number></property>
+          <item><widget class="QLabel" name="ideasLibraryTitleLabel"><property name="text"><string>Idea Library</string></property></widget></item>
+          <item><widget class="QListWidget" name="ideasLibraryListView">
+           <property name="styleSheet"><string notr="true">
+QListWidget { border: 0; background: transparent; }
+QListWidget::item {
+  background: #FFFFFF;
+  border: 1px solid #E4E7EC;
+  border-radius: 14px;
+  margin-bottom: 10px;
+  padding: 14px;
+}
+QListWidget::item:hover { border-color: #C7D7FE; background: #FBFCFF; }
+QListWidget::item:selected { border-color: #4F7DFF; background: #EEF4FF; color: #172033; }
+           </string></property>
+           <property name="minimumSize"><size><width>0</width><height>620</height></size></property>
+           <property name="spacing"><number>8</number></property>
+           <property name="selectionMode"><enum>QAbstractItemView::SingleSelection</enum></property>
+          </widget></item>
+          <item>
+           <layout class="QHBoxLayout" name="ideasActionHorizontalLayout">
+            <property name="spacing"><number>8</number></property>
+            <item><widget class="QPushButton" name="editIdeaButton"><property name="variant"><string>secondary</string></property><property name="text"><string>编辑</string></property></widget></item>
+            <item><widget class="QPushButton" name="deleteIdeaButton"><property name="variant"><string>danger</string></property><property name="text"><string>移入已删除</string></property></widget></item>
+            <item><widget class="QPushButton" name="restoreIdeaButton"><property name="variant"><string>secondary</string></property><property name="text"><string>恢复</string></property></widget></item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

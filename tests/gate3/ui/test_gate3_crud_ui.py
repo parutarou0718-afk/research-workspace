@@ -122,14 +122,16 @@ def test_crud_pages_are_real_lists_without_future_controls(qtbot) -> None:
 
     services = _services()
     paper_page = PapersPage(services)
-    pages = (paper_page, IdeasPage(services), SubmissionsPage(services))
+    idea_page = IdeasPage(services)
+    submission_page = SubmissionsPage(services)
+    pages = (paper_page, idea_page, submission_page)
     for page in pages:
         qtbot.addWidget(page.widget)
         page.refresh()
         assert page.new_button.isVisible() is False or page.new_button.text()
     assert paper_page.list_view.count() == 0
-    for page in pages[1:]:
-        assert page.table.rowCount() == 0
+    assert idea_page.list_view.count() == 0
+    assert submission_page.table.rowCount() == 0
     combined = " ".join(
         (UI / name).read_text("utf-8").casefold()
         for name in ("papers_page.ui", "ideas_page.ui", "submissions_page.ui")
