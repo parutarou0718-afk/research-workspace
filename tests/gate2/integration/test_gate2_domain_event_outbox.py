@@ -1,19 +1,23 @@
 import json
 from datetime import datetime, timezone
-from pathlib import Path
 from uuid import uuid4
 
 import rfc8785
 from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
 
 from research_workspace.application.dto.monitoring_dto import MonitoringRootSeed, RawFileEventDTO
-from research_workspace.domain.monitoring import DEFAULT_MONITORING_CONFIG, RawFileEventType
+from research_workspace.application.dto.monitoring_dto import ReconciliationPlan
+from research_workspace.domain.monitoring import (
+    DEFAULT_MONITORING_CONFIG,
+    RawFileEventType,
+    ReconciliationReason,
+)
 from research_workspace.infrastructure.db.models import (
     BackgroundOperationModel,
     DomainEventModel,
     MonitoringRootModel,
     RawFileEventModel,
+    ReconciliationRunModel,
 )
 from research_workspace.infrastructure.db.write_coordinator import (
     SqlWriteCoordinator,
@@ -98,3 +102,42 @@ def test_overflow_operation_collision_rolls_back_raw_and_root_state(
         assert session.get(MonitoringRootModel, root_id).status == "active"
         assert session.scalar(select(func.count()).select_from(RawFileEventModel)) == 0
         assert session.scalar(select(func.count()).select_from(DomainEventModel)) == 0
+
+
+def test_reconciliation_completion_event_collision_rolls_back_page(
+    monitoring_database,
+) -> None:
+    coordinator, root_id, now = _root(monitoring_database)
+    root_path = monitoring_database.workspace.parent / "external"
+    plan = ReconciliationPlan(
+        uuid4(), uuid4(), root_id, ReconciliationReason.USER_VERIFY,
+        root_path, None, 10,
+    )
+    known = coordinator.begin_reconciliation(plan, now)
+    from research_workspace.infrastructure.monitoring.reconciliation import BoundedReconciler
+    page = BoundedReconciler().scan_page(plan, known)
+    with monitoring_database.factory.begin() as session:
+        session.add(
+            DomainEventModel(
+                id=uuid4(), schema_version="2.0",
+                event_type="monitoring.reconciliation_completed",
+                workspace_id=coordinator.workspace_id(), command_id=None,
+                operation_id=uuid4(), aggregate_type="MonitoringRoot",
+                aggregate_id=root_id, aggregate_version=None, actor_type="system",
+                payload_json="{}", deduplication_key=(
+                    f"monitoring.reconciliation_completed:{plan.reconciliation_run_id}"
+                ),
+                causation_id=None, correlation_id=None, created_at=now,
+                occurred_at=now, processed_at=None,
+            )
+        )
+    try:
+        coordinator.record_reconciliation_page(plan.reconciliation_run_id, page, now)
+    except WriteCoordinatorError:
+        pass
+    else:
+        raise AssertionError("outbox collision must fail closed")
+    with monitoring_database.factory() as session:
+        run = session.get(ReconciliationRunModel, plan.reconciliation_run_id)
+        assert run.status == "running"
+        assert run.items_seen == 0

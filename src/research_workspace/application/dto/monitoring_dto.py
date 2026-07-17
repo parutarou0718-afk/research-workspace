@@ -71,10 +71,44 @@ class ReconciliationPlan:
     page_size: int
 
     def __post_init__(self) -> None:
-        if self.page_size < 1:
-            raise ValueError("page_size must be positive")
+        if self.page_size < 1 or self.page_size > 10_000:
+            raise ValueError("page_size must be in the bounded range 1..10000")
         if self.checkpoint is not None and not isinstance(self.checkpoint, bytes):
             raise TypeError("checkpoint must be immutable bytes")
+
+
+@dataclass(frozen=True, slots=True)
+class ReconciliationObservation:
+    normalized_path: str
+    size_bytes: int | None
+    modified_at: datetime | None
+    file_id_hint: str | None
+    volume_serial_hint: str | None
+
+@dataclass(frozen=True, slots=True)
+class ReconciliationFinding:
+    source_path: Path
+    normalized_path: str
+    normalized_path_hash: str
+    size_bytes: int
+    modified_at: datetime
+    file_id_hint: str | None
+    volume_serial_hint: str | None
+
+@dataclass(frozen=True, slots=True)
+class ReconciliationPage:
+    checkpoint: bytes | None
+    items_seen: int
+    suspected: tuple[ReconciliationFinding, ...]
+    completed: bool
+    cancelled: bool = False
+
+    def __post_init__(self) -> None:
+        if self.items_seen < 0 or self.items_seen > 10_000:
+            raise ValueError("items_seen outside bounded page")
+        if self.checkpoint is not None and not isinstance(self.checkpoint, bytes):
+            raise TypeError("checkpoint must be immutable bytes")
+        object.__setattr__(self, "suspected", tuple(self.suspected))
 
 
 @dataclass(frozen=True, slots=True)

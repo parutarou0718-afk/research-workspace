@@ -83,6 +83,7 @@ CURRENT_GATE2_PATHS = frozenset(
         "src/research_workspace/domain/monitoring.py",
         "src/research_workspace/domain/versioning.py",
         "src/research_workspace/infrastructure/monitoring/__init__.py",
+        "src/research_workspace/infrastructure/monitoring/reconciliation.py",
         "src/research_workspace/infrastructure/monitoring/watchdog_observer.py",
     }
 )
@@ -117,7 +118,6 @@ src/research_workspace/application/services/recovery_points.py
 src/research_workspace/application/services/relation_graph.py
 src/research_workspace/domain/audit.py
 src/research_workspace/domain/transfer.py
-src/research_workspace/infrastructure/monitoring/reconciliation.py
 src/research_workspace/infrastructure/recovery/__init__.py
 src/research_workspace/infrastructure/recovery/sqlite_recovery.py
 src/research_workspace/infrastructure/transfer/__init__.py

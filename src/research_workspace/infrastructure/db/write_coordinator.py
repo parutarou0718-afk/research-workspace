@@ -24,6 +24,9 @@ from research_workspace.application.dto.monitoring_dto import (
     MonitoringRootSeed,
     PendingPathCheckDTO,
     RawFileEventDTO,
+    ReconciliationObservation,
+    ReconciliationPage,
+    ReconciliationPlan,
 )
 from research_workspace.application.ports.write_coordinator import (
     ImportBatchSeed,
@@ -59,6 +62,7 @@ from research_workspace.infrastructure.db.models import (
     ParseAttemptModel,
     RawEventPendingLinkModel,
     RawFileEventModel,
+    ReconciliationRunModel,
     SnapshotParsePreferenceModel,
     SourceObservationModel,
     SourceObservationEventModel,
@@ -537,6 +541,248 @@ class SqlWriteCoordinator:
             )
         )
         session.flush()
+
+    def begin_reconciliation(
+        self, plan: ReconciliationPlan, now: datetime
+    ) -> tuple[ReconciliationObservation, ...]:
+        try:
+            with self._factory.begin() as session:
+                root = session.get(MonitoringRootModel, plan.monitoring_root_id)
+                if (
+                    root is None
+                    or root.removed_at is not None
+                    or normalize_path_text(plan.root_path) != root.normalized_path
+                    or root.status
+                    not in {
+                        MonitoringRootStatus.ACTIVE.value,
+                        MonitoringRootStatus.DISCONNECTED.value,
+                        MonitoringRootStatus.DEGRADED.value,
+                        MonitoringRootStatus.OVERFLOW_RECONCILING.value,
+                    }
+                ):
+                    raise WriteCoordinatorError("MONITOR_ROOT_STATE_CHANGED")
+                workspace_id = self._required_workspace_id(session)
+                context = {
+                    "schema_version": "1.0",
+                    "actor_type": "system",
+                    "actor_id": "monitoring-subsystem",
+                    "workspace_id": str(workspace_id),
+                    "capabilities": ["source.observe.request"],
+                    "scope_refs": [str(root.id)],
+                    "path_scopes": [],
+                    "network_allowed": False,
+                    "granted_at": now.isoformat().replace("+00:00", "Z"),
+                    "policy_version": "1.0",
+                    "authorization_decision_id": str(plan.operation_id),
+                }
+                work_plan = {
+                    "monitoring_root_id": str(root.id),
+                    "reason": plan.reason.value,
+                    "reconciliation_run_id": str(plan.reconciliation_run_id),
+                }
+                session.add(
+                    BackgroundOperationModel(
+                        id=plan.operation_id,
+                        operation_type="monitor_reconcile",
+                        status="running",
+                        work_plan_fingerprint=hashlib.sha256(
+                            rfc8785.dumps(work_plan)
+                        ).hexdigest(),
+                        permission_context_json=rfc8785.dumps(context).decode("utf-8"),
+                        result_summary_json=None,
+                        error_code=None,
+                        created_at=now,
+                        started_at=now,
+                        finished_at=None,
+                        cancel_requested_at=None,
+                    )
+                )
+                session.add(
+                    ReconciliationRunModel(
+                        id=plan.reconciliation_run_id,
+                        monitoring_root_id=root.id,
+                        operation_id=plan.operation_id,
+                        reason=plan.reason.value,
+                        status="running",
+                        checkpoint_json=(
+                            plan.checkpoint.decode("utf-8")
+                            if plan.checkpoint is not None
+                            else None
+                        ),
+                        items_seen=0,
+                        items_estimated=None,
+                        items_suspected_changed=0,
+                        started_at=now,
+                        finished_at=None,
+                    )
+                )
+                observations = session.scalars(
+                    select(SourceObservationModel).where(
+                        SourceObservationModel.monitoring_root_id == root.id
+                    )
+                ).all()
+                session.flush()
+                return tuple(
+                    ReconciliationObservation(
+                        item.normalized_path,
+                        item.size_bytes,
+                        item.modified_at,
+                        item.file_id_hint,
+                        item.volume_serial_hint,
+                    )
+                    for item in observations
+                )
+        except WriteCoordinatorError:
+            raise
+        except (IntegrityError, UnicodeDecodeError) as exc:
+            raise WriteCoordinatorError("DATABASE_CONSTRAINT_VIOLATION") from exc
+
+    def record_reconciliation_page(
+        self, reconciliation_run_id: UUID, page: ReconciliationPage, now: datetime
+    ) -> None:
+        try:
+            with self._factory.begin() as session:
+                run = session.get(ReconciliationRunModel, reconciliation_run_id)
+                if run is None or run.status != "running" or page.cancelled:
+                    raise WriteCoordinatorError("MONITOR_ROOT_STATE_CHANGED")
+                root = session.get(MonitoringRootModel, run.monitoring_root_id)
+                operation = session.get(BackgroundOperationModel, run.operation_id)
+                if root is None or operation is None or operation.status != "running":
+                    raise WriteCoordinatorError("MONITOR_ROOT_STATE_CHANGED")
+                for finding in page.suspected:
+                    pending = session.scalar(
+                        select(PendingPathCheckModel).where(
+                            PendingPathCheckModel.monitoring_root_id == root.id,
+                            PendingPathCheckModel.normalized_path
+                            == finding.normalized_path,
+                        )
+                    )
+                    observation = session.scalar(
+                        select(SourceObservationModel).where(
+                            SourceObservationModel.normalized_path
+                            == finding.normalized_path
+                        )
+                    )
+                    if pending is None:
+                        session.add(
+                            PendingPathCheckModel(
+                                id=uuid4(),
+                                monitoring_root_id=root.id,
+                                normalized_path=finding.normalized_path,
+                                normalized_path_hash=finding.normalized_path_hash,
+                                first_event_at=now,
+                                last_event_at=now,
+                                merged_event_types_json='["root_state"]',
+                                state=PendingPathState.DETECTED.value,
+                                stability_attempt_count=0,
+                                next_check_at=now,
+                                last_failure_code=None,
+                                source_observation_id=(
+                                    observation.id if observation is not None else None
+                                ),
+                                row_version=1,
+                            )
+                        )
+                    else:
+                        pending.last_event_at = max(pending.last_event_at, now)
+                        pending.next_check_at = now
+                        pending.state = PendingPathState.DETECTED.value
+                        pending.row_version += 1
+                run.items_seen += page.items_seen
+                run.items_suspected_changed += len(page.suspected)
+                run.checkpoint_json = (
+                    page.checkpoint.decode("utf-8")
+                    if page.checkpoint is not None
+                    else None
+                )
+                if not page.completed:
+                    return
+                run.status = "completed"
+                run.finished_at = now
+                operation.status = "completed"
+                operation.finished_at = now
+                operation.result_summary_json = rfc8785.dumps(
+                    {
+                        "items_seen": run.items_seen,
+                        "items_suspected_changed": run.items_suspected_changed,
+                        "status": "completed",
+                    }
+                ).decode("utf-8")
+                workspace_id = self._required_workspace_id(session)
+                payload = {
+                    "reconciliation_run_id": str(run.id),
+                    "monitoring_root_id": str(root.id),
+                    "reason": run.reason,
+                    "items_seen": run.items_seen,
+                    "items_suspected_changed": run.items_suspected_changed,
+                }
+                session.add(
+                    self._system_event(
+                        event_type="monitoring.reconciliation_completed",
+                        workspace_id=workspace_id,
+                        operation_id=run.operation_id,
+                        aggregate_type="MonitoringRoot",
+                        aggregate_id=root.id,
+                        payload=payload,
+                        deduplication_key=(
+                            f"monitoring.reconciliation_completed:{run.id}"
+                        ),
+                    )
+                )
+                if root.status == MonitoringRootStatus.OVERFLOW_RECONCILING.value:
+                    old_status = root.status
+                    root.status = MonitoringRootStatus.ACTIVE.value
+                    root.updated_at = max(root.updated_at, now)
+                    session.add(
+                        self._system_event(
+                            event_type="monitoring.root_status_changed",
+                            workspace_id=workspace_id,
+                            operation_id=run.operation_id,
+                            aggregate_type="MonitoringRoot",
+                            aggregate_id=root.id,
+                            payload={
+                                "monitoring_root_id": str(root.id),
+                                "old_status": old_status,
+                                "new_status": root.status,
+                            },
+                            deduplication_key=(
+                                f"monitoring.root_status_changed:{run.id}:completed"
+                            ),
+                        )
+                    )
+                session.flush()
+        except WriteCoordinatorError:
+            raise
+        except (IntegrityError, UnicodeDecodeError) as exc:
+            raise WriteCoordinatorError("DATABASE_CONSTRAINT_VIOLATION") from exc
+
+    def pause_reconciliation(self, reconciliation_run_id: UUID, now: datetime) -> None:
+        self._change_reconciliation_status(reconciliation_run_id, "running", "paused", now)
+
+    def resume_reconciliation(self, reconciliation_run_id: UUID, now: datetime) -> None:
+        self._change_reconciliation_status(reconciliation_run_id, "paused", "running", now)
+
+    def cancel_reconciliation(self, reconciliation_run_id: UUID, now: datetime) -> None:
+        self._change_reconciliation_status(
+            reconciliation_run_id, "running", "cancelled", now
+        )
+
+    def _change_reconciliation_status(
+        self, reconciliation_run_id: UUID, expected: str, new_status: str, now: datetime
+    ) -> None:
+        with self._factory.begin() as session:
+            run = session.get(ReconciliationRunModel, reconciliation_run_id)
+            if run is None or run.status != expected:
+                raise WriteCoordinatorError("MONITOR_ROOT_STATE_CHANGED")
+            operation = session.get(BackgroundOperationModel, run.operation_id)
+            if operation is None or operation.status != "running":
+                raise WriteCoordinatorError("MONITOR_ROOT_STATE_CHANGED")
+            run.status = new_status
+            if new_status == "cancelled":
+                run.finished_at = now
+                operation.status = "cancelled"
+                operation.cancel_requested_at = now
+                operation.finished_at = now
 
     @staticmethod
     def _event_paths(event: RawFileEventDTO) -> tuple[Path, ...]:

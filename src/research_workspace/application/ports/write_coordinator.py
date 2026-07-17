@@ -18,6 +18,9 @@ from research_workspace.application.dto.monitoring_dto import (
     MonitoringRootSeed,
     PendingPathCheckDTO,
     RawFileEventDTO,
+    ReconciliationObservation,
+    ReconciliationPage,
+    ReconciliationPlan,
 )
 from research_workspace.domain.monitoring import MonitoringRootStatus, RawEventCapacity
 
@@ -123,6 +126,16 @@ class WriteCoordinator(Protocol):
     def assess_raw_event_capacity(
         self, monitoring_root_id: UUID, operation_id: UUID, now: datetime
     ) -> RawEventCapacity: ...
+
+    def begin_reconciliation(
+        self, plan: ReconciliationPlan, now: datetime
+    ) -> tuple[ReconciliationObservation, ...]: ...
+    def record_reconciliation_page(
+        self, reconciliation_run_id: UUID, page: ReconciliationPage, now: datetime
+    ) -> None: ...
+    def pause_reconciliation(self, reconciliation_run_id: UUID, now: datetime) -> None: ...
+    def resume_reconciliation(self, reconciliation_run_id: UUID, now: datetime) -> None: ...
+    def cancel_reconciliation(self, reconciliation_run_id: UUID, now: datetime) -> None: ...
     def begin_pending_import(
         self, pending_path_check_id: UUID, now: datetime
     ) -> PendingPathCheckDTO: ...
