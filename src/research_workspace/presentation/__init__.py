@@ -15,6 +15,11 @@ def _token_stylesheet() -> str:
     tokens = json.loads(token_path.read_text(encoding="utf-8"))
     colors = tokens["colors"]
     radius = tokens["radius"]
+    components = tokens["components"]
+    button = components["button"]
+    card = components["card"]
+    input_component = components["input"]
+    badge = components["badge"]["variants"]
     typography = tokens["typography"]
     point_scale = typography["pointScale"]
     body_points = typography["body"] * point_scale
@@ -31,7 +36,87 @@ QWidget#submissionsPage, QWidget#conferencesPage, QWidget#grantsPage,
 QWidget#importsPage, QWidget#monitoringPage, QWidget#versionCandidatesPage,
 QWidget#relationsPage, QWidget#settingsPage, QWidget#startupErrorPage,
 QDialog#importBatchDialog {{ background: {colors['background']}; }}
-QFrame[card="true"] {{ background: {colors['surface']}; border: 1px solid {colors['border']}; border-radius: {radius['card']}px; }}
+QFrame[card="true"], QFrame[component="card"] {{
+  background: {colors['surface']};
+  border: {card['borderWidth']}px solid {colors['border']};
+  border-radius: {card['radius']}px;
+}}
+QFrame[component="toolbar"] {{
+  background: {colors['surface']};
+  border: 1px solid {colors['border']};
+  border-radius: {card['radius']}px;
+}}
+QFrame[component="emptyState"] {{
+  background: {colors['surface']};
+  border: 1px dashed {colors['border']};
+  border-radius: {card['radius']}px;
+}}
+QPushButton[variant="primary"] {{
+  min-height: {button['height']}px;
+  border: 1px solid {button['variants']['primary']['border']};
+  border-radius: {button['radius']}px;
+  padding: 0 16px;
+  background: {button['variants']['primary']['background']};
+  color: {button['variants']['primary']['foreground']};
+  font-weight: 600;
+}}
+QPushButton[variant="primary"]:hover {{
+  background: {button['variants']['primary']['hover']};
+  border-color: {button['variants']['primary']['hover']};
+}}
+QPushButton[variant="secondary"] {{
+  min-height: {button['height']}px;
+  border: 1px solid {button['variants']['secondary']['border']};
+  border-radius: {button['radius']}px;
+  padding: 0 16px;
+  background: {button['variants']['secondary']['background']};
+  color: {button['variants']['secondary']['foreground']};
+}}
+QPushButton[variant="secondary"]:hover {{
+  background: {button['variants']['secondary']['hover']};
+}}
+QPushButton[variant="ghost"] {{
+  min-height: {button['height']}px;
+  border: 1px solid {button['variants']['ghost']['border']};
+  border-radius: {button['radius']}px;
+  padding: 0 12px;
+  background: {button['variants']['ghost']['background']};
+  color: {button['variants']['ghost']['foreground']};
+}}
+QPushButton[variant="ghost"]:hover {{
+  background: {button['variants']['ghost']['hover']};
+}}
+QPushButton[variant="danger"] {{
+  min-height: {button['height']}px;
+  border: 1px solid {button['variants']['danger']['border']};
+  border-radius: {button['radius']}px;
+  padding: 0 16px;
+  background: {button['variants']['danger']['background']};
+  color: {button['variants']['danger']['foreground']};
+  font-weight: 600;
+}}
+QPushButton[variant="danger"]:hover {{
+  background: {button['variants']['danger']['hover']};
+  border-color: {button['variants']['danger']['hover']};
+}}
+QLineEdit[component="input"], QLineEdit[component="search"] {{
+  min-height: {input_component['height']}px;
+  border: 1px solid {colors['border']};
+  border-radius: {input_component['radius']}px;
+  padding: 0 14px;
+  background: {colors['surface']};
+  color: {colors['textMain']};
+}}
+QLineEdit[component="input"]:focus, QLineEdit[component="search"]:focus {{
+  border: 1px solid {input_component['focusBorder']};
+}}
+QLabel[badge="draft"] {{ background: {badge['draft']['background']}; color: {badge['draft']['foreground']}; border-radius: 10px; padding: 3px 8px; }}
+QLabel[badge="ready"] {{ background: {badge['ready']['background']}; color: {badge['ready']['foreground']}; border-radius: 10px; padding: 3px 8px; }}
+QLabel[badge="review"] {{ background: {badge['review']['background']}; color: {badge['review']['foreground']}; border-radius: 10px; padding: 3px 8px; }}
+QLabel[badge="revision"] {{ background: {badge['revision']['background']}; color: {badge['revision']['foreground']}; border-radius: 10px; padding: 3px 8px; }}
+QLabel[badge="accepted"] {{ background: {badge['accepted']['background']}; color: {badge['accepted']['foreground']}; border-radius: 10px; padding: 3px 8px; }}
+QLabel[badge="rejected"] {{ background: {badge['rejected']['background']}; color: {badge['rejected']['foreground']}; border-radius: 10px; padding: 3px 8px; }}
+QLabel[badge="archived"] {{ background: {badge['archived']['background']}; color: {badge['archived']['foreground']}; border-radius: 10px; padding: 3px 8px; }}
 QLabel#pageTitleLabel {{ font-size: {title_points:g}pt; font-weight: 700; }}
 """.strip()
 

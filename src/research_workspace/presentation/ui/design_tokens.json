@@ -41,5 +41,59 @@
   },
   "shadow": {
     "card": "0 1px 3px rgba(16,24,40,0.06)"
+  },
+  "components": {
+    "button": {
+      "height": 40,
+      "radius": 10,
+      "variants": {
+        "primary": {
+          "background": "#4F7DFF",
+          "foreground": "#FFFFFF",
+          "border": "#4F7DFF",
+          "hover": "#356AE6"
+        },
+        "secondary": {
+          "background": "#FFFFFF",
+          "foreground": "#172033",
+          "border": "#E4E7EC",
+          "hover": "#F5F7FB"
+        },
+        "ghost": {
+          "background": "transparent",
+          "foreground": "#667085",
+          "border": "transparent",
+          "hover": "#F5F7FB"
+        },
+        "danger": {
+          "background": "#DC2626",
+          "foreground": "#FFFFFF",
+          "border": "#DC2626",
+          "hover": "#B91C1C"
+        }
+      }
+    },
+    "card": {
+      "radius": 16,
+      "padding": 20,
+      "borderWidth": 1,
+      "shadow": "0 1px 3px rgba(16,24,40,0.06)"
+    },
+    "input": {
+      "height": 40,
+      "radius": 10,
+      "focusBorder": "#4F7DFF"
+    },
+    "badge": {
+      "variants": {
+        "draft": {"background": "#F2F4F7", "foreground": "#667085"},
+        "ready": {"background": "#EEF4FF", "foreground": "#356AE6"},
+        "review": {"background": "#F5F3FF", "foreground": "#6D28D9"},
+        "revision": {"background": "#FEF3C7", "foreground": "#D97706"},
+        "accepted": {"background": "#DCFCE7", "foreground": "#16A34A"},
+        "rejected": {"background": "#FEE2E2", "foreground": "#DC2626"},
+        "archived": {"background": "#F2F4F7", "foreground": "#667085"}
+      }
+    }
   }
 }
