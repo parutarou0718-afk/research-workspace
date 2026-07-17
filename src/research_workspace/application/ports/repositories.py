@@ -17,6 +17,9 @@ from research_workspace.application.dto.recovery_dto import VerifiedRecoveryPoin
 from research_workspace.application.services.command_dispatcher import DomainMutation
 from research_workspace.application.queries.get_papers import PaperReadRepository
 from research_workspace.application.queries.get_ideas import IdeaReadRepository
+from research_workspace.application.queries.get_version_candidates import (
+    UndoHistoryRepository,
+)
 
 
 @dataclass(frozen=True, slots=True)

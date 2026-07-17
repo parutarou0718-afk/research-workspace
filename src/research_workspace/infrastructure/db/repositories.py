@@ -58,9 +58,17 @@ from research_workspace.application.services.relation_graph import (
 from research_workspace.application.dto.recovery_dto import VerifiedRecoveryPoint
 from research_workspace.infrastructure.db.models import (
     ApplicationCommandModel,
+    AuditChangeModel,
     RecoveryPointModel,
     RecoverySlotModel,
     WorkspaceMetadataModel,
+)
+from research_workspace.application.commands.undo_command import (
+    UndoChange,
+    UndoPreflight,
+)
+from research_workspace.application.queries.get_version_candidates import (
+    UndoHistoryRecord,
 )
 
 
@@ -341,6 +349,169 @@ class SqlSubmissionReadRepository:
             statement.order_by(SubmissionModel.venue, SubmissionModel.id)
         ).all()
         return tuple(self._record(row) for row in rows)
+
+
+class SqlUndoHistoryRepository:
+    """Projects immutable command/audit/current facts for Application preflight."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def list_undo_history(self) -> tuple[UndoHistoryRecord, ...]:
+        commands = self._session.scalars(
+            select(ApplicationCommandModel)
+            .where(
+                ApplicationCommandModel.status == "committed",
+                ApplicationCommandModel.actor_type.in_(("user", "system")),
+            )
+            .order_by(
+                ApplicationCommandModel.committed_at.desc(),
+                ApplicationCommandModel.id.desc(),
+            )
+        ).all()
+        undone = frozenset(
+            value
+            for value in self._session.scalars(
+                select(ApplicationCommandModel.undo_of_command_id).where(
+                    ApplicationCommandModel.undo_of_command_id.is_not(None)
+                )
+            )
+            if value is not None
+        )
+        result: list[UndoHistoryRecord] = []
+        for command in commands:
+            changes = self._session.scalars(
+                select(AuditChangeModel)
+                .where(AuditChangeModel.command_id == command.id)
+                .order_by(AuditChangeModel.change_index)
+            ).all()
+            projected: list[UndoChange] = []
+            for change in changes:
+                current = self._current_snapshot(
+                    change.entity_type, change.entity_id
+                )
+                if current is None:
+                    continue
+                projected.append(
+                    UndoChange(
+                        change.entity_type,
+                        change.entity_id,
+                        change.operation,
+                        change.before_json.encode("utf-8")
+                        if change.before_json is not None else None,
+                        change.after_json.encode("utf-8")
+                        if change.after_json is not None else None,
+                        tuple(__import__("json").loads(change.changed_fields_json)),
+                        current,
+                        self._dependency_count(
+                            change.entity_type, change.entity_id
+                        ),
+                    )
+                )
+            result.append(
+                UndoHistoryRecord(
+                    command.id,
+                    command.command_type,
+                    command.actor_type,
+                    command.committed_at,
+                    UndoPreflight(
+                        command.status,
+                        command.id in undone,
+                        command.undo_of_command_id is not None,
+                        tuple(projected),
+                    ),
+                )
+            )
+        return tuple(result)
+
+    @staticmethod
+    def _iso(value: datetime | None) -> str | None:
+        return (
+            value.isoformat().replace("+00:00", "Z")
+            if value is not None else None
+        )
+
+    def _current_snapshot(
+        self, entity_type: str, entity_id: UUID
+    ) -> bytes | None:
+        row = None
+        fields = None
+        if entity_type == "Paper":
+            row = self._session.get(PaperModel, entity_id)
+            if row is not None:
+                fields = {
+                    "title": row.title,
+                    "status": row.status,
+                    "current_version_id": str(row.current_version_id)
+                    if row.current_version_id else None,
+                    "deleted_at": self._iso(row.deleted_at),
+                }
+        elif entity_type == "Idea":
+            row = self._session.get(IdeaModel, entity_id)
+            if row is not None:
+                fields = {
+                    "title": row.title,
+                    "content": row.content,
+                    "status": row.status,
+                    "origin_type": row.origin_type,
+                    "deleted_at": self._iso(row.deleted_at),
+                }
+        elif entity_type == "Submission":
+            row = self._session.get(SubmissionModel, entity_id)
+            if row is not None:
+                fields = {
+                    "paper_id": str(row.paper_id),
+                    "venue": row.venue,
+                    "status": row.status,
+                    "submitted_at": self._iso(row.submitted_at),
+                    "deadline_at": self._iso(row.deadline_at),
+                    "active_version_id": str(row.active_version_id)
+                    if row.active_version_id else None,
+                    "deleted_at": self._iso(row.deleted_at),
+                }
+        if row is None or fields is None:
+            return None
+        return rfc8785.dumps({
+            "schema_version": "1.0",
+            "entity_type": entity_type,
+            "entity_id": str(entity_id),
+            "row_version": row.row_version,
+            "fields": fields,
+        })
+
+    def _dependency_count(self, entity_type: str, entity_id: UUID) -> int:
+        relation_count = self._session.scalar(
+            select(func.count(EntityRelationModel.id)).where(
+                EntityRelationModel.lifecycle_state == "active",
+                or_(
+                    (EntityRelationModel.source_type == entity_type)
+                    & (EntityRelationModel.source_id == entity_id),
+                    (EntityRelationModel.target_type == entity_type)
+                    & (EntityRelationModel.target_id == entity_id),
+                ),
+            )
+        ) or 0
+        evidence_count = self._session.scalar(
+            select(func.count(EvidenceRefModel.id)).where(
+                EvidenceRefModel.entity_type == entity_type,
+                EvidenceRefModel.entity_id == entity_id,
+            )
+        ) or 0
+        specific = 0
+        if entity_type == "Paper":
+            specific += self._session.scalar(
+                select(func.count(SubmissionModel.id)).where(
+                    SubmissionModel.paper_id == entity_id,
+                    SubmissionModel.deleted_at.is_(None),
+                )
+            ) or 0
+            specific += self._session.scalar(
+                select(func.count(PaperVersionModel.id)).where(
+                    PaperVersionModel.paper_id == entity_id,
+                    PaperVersionModel.lifecycle_state == "active",
+                )
+            ) or 0
+        return int(relation_count + evidence_count + specific)
 
 
 class SqlGate1WriteRepository:

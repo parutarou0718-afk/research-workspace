@@ -1,12 +1,19 @@
 """Read-only immutable PaperVersionCandidate projection."""
 
 from dataclasses import dataclass
+from datetime import datetime
 import json
+from typing import Protocol
 from uuid import UUID
 
 from sqlalchemy import select
 
 from research_workspace.infrastructure.db.models import PaperVersionCandidateModel
+from research_workspace.application.commands.undo_command import (
+    UndoError,
+    UndoPreflight,
+    plan_compensating_undo,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +48,60 @@ class DecisionReviewBundle:
     input_observation_ids: tuple[UUID, ...]
     existing_memberships: tuple[UUID, ...]
     existing_relation_ids: tuple[UUID, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class UndoHistoryRecord:
+    command_id: UUID
+    command_type: str
+    actor_type: str
+    committed_at: datetime
+    preflight: UndoPreflight
+
+
+@dataclass(frozen=True, slots=True)
+class SafeUndoItem:
+    command_id: UUID
+    command_type: str
+    committed_at: datetime
+    affected_entity_ids: tuple[UUID, ...]
+    action: str = "undo"
+
+
+class UndoHistoryRepository(Protocol):
+    def list_undo_history(self) -> tuple[UndoHistoryRecord, ...]: ...
+
+
+class GetSafeUndoQuery:
+    def __init__(self, repository: UndoHistoryRepository) -> None:
+        self._repository = repository
+
+    def execute(self, *, as_of: datetime) -> tuple[SafeUndoItem, ...]:
+        result: list[SafeUndoItem] = []
+        for record in self._repository.list_undo_history():
+            if record.actor_type != "user":
+                continue
+            try:
+                plan_compensating_undo(
+                    record.command_id, UUID(int=0), as_of, record.preflight
+                )
+            except UndoError:
+                continue
+            result.append(
+                SafeUndoItem(
+                    record.command_id,
+                    record.command_type,
+                    record.committed_at,
+                    tuple(change.entity_id for change in record.preflight.changes),
+                )
+            )
+        return tuple(
+            sorted(
+                result,
+                key=lambda item: (item.committed_at, item.command_id),
+                reverse=True,
+            )
+        )
 
 
 def build_decision_review_bundle(
