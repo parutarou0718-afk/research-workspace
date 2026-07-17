@@ -2,6 +2,32 @@
 <ui version="4.0">
  <class>PapersPage</class>
  <widget class="QWidget" name="papersPage">
+  <property name="styleSheet"><string notr="true">
+QWidget#papersPage {
+  font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI";
+  color: #172033;
+}
+QListWidget#papersListView {
+  border: 0;
+  background: transparent;
+}
+QListWidget#papersListView::item {
+  background: #FFFFFF;
+  border: 1px solid #E4E7EC;
+  border-radius: 14px;
+  margin-bottom: 10px;
+  padding: 14px;
+}
+QListWidget#papersListView::item:hover {
+  border-color: #C7D7FE;
+  background: #FBFCFF;
+}
+QListWidget#papersListView::item:selected {
+  border-color: #4F7DFF;
+  background: #EEF4FF;
+  color: #172033;
+}
+  </string></property>
   <layout class="QVBoxLayout" name="papersRootVerticalLayout">
    <property name="leftMargin"><number>0</number></property>
    <property name="topMargin"><number>0</number></property>
@@ -71,8 +97,10 @@
         <layout class="QHBoxLayout" name="papersWorkspaceHorizontalLayout">
          <property name="spacing"><number>16</number></property>
          <item>
-          <widget class="QFrame" name="papersListCard">
+         <widget class="QFrame" name="papersListCard">
            <property name="component"><string>card</string></property>
+           <property name="minimumWidth"><number>460</number></property>
+           <property name="maximumWidth"><number>500</number></property>
            <layout class="QVBoxLayout" name="papersListVerticalLayout">
             <property name="leftMargin"><number>20</number></property>
             <property name="topMargin"><number>20</number></property>
@@ -80,7 +108,7 @@
             <property name="bottomMargin"><number>20</number></property>
             <property name="spacing"><number>12</number></property>
             <item><widget class="QLabel" name="papersListTitleLabel"><property name="text"><string>Paper List</string></property></widget></item>
-            <item><widget class="QListWidget" name="papersListView"><property name="minimumSize"><size><width>360</width><height>520</height></size></property><property name="selectionMode"><enum>QAbstractItemView::SingleSelection</enum></property></widget></item>
+            <item><widget class="QListWidget" name="papersListView"><property name="minimumSize"><size><width>0</width><height>520</height></size></property><property name="spacing"><number>8</number></property><property name="selectionMode"><enum>QAbstractItemView::SingleSelection</enum></property></widget></item>
             <item>
              <layout class="QHBoxLayout" name="papersActionHorizontalLayout">
               <property name="spacing"><number>8</number></property>
@@ -95,6 +123,7 @@
          <item>
           <widget class="QFrame" name="paperDetailCard">
            <property name="component"><string>card</string></property>
+           <property name="minimumWidth"><number>680</number></property>
            <layout class="QVBoxLayout" name="paperDetailVerticalLayout">
             <property name="leftMargin"><number>20</number></property>
             <property name="topMargin"><number>20</number></property>
@@ -107,12 +136,20 @@
             <item><widget class="QLabel" name="paperMetadataTextLabel"><property name="text"><string>Year, authors and version metadata will appear here.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
             <item><widget class="QLabel" name="paperAbstractTitleLabel"><property name="text"><string>Abstract</string></property></widget></item>
             <item><widget class="QLabel" name="paperAbstractTextLabel"><property name="text"><string>No abstract captured yet.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
-            <item><widget class="QLabel" name="paperResearchNotesTitleLabel"><property name="text"><string>Research Notes</string></property></widget></item>
-            <item><widget class="QLabel" name="paperResearchNotesTextLabel"><property name="text"><string>Notes linked to this paper will appear here.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
-            <item><widget class="QLabel" name="paperTimelineTitleLabel"><property name="text"><string>Timeline</string></property></widget></item>
-            <item><widget class="QLabel" name="paperTimelineTextLabel"><property name="text"><string>Creation, edits and decisions will appear here.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
-            <item><widget class="QLabel" name="paperResearchAnalysisTitleLabel"><property name="text"><string>Research Analysis</string></property></widget></item>
-            <item><widget class="QLabel" name="paperResearchAnalysisTextLabel"><property name="text"><string>No analysis yet.
+            <item>
+             <layout class="QHBoxLayout" name="paperDemoActionsHorizontalLayout">
+              <property name="spacing"><number>12</number></property>
+              <item>
+               <widget class="QFrame" name="paperResearchAnalysisCard">
+              <property name="component"><string>emptyState</string></property>
+              <layout class="QVBoxLayout" name="paperResearchAnalysisVerticalLayout">
+               <property name="leftMargin"><number>20</number></property>
+               <property name="topMargin"><number>20</number></property>
+               <property name="rightMargin"><number>20</number></property>
+               <property name="bottomMargin"><number>20</number></property>
+               <property name="spacing"><number>8</number></property>
+               <item><widget class="QLabel" name="paperResearchAnalysisTitleLabel"><property name="text"><string>Research Analysis</string></property></widget></item>
+               <item><widget class="QLabel" name="paperResearchAnalysisTextLabel"><property name="text"><string>No analysis yet.
 
 Analyze this paper to generate:
 
@@ -121,14 +158,11 @@ Analyze this paper to generate:
 • Key claims
 
 • Suggested ideas</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
-            <item><widget class="QPushButton" name="paperAnalyzeWithAiButton"><property name="variant"><string>secondary</string></property><property name="informational"><bool>true</bool></property><property name="text"><string>Analyze with AI</string></property></widget></item>
-            <item><widget class="QLabel" name="paperResearchAnalysisMilestoneLabel"><property name="text"><string>Available in the next milestone.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
-            <item><widget class="QLabel" name="paperRelatedIdeasTitleLabel"><property name="text"><string>Related Ideas</string></property></widget></item>
-            <item><widget class="QLabel" name="paperRelatedIdeasTextLabel"><property name="text"><string>No related ideas yet.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
-            <item><widget class="QLabel" name="paperRelatedPapersTitleLabel"><property name="text"><string>Related Papers</string></property></widget></item>
-            <item><widget class="QLabel" name="paperRelatedPapersTextLabel"><property name="text"><string>No related papers yet.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
-            <item><widget class="QLabel" name="paperRelationsTitleLabel"><property name="text"><string>Relations</string></property></widget></item>
-            <item><widget class="QLabel" name="paperRelationsTextLabel"><property name="text"><string>Known relations and evidence will appear here.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+               <item><widget class="QPushButton" name="paperAnalyzeWithAiButton"><property name="variant"><string>secondary</string></property><property name="informational"><bool>true</bool></property><property name="text"><string>Analyze with AI</string></property></widget></item>
+               <item><widget class="QLabel" name="paperResearchAnalysisMilestoneLabel"><property name="text"><string>Available in the next milestone.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+              </layout>
+               </widget>
+              </item>
             <item>
              <widget class="QFrame" name="paperNextStepCard">
               <property name="component"><string>emptyState</string></property>
@@ -144,6 +178,18 @@ Analyze this paper to generate:
               </layout>
              </widget>
             </item>
+             </layout>
+            </item>
+            <item><widget class="QLabel" name="paperResearchNotesTitleLabel"><property name="text"><string>Research Notes</string></property></widget></item>
+            <item><widget class="QLabel" name="paperResearchNotesTextLabel"><property name="text"><string>Notes linked to this paper will appear here.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+            <item><widget class="QLabel" name="paperTimelineTitleLabel"><property name="text"><string>Timeline</string></property></widget></item>
+            <item><widget class="QLabel" name="paperTimelineTextLabel"><property name="text"><string>Creation, edits and decisions will appear here.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+            <item><widget class="QLabel" name="paperRelatedIdeasTitleLabel"><property name="text"><string>Related Ideas</string></property></widget></item>
+            <item><widget class="QLabel" name="paperRelatedIdeasTextLabel"><property name="text"><string>No related ideas yet.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+            <item><widget class="QLabel" name="paperRelatedPapersTitleLabel"><property name="text"><string>Related Papers</string></property></widget></item>
+            <item><widget class="QLabel" name="paperRelatedPapersTextLabel"><property name="text"><string>No related papers yet.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+            <item><widget class="QLabel" name="paperRelationsTitleLabel"><property name="text"><string>Relations</string></property></widget></item>
+            <item><widget class="QLabel" name="paperRelationsTextLabel"><property name="text"><string>Known relations and evidence will appear here.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
            </layout>
           </widget>
          </item>

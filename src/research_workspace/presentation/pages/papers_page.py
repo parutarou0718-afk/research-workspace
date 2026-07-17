@@ -1,6 +1,6 @@
 """Thin Paper page controller."""
 
-from PySide6.QtCore import QThread
+from PySide6.QtCore import QSize, QThread
 from PySide6.QtWidgets import QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QScrollArea, QFrame
 
 from research_workspace.presentation import load_ui_resource, require_child
@@ -138,8 +138,11 @@ class PapersPage(CrudPageController):
         self.list_view.clear()
         for row in rows:
             item = QListWidgetItem(
-                f"{row.title}\n{_status_label(row.status)} · Version {row.row_version}"
+                f"{row.title}\n"
+                f"Authors pending | Year pending\n"
+                f"Status: {_status_label(row.status)} | Version {row.row_version}"
             )
+            item.setSizeHint(QSize(0, 92))
             self.list_view.addItem(item)
         has_rows = bool(rows)
         self.empty_state.setVisible(not has_rows)

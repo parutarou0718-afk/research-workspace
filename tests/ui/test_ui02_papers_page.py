@@ -3,7 +3,7 @@ from uuid import uuid4
 from xml.etree import ElementTree
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QLabel, QListWidget, QPushButton
+from PySide6.QtWidgets import QLabel, QListWidget, QPushButton, QFrame
 
 from research_workspace.presentation.pages.papers_page import PapersPage
 
@@ -63,6 +63,17 @@ def widget_names():
     }
 
 
+def ui_strings():
+    return [
+        element.text or ""
+        for element in ElementTree.parse(UI_PATH).getroot().iter("string")
+    ]
+
+
+def global_rect(widget):
+    return widget.rect().translated(widget.mapToGlobal(widget.rect().topLeft()))
+
+
 def test_paper_page_uses_product_layout_not_raw_table():
     names = widget_names()
     assert {
@@ -91,6 +102,42 @@ def test_paper_page_uses_product_layout_not_raw_table():
         "papersEmptyActionButton",
     } <= names
     assert "papersTable" not in names
+
+
+def test_paper_workspace_layout_is_balanced_and_card_like():
+    names = widget_names()
+    assert {"papersListCard", "paperDetailCard"} <= names
+    joined = "\n".join(ui_strings())
+    assert 'font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI"' in joined
+    assert "QListWidget#papersListView::item" in joined
+    assert "border-radius: 14px" in joined
+
+
+def test_paper_detail_actions_are_visible_at_demo_sizes(qtbot):
+    first = row("Transformer Survey", status="active")
+    page = PapersPage(services((first,)))
+    qtbot.addWidget(page.widget)
+
+    for width, height, minimum_detail_width in ((1366, 768, 700), (1280, 720, 680)):
+        page.widget.resize(width, height)
+        page.widget.show()
+        page.list_view.setCurrentRow(0)
+        page._update_actions()
+        qtbot.wait(0)
+
+        list_card = page.widget.findChild(QFrame, "papersListCard")
+        detail_card = page.widget.findChild(QFrame, "paperDetailCard")
+        split_width = list_card.width() + detail_card.width()
+        list_ratio = list_card.width() / split_width
+        assert 0.35 <= list_ratio <= 0.42
+        assert detail_card.width() >= minimum_detail_width
+        assert page.scroll_area.horizontalScrollBar().maximum() == 0
+
+        viewport = global_rect(page.scroll_area.viewport())
+        assert viewport.contains(global_rect(page.research_analysis_title_label))
+        assert viewport.contains(global_rect(page.analyze_with_ai_button))
+        assert viewport.contains(global_rect(page.next_step_title_label))
+        assert viewport.contains(global_rect(page.create_idea_button))
 
 
 def test_paper_page_empty_state_is_specific_and_actionable(qtbot):
