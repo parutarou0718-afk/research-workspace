@@ -134,10 +134,10 @@ def test_ui01_overview_has_empty_suggestions_and_polished_submission_table(qtbot
         )
     )
 
-    assert controller.widget.findChild(QLabel, "suggestionsEmptyTitleLabel").text() == "No suggestions yet."
+    assert controller.widget.findChild(QLabel, "suggestionsEmptyTitleLabel").text() == "暂时没有建议。"
     assert (
         controller.widget.findChild(QLabel, "suggestionsEmptyBodyLabel").text()
-        == "Import papers or capture research notes to see analysis here."
+        == "导入论文或记录研究笔记后，这里会显示分析结果。"
     )
     assert controller.suggestions_list.isHidden()
 
@@ -147,7 +147,7 @@ def test_ui01_overview_has_empty_suggestions_and_polished_submission_table(qtbot
     assert [table.item(0, column).text() for column in range(4)] == [
         "Paper A",
         "Journal",
-        "Revision",
+        "返修中",
         "2026-07-20",
     ]
 
@@ -156,8 +156,8 @@ def test_ui01_quick_record_controls_are_visible_and_actionable(qtbot):
     controller = OverviewPage(services=object())
     qtbot.addWidget(controller.widget)
 
-    assert controller.quick_idea_line_edit.placeholderText() == "Capture a research note"
+    assert controller.quick_idea_line_edit.placeholderText() == "记录一条研究笔记"
     assert controller.idea_argument_button.isEnabled()
     assert controller.idea_material_button.isEnabled()
     assert controller.idea_question_button.isEnabled()
-    assert controller.save_idea_button.text() == "Capture"
+    assert controller.save_idea_button.text() == "记录"

@@ -22,6 +22,7 @@ from research_workspace.application.ports.ai_provider import (
 from research_workspace.presentation import load_ui_resource, require_child
 from research_workspace.presentation.dialogs.idea_editor_dialog import IdeaEditorDialog
 from research_workspace.presentation.dialogs.paper_editor_dialog import PaperEditorDialog
+from research_workspace.presentation.localization import zh_error
 from research_workspace.presentation.view_models.papers import PapersViewModel
 
 
@@ -176,8 +177,8 @@ class PapersPage(CrudPageController):
         for row in rows:
             item = QListWidgetItem(
                 f"{row.title}\n"
-                f"Authors not added | Year not added\n"
-                f"Status: {_status_label(row.status)} | Version {row.row_version}"
+                f"作者未填写 | 年份未填写\n"
+                f"状态：{_status_label(row.status)}"
             )
             item.setSizeHint(QSize(0, 92))
             self.list_view.addItem(item)
@@ -237,11 +238,11 @@ class PapersPage(CrudPageController):
     def _update_detail(self) -> None:
         row = self._selected()
         if row is None:
-            self.detail_title_label.setText("Select a paper")
-            self.status_badge_label.setText("Draft")
+            self.detail_title_label.setText("选择一篇论文")
+            self.status_badge_label.setText("草稿")
             self.status_badge_label.setProperty("badge", "draft")
             self.metadata_text_label.setText(
-                "Year, authors and status metadata will appear here."
+                "年份、作者和状态信息会显示在这里。"
             )
             return
         self.detail_title_label.setText(row.title)
@@ -250,20 +251,20 @@ class PapersPage(CrudPageController):
         self.status_badge_label.style().unpolish(self.status_badge_label)
         self.status_badge_label.style().polish(self.status_badge_label)
         self.metadata_text_label.setText(
-            f"Status: {_status_label(row.status)}\n"
-            "Authors not added\n"
-            "Year not added"
+            f"状态：{_status_label(row.status)}\n"
+            "作者未填写\n"
+            "年份未填写"
         )
-        self.abstract_text_label.setText("No abstract captured yet.")
-        self.research_notes_text_label.setText("Notes linked to this paper will appear here.")
-        self.timeline_text_label.setText("Creation, edits and decisions will appear here.")
-        self.research_analysis_title_label.setText("Research Analysis")
+        self.abstract_text_label.setText("还没有记录摘要。")
+        self.research_notes_text_label.setText("与这篇论文相关的笔记会显示在这里。")
+        self.timeline_text_label.setText("创建、编辑和决策记录会显示在这里。")
+        self.research_analysis_title_label.setText("研究分析")
         self._render_ai_ready_state()
-        self.next_step_title_label.setText("Next Step")
-        self.next_step_text_label.setText("Capture an idea from this paper.")
-        self.related_ideas_text_label.setText("No related ideas yet.")
-        self.related_papers_text_label.setText("No related papers yet.")
-        self.relations_text_label.setText("Known relations and evidence will appear here.")
+        self.next_step_title_label.setText("下一步")
+        self.next_step_text_label.setText("从这篇论文中记录一个想法。")
+        self.related_ideas_text_label.setText("还没有相关想法。")
+        self.related_papers_text_label.setText("还没有相关论文。")
+        self.relations_text_label.setText("已记录的关系和证据会显示在这里。")
 
     def _ai_service(self):
         return getattr(self.services, "paper_ai_analysis", None)
@@ -277,20 +278,20 @@ class PapersPage(CrudPageController):
         self._clear_suggestion_buttons()
         self.analyze_with_ai_button.setEnabled(True)
         if not self._ai_is_configured():
-            self.research_analysis_text_label.setText("AI is not configured.")
-            self.analyze_with_ai_button.setText("Open AI Settings")
+            self.research_analysis_text_label.setText("AI 尚未配置。")
+            self.analyze_with_ai_button.setText("打开 AI 设置")
             self.research_analysis_milestone_label.setText(
-                "Configure AI in Settings to analyze this paper."
+                "请先在设置中填写 AI 接口信息。"
             )
             return
         self.research_analysis_text_label.setText(
-            "No analysis yet.\n"
-            "Analyze this paper to generate:\n"
-            "• Summary\n"
-            "• Key Claims\n"
-            "• Suggested Ideas"
+            "还没有分析结果。\n"
+            "用 AI 分析这篇论文，可生成：\n"
+            "• 摘要\n"
+            "• 关键观点\n"
+            "• 建议想法"
         )
-        self.analyze_with_ai_button.setText("Analyze with AI")
+        self.analyze_with_ai_button.setText("用 AI 分析")
         self.research_analysis_milestone_label.clear()
 
     def _handle_ai_button(self) -> None:
@@ -320,7 +321,7 @@ class PapersPage(CrudPageController):
         if request is None or analyze_async is None:
             return
         self._clear_suggestion_buttons()
-        self.research_analysis_text_label.setText("Analyzing paper...")
+        self.research_analysis_text_label.setText("正在分析论文…")
         self.research_analysis_milestone_label.clear()
         self.analyze_with_ai_button.setEnabled(False)
         self._ai_handle = analyze_async(request)
@@ -343,8 +344,8 @@ class PapersPage(CrudPageController):
 
     def _render_ai_failure(self, message: str) -> None:
         self._clear_suggestion_buttons()
-        self.research_analysis_text_label.setText(message)
-        self.analyze_with_ai_button.setText("Try Again")
+        self.research_analysis_text_label.setText(zh_error(message))
+        self.analyze_with_ai_button.setText("重试")
         self.research_analysis_milestone_label.clear()
 
     def _render_ai_success(self, analysis: PaperAnalysis) -> None:
@@ -352,17 +353,17 @@ class PapersPage(CrudPageController):
         claims = "\n".join(f"• {claim}" for claim in analysis.key_claims)
         ideas = "\n".join(f"• {idea.title}" for idea in analysis.suggested_ideas)
         self.research_analysis_text_label.setText(
-            f"Summary\n{analysis.summary}\n\n"
-            f"Key Claims\n{claims}\n\n"
-            f"Suggested Ideas\n{ideas}"
+            f"摘要\n{analysis.summary}\n\n"
+            f"关键观点\n{claims}\n\n"
+            f"建议想法\n{ideas}"
         )
-        self.analyze_with_ai_button.setText("Analyze with AI")
+        self.analyze_with_ai_button.setText("用 AI 分析")
         self.research_analysis_milestone_label.clear()
         insert_at = self.research_analysis_layout.indexOf(
             self.research_analysis_milestone_label
         )
         for suggestion in analysis.suggested_ideas:
-            button = QPushButton("Create Idea", self.widget)
+            button = QPushButton("创建想法", self.widget)
             button.setProperty("variant", "primary")
             button.clicked.connect(
                 lambda checked=False, idea=suggestion: self._open_suggested_idea(idea)
@@ -380,13 +381,13 @@ class PapersPage(CrudPageController):
 
 def _status_label(status: str) -> str:
     return {
-        "active": "Active",
-        "draft": "Draft",
-        "archived": "Archived",
-        "deleted": "Archived",
-        "accepted": "Accepted",
-        "rejected": "Rejected",
-        "revision": "Revision",
+        "active": "进行中",
+        "draft": "草稿",
+        "archived": "已归档",
+        "deleted": "已归档",
+        "accepted": "已接受",
+        "rejected": "已拒绝",
+        "revision": "返修中",
     }.get(str(status), str(status).replace("_", " ").title())
 
 

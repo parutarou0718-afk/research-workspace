@@ -15,16 +15,16 @@ from research_workspace.presentation import load_ui_resource, require_child
 
 
 SUBMISSION_STATUS_TEXT = {
-    "preparing": "Preparing",
-    "ready": "Ready",
-    "submitted": "Submitted",
-    "editorial_review": "Editorial Review",
-    "external_review": "External Review",
-    "revision": "Revision",
-    "accepted": "Accepted",
-    "rejected": "Rejected",
-    "withdrawn": "Withdrawn",
-    "no_response": "No Response",
+    "preparing": "准备中",
+    "ready": "待投稿",
+    "submitted": "已投稿",
+    "editorial_review": "编辑初审",
+    "external_review": "外审中",
+    "revision": "返修中",
+    "accepted": "已接受",
+    "rejected": "已拒稿",
+    "withdrawn": "已撤回",
+    "no_response": "暂无回复",
 }
 
 

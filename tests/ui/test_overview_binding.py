@@ -38,7 +38,7 @@ def test_overview_renders_view_model_values(qtbot):
     assert [
         controller.submission_table.item(0, column).text()
         for column in range(4)
-    ] == ["Paper", "Venue", "Revision", "2026-07-20"]
+    ] == ["Paper", "Venue", "返修中", "2026-07-20"]
     assert [
         controller.activities_list.item(index).text()
         for index in range(controller.activities_list.count())

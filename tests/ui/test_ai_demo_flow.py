@@ -95,8 +95,8 @@ def test_settings_page_exposes_ai_configuration_and_masks_key(qtbot, tmp_path):
     page = SettingsPage(SimpleNamespace(ai_settings_store=store, ai_connection_tester=None))
     qtbot.addWidget(page.widget)
 
-    assert page.ai_provider_label.text() == "Provider"
-    assert page.ai_provider_value_label.text() == "OpenAI Compatible"
+    assert page.ai_provider_label.text() == "服务商"
+    assert page.ai_provider_value_label.text() == "OpenAI 兼容接口"
     assert page.ai_base_url_edit.text() == "https://example.test/v1"
     assert page.ai_api_key_edit.echoMode() == page.ai_api_key_edit.EchoMode.Password
     assert page.ai_api_key_edit.text() == "sk-secret-demo"
@@ -109,8 +109,8 @@ def test_paper_analysis_not_configured_opens_settings(qtbot):
     page.list_view.setCurrentRow(0)
     page._update_actions()
 
-    assert "AI is not configured." in page.research_analysis_text_label.text()
-    assert page.analyze_with_ai_button.text() == "Open AI Settings"
+    assert "AI 尚未配置。" in page.research_analysis_text_label.text()
+    assert page.analyze_with_ai_button.text() == "打开 AI 设置"
 
 
 def test_paper_analysis_loading_prevents_repeated_clicks(qtbot):
@@ -125,7 +125,7 @@ def test_paper_analysis_loading_prevents_repeated_clicks(qtbot):
 
     assert app_services.paper_ai_analysis.requests
     assert page.analyze_with_ai_button.isEnabled() is False
-    assert page.research_analysis_text_label.text() == "Analyzing paper..."
+    assert page.research_analysis_text_label.text() == "正在分析论文…"
 
 
 def test_paper_analysis_success_shows_structured_output_and_prefills_idea(qtbot, monkeypatch):
@@ -161,8 +161,8 @@ def test_paper_analysis_success_shows_structured_output_and_prefills_idea(qtbot,
     page._start_ai_analysis()
     page._poll_ai_analysis()
 
-    assert "Summary\nSummary text" in page.research_analysis_text_label.text()
-    assert "Key Claims\n• Claim one\n• Claim two" in page.research_analysis_text_label.text()
+    assert "摘要\nSummary text" in page.research_analysis_text_label.text()
+    assert "关键观点\n• Claim one\n• Claim two" in page.research_analysis_text_label.text()
     assert page.suggestion_buttons
     qtbot.mouseClick(page.suggestion_buttons[0], Qt.MouseButton.LeftButton)
     assert opened == [("Suggested Idea", "Idea content", page.widget), "exec"]
@@ -180,7 +180,7 @@ def test_paper_analysis_failure_shows_concise_retry(qtbot):
     page._poll_ai_analysis()
 
     assert page.research_analysis_text_label.text() == "Authentication failed."
-    assert page.analyze_with_ai_button.text() == "Try Again"
+    assert page.analyze_with_ai_button.text() == "重试"
 
 
 def test_idea_dialog_accepts_initial_suggestion_values(qtbot):

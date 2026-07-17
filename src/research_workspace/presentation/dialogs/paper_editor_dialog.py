@@ -32,7 +32,7 @@ class ProtectedEditorDialog(QDialog):
         if self.operation_handle.status == "completed":
             self.accept()
         else:
-            self.error_label.setText(f"Operation did not complete: {self.operation_handle.status}")
+            self.error_label.setText(f"操作未完成：{self.operation_handle.status}")
 
     def reject(self) -> None:
         if self.operation_handle is not None and not self.operation_handle.done:
@@ -56,12 +56,12 @@ class PaperEditorDialog(ProtectedEditorDialog):
         self.error_label = require_child(self, QLabel, "paperErrorLabel")
         self._bind_operation_widgets(self.save_button, self.error_label)
         for text, value in (
-            ("Active", "active"),
-            ("Paused", "paused"),
-            ("Revision", "revision"),
-            ("Submitted", "submitted"),
-            ("Completed", "completed"),
-            ("Archived", "archived"),
+            ("进行中", "active"),
+            ("已暂停", "paused"),
+            ("返修中", "revision"),
+            ("已投稿", "submitted"),
+            ("已完成", "completed"),
+            ("已归档", "archived"),
         ):
             self.status_combo.addItem(text, value)
         if record is not None:
@@ -73,7 +73,7 @@ class PaperEditorDialog(ProtectedEditorDialog):
         self.cancel_button.clicked.connect(self.reject)
 
     def save(self) -> None:
-        self.recovery_status_label.setText("Preparing a safe recovery point...")
+        self.recovery_status_label.setText("正在准备安全恢复点…")
         self.save_button.setEnabled(False)
         status = self.status_combo.currentData()
         try:

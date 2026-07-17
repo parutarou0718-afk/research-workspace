@@ -91,7 +91,7 @@ def test_idea_detail_empty_state_has_next_step_context(qtbot):
 
     assert page.widget.findChild(QLabel, "ideasEmptyIconLabel") is None
     assert not page.empty_detail_card.isHidden()
-    assert page.empty_detail_title_label.text() == "Idea Detail"
+    assert page.empty_detail_title_label.text() == "想法详情"
     assert page.detail_card.isHidden()
 
 
@@ -107,21 +107,21 @@ def test_idea_detail_renders_selected_idea_and_ai_placeholder(qtbot):
     assert not page.detail_card.isHidden()
     assert page.detail_title_label.text() == "Resultative Complement Theory"
     assert page.content_text_label.text() == "A compact explanation of the idea and why it matters."
-    assert page.research_notes_text_label.text() == "Research notes linked to this idea will appear here."
-    assert page.related_papers_text_label.text() == "No related papers yet."
-    assert page.relations_text_label.text() == "No relations yet."
-    assert page.timeline_text_label.text() == "Idea history will appear here."
-    assert page.ai_suggestions_title_label.text() == "AI Suggestions"
+    assert page.research_notes_text_label.text() == "与这个想法相关的研究笔记会显示在这里。"
+    assert page.related_papers_text_label.text() == "还没有相关论文。"
+    assert page.relations_text_label.text() == "还没有关系。"
+    assert page.timeline_text_label.text() == "这个想法的历史会显示在这里。"
+    assert page.ai_suggestions_title_label.text() == "AI 建议"
     assert page.ai_suggestions_text_label.text() == (
-        "No suggestions yet.\n\n"
-        "Analyze this idea to discover related concepts and possible connections."
+        "还没有建议。\n\n"
+        "用 AI 分析这个想法，发现相关概念和可能的连接。"
     )
-    assert page.ai_button.text() == "Analyze with AI"
+    assert page.ai_button.text() == "用 AI 分析"
     assert page.ai_button.property("informational") is True
-    assert page.ai_milestone_label.text() == "Available in the next milestone."
-    assert page.next_step_title_label.text() == "Next Step"
-    assert page.next_step_text_label.text() == "Analyze this idea with AI."
-    assert page.next_step_milestone_label.text() == "Available in the next milestone."
+    assert page.ai_milestone_label.text() == "将在下一个版本开放。"
+    assert page.next_step_title_label.text() == "下一步"
+    assert page.next_step_text_label.text() == "用 AI 分析这个想法。"
+    assert page.next_step_milestone_label.text() == "将在下一个版本开放。"
 
 
 def test_idea_detail_ai_button_is_informational_only(qtbot):

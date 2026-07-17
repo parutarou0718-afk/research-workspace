@@ -30,7 +30,7 @@ def test_conference_and_grant_are_noninteractive_coming_soon_pages(
     controller = controller_type(services=object())
     labels = [label.text() for label in controller.widget.findChildren(QLabel)]
     assert title in labels
-    assert "Coming Soon" in labels
+    assert "即将开放" in labels
     interactive_types = (
         QAbstractButton,
         QAbstractItemView,

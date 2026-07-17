@@ -182,41 +182,41 @@ class IdeasPage(CrudPageController):
         if row is None:
             return
         self.detail_title_label.setText(row.title)
-        self.content_text_label.setText(str(getattr(row, "content", "") or "No content captured yet."))
+        self.content_text_label.setText(str(getattr(row, "content", "") or "还没有记录内容。"))
         self.research_notes_text_label.setText(
-            "Research notes linked to this idea will appear here."
+            "与这个想法相关的研究笔记会显示在这里。"
         )
-        self.related_papers_text_label.setText("No related papers yet.")
-        self.relations_text_label.setText("No relations yet.")
-        self.timeline_text_label.setText("Idea history will appear here.")
-        self.ai_suggestions_title_label.setText("AI Suggestions")
+        self.related_papers_text_label.setText("还没有相关论文。")
+        self.relations_text_label.setText("还没有关系。")
+        self.timeline_text_label.setText("这个想法的历史会显示在这里。")
+        self.ai_suggestions_title_label.setText("AI 建议")
         self.ai_suggestions_text_label.setText(
-            "No suggestions yet.\n\n"
-            "Analyze this idea to discover related concepts and possible connections."
+            "还没有建议。\n\n"
+            "用 AI 分析这个想法，发现相关概念和可能的连接。"
         )
-        self.ai_milestone_label.setText("Available in the next milestone.")
-        self.next_step_title_label.setText("Next Step")
-        self.next_step_text_label.setText("Analyze this idea with AI.")
-        self.next_step_milestone_label.setText("Available in the next milestone.")
+        self.ai_milestone_label.setText("将在下一个版本开放。")
+        self.next_step_title_label.setText("下一步")
+        self.next_step_text_label.setText("用 AI 分析这个想法。")
+        self.next_step_milestone_label.setText("将在下一个版本开放。")
 
 
 def _idea_type_label(origin_type: str) -> str:
     return {
-        "manual": "Claim",
-        "claim": "Claim",
-        "material": "Evidence",
-        "evidence": "Evidence",
-        "question": "Question",
-        "theory": "Theory",
+        "manual": "论点",
+        "claim": "论点",
+        "material": "材料",
+        "evidence": "证据",
+        "question": "问题",
+        "theory": "理论",
     }.get(str(origin_type), str(origin_type).replace("_", " ").title())
 
 
 def _idea_tags(row) -> str:
-    return "research idea"
+    return "研究想法"
 
 
 def _idea_preview(row) -> str:
-    content = getattr(row, "content", "") or "Small preview will appear here."
+    content = getattr(row, "content", "") or "内容预览会显示在这里。"
     content = " ".join(str(content).split())
     return content[:120]
 
@@ -224,10 +224,10 @@ def _idea_preview(row) -> str:
 def _idea_card_text(row) -> str:
     return (
         f"{row.title}\n"
-        f"{_idea_type_label(row.origin_type)} · Updated 2 days ago · "
-        f"3 Related Papers · 5 Relations\n"
+        f"{_idea_type_label(row.origin_type)} · 最近更新 · "
+        f"3 篇相关论文 · 5 个关系\n"
         f"{_idea_preview(row)}\n"
-        f"Tags: {_idea_tags(row)}"
+        f"标签：{_idea_tags(row)}"
     )
 
 

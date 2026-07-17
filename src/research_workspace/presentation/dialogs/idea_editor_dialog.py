@@ -39,10 +39,10 @@ class IdeaEditorDialog(ProtectedEditorDialog):
         self.error_label = require_child(self, QLabel, "ideaErrorLabel")
         self._bind_operation_widgets(self.save_button, self.error_label)
         for text, value in (
-            ("Unused", "unused"),
-            ("Used", "used"),
-            ("Parked", "parked"),
-            ("Archived", "archived"),
+            ("未使用", "unused"),
+            ("已使用", "used"),
+            ("暂存", "parked"),
+            ("已归档", "archived"),
         ):
             self.status_combo.addItem(text, value)
         if record is not None:
@@ -58,7 +58,7 @@ class IdeaEditorDialog(ProtectedEditorDialog):
         self.cancel_button.clicked.connect(self.reject)
 
     def save(self) -> None:
-        self.recovery_status_label.setText("Preparing a safe recovery point...")
+        self.recovery_status_label.setText("正在准备安全恢复点…")
         self.save_button.setEnabled(False)
         values = (
             self.title_edit.text(),

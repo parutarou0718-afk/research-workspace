@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 
 from research_workspace.application.ports.ai_provider import AISettings
 from research_workspace.presentation import load_ui_resource, require_child
+from research_workspace.presentation.localization import zh_error
 
 
 # Caller/packager contract: this process code requests a fresh application launch.
@@ -112,27 +113,27 @@ class SettingsPage:
     def save_ai_settings(self) -> None:
         store = self._ai_store()
         if store is None:
-            self.ai_settings_status_label.setText("AI settings storage is unavailable.")
+            self.ai_settings_status_label.setText("AI 设置存储不可用。")
             return
         try:
             store.save(self._current_ai_settings())
         except ValueError as exc:
-            self.ai_settings_status_label.setText(str(exc))
+            self.ai_settings_status_label.setText(zh_error(str(exc)))
             return
-        self.ai_settings_status_label.setText("AI settings saved.")
+        self.ai_settings_status_label.setText("AI 设置已保存。")
 
     def test_ai_connection(self) -> None:
         tester = getattr(self.services, "ai_connection_tester", None)
         test_async = getattr(tester, "test_async", None)
         if test_async is None:
-            self.ai_settings_status_label.setText("Connection test is unavailable.")
+            self.ai_settings_status_label.setText("连接测试不可用。")
             return
         try:
             settings = self._current_ai_settings()
         except ValueError as exc:
-            self.ai_settings_status_label.setText(str(exc))
+            self.ai_settings_status_label.setText(zh_error(str(exc)))
             return
-        self.ai_settings_status_label.setText("Testing connection...")
+        self.ai_settings_status_label.setText("正在测试连接…")
         self.test_ai_connection_button.setEnabled(False)
         self._ai_test_handle = test_async(settings)
         self._ai_test_timer.start()
@@ -144,15 +145,15 @@ class SettingsPage:
         self._ai_test_timer.stop()
         self.test_ai_connection_button.setEnabled(True)
         if handle.error is None:
-            self.ai_settings_status_label.setText("Connection successful.")
+            self.ai_settings_status_label.setText("连接成功。")
             return
         self.ai_settings_status_label.setText(
-            getattr(handle.error, "message", str(handle.error))
+            zh_error(getattr(handle.error, "message", str(handle.error)))
         )
 
     def choose_directory(self) -> None:
         selected = QFileDialog.getExistingDirectory(
-            self.widget, "Choose Data Directory", self.resolved_path_line_edit.text()
+            self.widget, "选择数据目录", self.resolved_path_line_edit.text()
         )
         if selected:
             self.select_directory(Path(selected))
@@ -169,11 +170,11 @@ class SettingsPage:
             "existing" if (resolved / "research_workspace.db").is_file() else "new"
         )
         if kind == "existing":
-            status = "Existing Research Workspace"
+            status = "已有研究工作台"
         elif kind == "new":
-            status = "New Research Workspace will be initialized here."
+            status = "将在这里初始化新的研究工作台。"
         else:
-            status = f"Invalid Research Workspace: {inspection.reason}"
+            status = f"无效的研究工作台：{inspection.reason}"
         self.workspace_status_label.setText(status)
         self.error_label.clear()
         self.confirm_button.setEnabled(kind != "invalid")
@@ -196,7 +197,7 @@ class SettingsPage:
             return
         self.error_label.clear()
         self.pending_status_label.setText(
-            "Directory verified. Restart to use it; current data remains unchanged."
+            "目录已验证。重启后使用该目录；当前数据不会被修改。"
         )
         self.restart_now_button.setEnabled(True)
         self.later_button.setEnabled(True)

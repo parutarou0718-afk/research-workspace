@@ -82,6 +82,10 @@ Exit code: 0
 - Suggested idea handoff into the existing Create Idea dialog
 - No automatic idea saving; the user reviews and saves normally
 
+Compatibility note for the v0.2 lineage: Overview and Imports are backed by application queries. Importing documents creates local immutable snapshots.
+Papers, Ideas, and Submissions are foundation placeholders. They were expanded
+into the current protected editing workflow.
+
 ## How I collaborated with Codex
 
 This project was built through an iterative collaboration with Codex and

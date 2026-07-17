@@ -33,6 +33,7 @@ src/research_workspace/infrastructure/ai/openai_compatible.py
 src/research_workspace/infrastructure/config/ai_settings_store.py
 src/research_workspace/infrastructure/recovery/__init__.py
 src/research_workspace/infrastructure/recovery/sqlite_recovery.py
+src/research_workspace/presentation/localization.py
 src/research_workspace/presentation/dialogs/paper_editor_dialog.py
 src/research_workspace/presentation/dialogs/idea_editor_dialog.py
 src/research_workspace/presentation/dialogs/submission_editor_dialog.py

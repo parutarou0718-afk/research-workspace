@@ -7,6 +7,8 @@ from PySide6.QtCore import QFile, QIODevice
 from PySide6.QtUiTools import QUiLoader
 from PySide6.QtWidgets import QWidget
 
+from research_workspace.presentation.localization import apply_zh_cn_friend_surface
+
 
 def _token_stylesheet() -> str:
     token_path = files("research_workspace.presentation").joinpath(
@@ -133,6 +135,7 @@ def load_ui_resource(filename: str) -> QWidget:
         ui_file.close()
     if widget is None:
         raise RuntimeError(f"Unable to load UI resource: {filename}")
+    apply_zh_cn_friend_surface(widget)
     widget.setStyleSheet(f"{widget.styleSheet()}\n{_token_stylesheet()}")
     return widget
 
@@ -170,4 +173,5 @@ def load_ui_into(filename: str, root: QWidget) -> None:
         ui_file.close()
     if loaded is not root:
         raise RuntimeError(f"Unable to populate UI resource: {filename}")
+    apply_zh_cn_friend_surface(root)
     root.setStyleSheet(f"{root.styleSheet()}\n{_token_stylesheet()}")

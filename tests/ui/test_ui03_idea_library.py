@@ -90,9 +90,9 @@ def test_idea_library_empty_state_is_specific(qtbot):
     qtbot.addWidget(page.widget)
 
     assert not page.empty_state.isHidden()
-    assert page.empty_title_label.text() == "No ideas yet."
-    assert page.empty_body_label.text() == "Capture your first research idea."
-    assert page.empty_action_button.text() == "New Idea"
+    assert page.empty_title_label.text() == "还没有想法。"
+    assert page.empty_body_label.text() == "记录你的第一个研究想法。"
+    assert page.empty_action_button.text() == "新建想法"
     assert page.list_view.count() == 0
 
 
@@ -109,10 +109,10 @@ def test_idea_library_renders_cards_and_searches_title_tag_type(qtbot):
     assert page.list_view.count() == 3
     first = page.list_view.item(0).text()
     assert "Resultative Complement Theory" in first
-    assert "Claim" in first
-    assert "3 Related Papers" in first
-    assert "5 Relations" in first
-    assert "Updated 2 days ago" in first
+    assert "论点" in first
+    assert "3 篇相关论文" in first
+    assert "5 个关系" in first
+    assert "最近更新" in first
     assert page.list_view.item(0).sizeHint().height() >= 96
 
     page.search_line_edit.setText("evidence")

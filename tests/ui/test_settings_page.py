@@ -50,13 +50,13 @@ def test_selection_uses_production_inspection_for_existing_new_and_invalid(qtbot
     controller.select_directory(selected)
 
     assert controller.resolved_path_line_edit.text() == str(resolved)
-    assert controller.workspace_status_label.text() == "Existing Research Workspace"
+    assert controller.workspace_status_label.text() == "已有研究工作台"
     assert controller.confirm_button.isEnabled()
     controller.select_directory(new_directory)
-    assert controller.workspace_status_label.text().startswith("New Research Workspace")
+    assert controller.workspace_status_label.text().startswith("将在这里初始化新的研究工作台")
     assert controller.confirm_button.isEnabled()
     controller.select_directory(invalid_directory)
-    assert controller.workspace_status_label.text().startswith("Invalid Research Workspace")
+    assert controller.workspace_status_label.text().startswith("无效的研究工作台")
     assert not controller.confirm_button.isEnabled()
 
 
@@ -82,7 +82,7 @@ def test_success_records_pending_path_and_offers_restart_actions(qtbot, tmp_path
 
     assert service.calls == [selected]
     assert controller.pending_status_label.text() == (
-        "Directory verified. Restart to use it; current data remains unchanged."
+        "目录已验证。重启后使用该目录；当前数据不会被修改。"
     )
     assert controller.restart_now_button.isEnabled()
     assert controller.later_button.isEnabled()

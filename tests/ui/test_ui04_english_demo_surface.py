@@ -1,32 +1,16 @@
 import re
-from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
-from xml.etree import ElementTree
+
+from PySide6.QtWidgets import QWidget
 
 from research_workspace.presentation.dialogs.idea_editor_dialog import IdeaEditorDialog
 from research_workspace.presentation.dialogs.paper_editor_dialog import PaperEditorDialog
+from research_workspace.presentation import load_ui_resource
 from research_workspace.presentation.pages.ideas_page import IdeasPage
 from research_workspace.presentation.pages.overview_page import SUBMISSION_STATUS_TEXT
 from research_workspace.presentation.pages.papers_page import PapersPage
 
-
-UI_DIR = (
-    Path(__file__).parents[2]
-    / "src"
-    / "research_workspace"
-    / "presentation"
-    / "ui"
-)
-
-DEMO_UI_FILES = (
-    "main_window.ui",
-    "overview_page.ui",
-    "papers_page.ui",
-    "paper_editor_dialog.ui",
-    "ideas_page.ui",
-    "idea_editor_dialog.ui",
-)
 
 FORBIDDEN_TEXT = re.compile(
     r"[\u4e00-\u9fff]|"
@@ -36,33 +20,55 @@ FORBIDDEN_TEXT = re.compile(
 )
 
 
-def _ui_texts(file_name: str) -> list[str]:
-    root = ElementTree.parse(UI_DIR / file_name).getroot()
-    return [element.text or "" for element in root.iter("string")]
+def _visible_widget_text(root) -> str:
+    texts = []
+    for widget in (root, *root.findChildren(QWidget)):
+        for getter in ("text", "windowTitle", "placeholderText"):
+            method = getattr(widget, getter, None)
+            if callable(method):
+                value = method()
+                if value:
+                    texts.append(str(value))
+    return "\n".join(texts)
 
 
-def test_demo_flow_ui_files_are_english_only():
-    joined = "\n".join(
-        text for file_name in DEMO_UI_FILES for text in _ui_texts(file_name)
+def test_demo_flow_loaded_ui_is_zh_cn_friend_surface(qtbot):
+    widgets = [
+        load_ui_resource("main_window.ui"),
+        load_ui_resource("overview_page.ui"),
+        load_ui_resource("papers_page.ui"),
+        load_ui_resource("paper_editor_dialog.ui"),
+        load_ui_resource("ideas_page.ui"),
+        load_ui_resource("idea_editor_dialog.ui"),
+        load_ui_resource("settings_page.ui"),
+    ]
+    for widget in widgets:
+        qtbot.addWidget(widget)
+
+    joined = "\n".join(_visible_widget_text(widget) for widget in widgets)
+
+    assert not re.search(
+        r"Dashboard|Papers|Create Paper|Research Analysis|Analyze with AI|"
+        r"Idea Library|Idea Detail|Save Idea|Next Step",
+        joined,
     )
-
-    assert not FORBIDDEN_TEXT.search(joined)
     for term in (
-        "Research Workspace",
-        "Dashboard",
-        "Papers",
-        "Paper List",
-        "Create Paper",
-        "Research Analysis",
-        "Summary",
-        "Key Claims",
-        "Suggested Ideas",
-        "Create Idea",
-        "Save Idea",
-        "Idea Library",
-        "Idea Detail",
-        "Next Step",
-        "Analyze with AI",
+        "研究工作台",
+        "总览",
+        "论文",
+        "论文列表",
+        "新建论文",
+        "研究分析",
+        "摘要",
+        "关键观点",
+        "建议想法",
+        "创建想法",
+        "保存想法",
+        "想法库",
+        "想法详情",
+        "下一步",
+        "用 AI 分析",
+        "AI 设置",
     ):
         assert term in joined
 
@@ -107,7 +113,7 @@ def idea_row():
     )
 
 
-def test_demo_flow_runtime_text_is_english(qtbot):
+def test_demo_flow_runtime_text_is_zh_cn_friend(qtbot):
     services = SimpleNamespace(
         get_papers=Query((paper_row(),)),
         get_ideas=Query((idea_row(),)),
@@ -138,7 +144,10 @@ def test_demo_flow_runtime_text_is_english(qtbot):
         )
     )
 
-    assert not FORBIDDEN_TEXT.search(runtime_text)
-    assert "Authors not added" in paper_page.metadata_text_label.text()
-    assert "Year not added" in paper_page.metadata_text_label.text()
-
+    assert not re.search(
+        r"Authors not added|Year not added|No analysis yet|No suggestions yet|"
+        r"Create Paper|Create Idea|Save Idea",
+        runtime_text,
+    )
+    assert "作者未填写" in paper_page.metadata_text_label.text()
+    assert "年份未填写" in paper_page.metadata_text_label.text()
