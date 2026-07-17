@@ -323,7 +323,11 @@ class PaperVersionCandidateModel(Base):
             "length(trim(detector_id)) > 0 AND length(trim(detector_version)) > 0",
             name="detector_nonblank",
         ),
-        CheckConstraint("rule_id IN ('R1','R2','R3','R4','R5')", name="rule_id_enum"),
+        CheckConstraint(
+            "rule_id IN ('R1_SOURCE_CONTINUITY','R2_REPLACE_CONTINUITY',"
+            "'R3_PAPER_TITLE_TIME','R4_NAME_TITLE_TEXT','R5_ZERO_TEXT_LINEAGE')",
+            name="rule_id_enum",
+        ),
         CheckConstraint(
             "length(rule_config_fingerprint)=64 "
             "AND rule_config_fingerprint NOT GLOB '*[^0-9a-f]*'",

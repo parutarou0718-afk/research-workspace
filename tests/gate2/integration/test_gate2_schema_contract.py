@@ -1,6 +1,8 @@
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import CheckConstraint, create_engine, inspect, text
+
+from research_workspace.infrastructure.db.models import PaperVersionCandidateModel
 
 
 def alembic_config(database_path):
@@ -16,6 +18,14 @@ GATE2_TABLES = {
     "pending_path_checks",
     "reconciliation_runs",
     "paper_version_candidates",
+}
+
+RULE_IDS = {
+    "R1_SOURCE_CONTINUITY",
+    "R2_REPLACE_CONTINUITY",
+    "R3_PAPER_TITLE_TIME",
+    "R4_NAME_TITLE_TEXT",
+    "R5_ZERO_TEXT_LINEAGE",
 }
 
 EXPECTED_COLUMNS = {
@@ -109,5 +119,29 @@ def test_0003_installs_required_uniques_foreign_keys_and_indexes(gate2_database_
             and fk["referred_table"] == "monitoring_roots"
             for fk in source_fks
         )
+    finally:
+        engine.dispose()
+
+
+def test_candidate_rule_check_uses_normative_stable_identifiers(gate2_database_path) -> None:
+    _upgrade(gate2_database_path)
+    engine = create_engine(f"sqlite:///{gate2_database_path.as_posix()}")
+    try:
+        database_checks = inspect(engine).get_check_constraints("paper_version_candidates")
+        database_rule = next(
+            item["sqltext"] for item in database_checks if item["name"] == "ck_paper_version_candidates_rule"
+        )
+        assert all(f"'{rule_id}'" in database_rule for rule_id in RULE_IDS)
+        assert "'R1'" not in database_rule
+
+        model_rule = next(
+            constraint
+            for constraint in PaperVersionCandidateModel.__table__.constraints
+            if isinstance(constraint, CheckConstraint)
+            and constraint.name.endswith("_rule_id_enum")
+        )
+        model_sql = str(model_rule.sqltext)
+        assert all(f"'{rule_id}'" in model_sql for rule_id in RULE_IDS)
+        assert "'R1'" not in model_sql
     finally:
         engine.dispose()

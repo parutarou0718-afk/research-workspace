@@ -230,7 +230,13 @@ _GATE2_DDL = (
             length(trim(detector_id))>0 AND length(trim(detector_version))>0
         ),
         CONSTRAINT ck_paper_version_candidates_rule CHECK (
-            rule_id IN ('R1','R2','R3','R4','R5')
+            rule_id IN (
+                'R1_SOURCE_CONTINUITY',
+                'R2_REPLACE_CONTINUITY',
+                'R3_PAPER_TITLE_TIME',
+                'R4_NAME_TITLE_TEXT',
+                'R5_ZERO_TEXT_LINEAGE'
+            )
         ),
         CONSTRAINT ck_paper_version_candidates_hash CHECK (
             length(rule_config_fingerprint)=64
