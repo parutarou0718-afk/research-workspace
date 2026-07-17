@@ -45,6 +45,52 @@ class IdeasPage(CrudPageController):
             self.widget, QPushButton, "ideasEmptyActionButton"
         )
         self.library_card = require_child(self.widget, QFrame, "ideasLibraryCard")
+        self.empty_detail_card = require_child(
+            self.widget, QFrame, "ideaEmptyDetailCard"
+        )
+        self.empty_detail_title_label = require_child(
+            self.widget, QLabel, "ideaEmptyDetailTitleLabel"
+        )
+        self.detail_card = require_child(self.widget, QFrame, "ideaDetailCard")
+        self.detail_title_label = require_child(
+            self.widget, QLabel, "ideaDetailTitleLabel"
+        )
+        self.content_text_label = require_child(
+            self.widget, QLabel, "ideaContentTextLabel"
+        )
+        self.research_notes_text_label = require_child(
+            self.widget, QLabel, "ideaResearchNotesTextLabel"
+        )
+        self.related_papers_text_label = require_child(
+            self.widget, QLabel, "ideaRelatedPapersTextLabel"
+        )
+        self.relations_text_label = require_child(
+            self.widget, QLabel, "ideaRelationsTextLabel"
+        )
+        self.timeline_text_label = require_child(
+            self.widget, QLabel, "ideaTimelineTextLabel"
+        )
+        self.ai_suggestions_title_label = require_child(
+            self.widget, QLabel, "ideaAiSuggestionsTitleLabel"
+        )
+        self.ai_suggestions_text_label = require_child(
+            self.widget, QLabel, "ideaAiSuggestionsTextLabel"
+        )
+        self.ai_button = require_child(
+            self.widget, QPushButton, "ideaAnalyzeWithAiButton"
+        )
+        self.ai_milestone_label = require_child(
+            self.widget, QLabel, "ideaAiMilestoneLabel"
+        )
+        self.next_step_title_label = require_child(
+            self.widget, QLabel, "ideaNextStepTitleLabel"
+        )
+        self.next_step_text_label = require_child(
+            self.widget, QLabel, "ideaNextStepTextLabel"
+        )
+        self.next_step_milestone_label = require_child(
+            self.widget, QLabel, "ideaNextStepMilestoneLabel"
+        )
         self.new_button = require_child(self.widget, QPushButton, "newIdeaButton")
         self.edit_button = require_child(self.widget, QPushButton, "editIdeaButton")
         self.delete_button = require_child(self.widget, QPushButton, "deleteIdeaButton")
@@ -94,6 +140,7 @@ class IdeasPage(CrudPageController):
         self.library_card.setVisible(has_rows)
         if has_rows and self.list_view.currentRow() < 0:
             self.list_view.setCurrentRow(0)
+        self._update_detail()
 
     def open_new(self):
         IdeaEditorDialog(self.services, parent=self.widget).exec()
@@ -123,6 +170,34 @@ class IdeasPage(CrudPageController):
         self.edit_button.setEnabled("edit" in actions)
         self.delete_button.setEnabled("soft_delete" in actions)
         self.restore_button.setEnabled("restore" in actions)
+        self._update_detail()
+
+    def _update_detail(self) -> None:
+        row = self._selected()
+        has_selection = row is not None
+        self.empty_detail_card.setVisible(not has_selection)
+        self.detail_card.setVisible(has_selection)
+        self.ai_suggestions_title_label.parentWidget().setVisible(has_selection)
+        self.next_step_title_label.parentWidget().setVisible(has_selection)
+        if row is None:
+            return
+        self.detail_title_label.setText(row.title)
+        self.content_text_label.setText(str(getattr(row, "content", "") or "No content captured yet."))
+        self.research_notes_text_label.setText(
+            "Research notes linked to this idea will appear here."
+        )
+        self.related_papers_text_label.setText("No related papers yet.")
+        self.relations_text_label.setText("No relations yet.")
+        self.timeline_text_label.setText("Idea history will appear here.")
+        self.ai_suggestions_title_label.setText("AI Suggestions")
+        self.ai_suggestions_text_label.setText(
+            "No suggestions yet.\n\n"
+            "Analyze this idea to discover related concepts and possible connections."
+        )
+        self.ai_milestone_label.setText("Available in the next milestone.")
+        self.next_step_title_label.setText("Next Step")
+        self.next_step_text_label.setText("Analyze this idea with AI.")
+        self.next_step_milestone_label.setText("Available in the next milestone.")
 
 
 def _idea_type_label(origin_type: str) -> str:

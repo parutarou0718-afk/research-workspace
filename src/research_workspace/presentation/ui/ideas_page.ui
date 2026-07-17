@@ -67,16 +67,19 @@
         </widget>
        </item>
        <item>
-        <widget class="QFrame" name="ideasLibraryCard">
-         <property name="component"><string>card</string></property>
-         <layout class="QVBoxLayout" name="ideasLibraryVerticalLayout">
-          <property name="leftMargin"><number>20</number></property>
-          <property name="topMargin"><number>20</number></property>
-          <property name="rightMargin"><number>20</number></property>
-          <property name="bottomMargin"><number>20</number></property>
-          <property name="spacing"><number>12</number></property>
-          <item><widget class="QLabel" name="ideasLibraryTitleLabel"><property name="text"><string>Idea Library</string></property></widget></item>
-          <item><widget class="QListWidget" name="ideasLibraryListView">
+        <layout class="QHBoxLayout" name="ideasWorkspaceHorizontalLayout">
+         <property name="spacing"><number>16</number></property>
+         <item>
+          <widget class="QFrame" name="ideasLibraryCard">
+           <property name="component"><string>card</string></property>
+           <layout class="QVBoxLayout" name="ideasLibraryVerticalLayout">
+            <property name="leftMargin"><number>20</number></property>
+            <property name="topMargin"><number>20</number></property>
+            <property name="rightMargin"><number>20</number></property>
+            <property name="bottomMargin"><number>20</number></property>
+            <property name="spacing"><number>12</number></property>
+            <item><widget class="QLabel" name="ideasLibraryTitleLabel"><property name="text"><string>Idea Library</string></property></widget></item>
+            <item><widget class="QListWidget" name="ideasLibraryListView">
            <property name="styleSheet"><string notr="true">
 QListWidget { border: 0; background: transparent; }
 QListWidget::item {
@@ -92,17 +95,86 @@ QListWidget::item:selected { border-color: #4F7DFF; background: #EEF4FF; color: 
            <property name="minimumSize"><size><width>0</width><height>620</height></size></property>
            <property name="spacing"><number>8</number></property>
            <property name="selectionMode"><enum>QAbstractItemView::SingleSelection</enum></property>
-          </widget></item>
-          <item>
-           <layout class="QHBoxLayout" name="ideasActionHorizontalLayout">
-            <property name="spacing"><number>8</number></property>
-            <item><widget class="QPushButton" name="editIdeaButton"><property name="variant"><string>secondary</string></property><property name="text"><string>编辑</string></property></widget></item>
-            <item><widget class="QPushButton" name="deleteIdeaButton"><property name="variant"><string>danger</string></property><property name="text"><string>移入已删除</string></property></widget></item>
-            <item><widget class="QPushButton" name="restoreIdeaButton"><property name="variant"><string>secondary</string></property><property name="text"><string>恢复</string></property></widget></item>
+            </widget></item>
+            <item>
+             <layout class="QHBoxLayout" name="ideasActionHorizontalLayout">
+              <property name="spacing"><number>8</number></property>
+              <item><widget class="QPushButton" name="editIdeaButton"><property name="variant"><string>secondary</string></property><property name="text"><string>编辑</string></property></widget></item>
+              <item><widget class="QPushButton" name="deleteIdeaButton"><property name="variant"><string>danger</string></property><property name="text"><string>移入已删除</string></property></widget></item>
+              <item><widget class="QPushButton" name="restoreIdeaButton"><property name="variant"><string>secondary</string></property><property name="text"><string>恢复</string></property></widget></item>
+             </layout>
+            </item>
            </layout>
-          </item>
-         </layout>
-        </widget>
+          </widget>
+         </item>
+         <item>
+          <layout class="QVBoxLayout" name="ideaDetailStackVerticalLayout">
+           <property name="spacing"><number>12</number></property>
+           <item>
+            <widget class="QFrame" name="ideaEmptyDetailCard">
+             <property name="component"><string>emptyState</string></property>
+             <layout class="QVBoxLayout" name="ideaEmptyDetailVerticalLayout">
+              <property name="leftMargin"><number>24</number></property>
+              <property name="topMargin"><number>24</number></property>
+              <property name="rightMargin"><number>24</number></property>
+              <property name="bottomMargin"><number>24</number></property>
+              <property name="spacing"><number>8</number></property>
+              <item><widget class="QLabel" name="ideaEmptyDetailTitleLabel"><property name="text"><string>Select an idea</string></property></widget></item>
+              <item><widget class="QLabel" name="ideaEmptyDetailBodyLabel"><property name="text"><string>Choose an idea from the library to inspect its notes, relations and next step.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QFrame" name="ideaDetailCard">
+             <property name="component"><string>card</string></property>
+             <layout class="QVBoxLayout" name="ideaDetailVerticalLayout">
+              <property name="leftMargin"><number>20</number></property>
+              <property name="topMargin"><number>20</number></property>
+              <property name="rightMargin"><number>20</number></property>
+              <property name="bottomMargin"><number>20</number></property>
+              <property name="spacing"><number>10</number></property>
+              <item><widget class="QLabel" name="ideaDetailTitleLabel"><property name="text"><string>Idea</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+              <item><widget class="QLabel" name="ideaContentTitleLabel"><property name="text"><string>Content</string></property></widget></item>
+              <item><widget class="QLabel" name="ideaContentTextLabel"><property name="text"><string/></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+              <item><widget class="QLabel" name="ideaResearchNotesTitleLabel"><property name="text"><string>Research Notes</string></property></widget></item>
+              <item><widget class="QLabel" name="ideaResearchNotesTextLabel"><property name="text"><string>Research notes linked to this idea will appear here.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+              <item><widget class="QLabel" name="ideaRelatedPapersTitleLabel"><property name="text"><string>Related Papers</string></property></widget></item>
+              <item><widget class="QLabel" name="ideaRelatedPapersTextLabel"><property name="text"><string>No related papers yet.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+              <item><widget class="QLabel" name="ideaRelationsTitleLabel"><property name="text"><string>Relations</string></property></widget></item>
+              <item><widget class="QLabel" name="ideaRelationsTextLabel"><property name="text"><string>No relations yet.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+              <item><widget class="QLabel" name="ideaTimelineTitleLabel"><property name="text"><string>Timeline</string></property></widget></item>
+              <item><widget class="QLabel" name="ideaTimelineTextLabel"><property name="text"><string>Idea history will appear here.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QFrame" name="ideaAiSuggestionsCard">
+             <property name="component"><string>card</string></property>
+             <layout class="QVBoxLayout" name="ideaAiSuggestionsVerticalLayout">
+              <property name="leftMargin"><number>20</number></property><property name="topMargin"><number>20</number></property><property name="rightMargin"><number>20</number></property><property name="bottomMargin"><number>20</number></property><property name="spacing"><number>10</number></property>
+              <item><widget class="QLabel" name="ideaAiSuggestionsTitleLabel"><property name="text"><string>AI Suggestions</string></property></widget></item>
+              <item><widget class="QLabel" name="ideaAiSuggestionsTextLabel"><property name="text"><string>No suggestions yet.
+
+Analyze this idea to discover related concepts and possible connections.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+              <item><widget class="QPushButton" name="ideaAnalyzeWithAiButton"><property name="variant"><string>secondary</string></property><property name="informational"><bool>true</bool></property><property name="text"><string>Analyze with AI</string></property></widget></item>
+              <item><widget class="QLabel" name="ideaAiMilestoneLabel"><property name="text"><string>Available in the next milestone.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QFrame" name="ideaNextStepCard">
+             <property name="component"><string>emptyState</string></property>
+             <layout class="QVBoxLayout" name="ideaNextStepVerticalLayout">
+              <property name="leftMargin"><number>20</number></property><property name="topMargin"><number>20</number></property><property name="rightMargin"><number>20</number></property><property name="bottomMargin"><number>20</number></property><property name="spacing"><number>8</number></property>
+              <item><widget class="QLabel" name="ideaNextStepTitleLabel"><property name="text"><string>Next Step</string></property></widget></item>
+              <item><widget class="QLabel" name="ideaNextStepTextLabel"><property name="text"><string>Analyze this idea with AI.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+              <item><widget class="QLabel" name="ideaNextStepMilestoneLabel"><property name="text"><string>Available in the next milestone.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+             </layout>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
        </item>
       </layout>
      </widget>
