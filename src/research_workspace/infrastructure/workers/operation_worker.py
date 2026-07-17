@@ -12,15 +12,25 @@ from PySide6.QtCore import QCoreApplication, QTimer, Qt
 
 from research_workspace.application.ports.document_parser import DocumentParser
 from research_workspace.application.ports.operation_runner import (
+    CandidateDetectionWorkPlan,
     DocumentParseWorkPlan,
     FeatureWorkPlan,
+    ReconciliationWorkPlan,
     SnapshotImportWorkPlan,
+)
+from research_workspace.application.services.candidate_detection import (
+    PaperMembership,
+    detect_candidate,
 )
 from research_workspace.infrastructure.filesystem.path_safety import SourceFailure
 from research_workspace.infrastructure.filesystem.snapshots import SnapshotStore
+from research_workspace.infrastructure.monitoring.reconciliation import BoundedReconciler
 from research_workspace.infrastructure.workers.worker_signals import (
     CallbackRelay,
+    CandidateWorkerResult,
+    DetectedCandidate,
     ParseWorkerResult,
+    ReconciliationWorkerResult,
     SnapshotWorkerResult,
     WorkerCancelled,
     WorkerCompleted,
@@ -29,6 +39,16 @@ from research_workspace.infrastructure.workers.worker_signals import (
     WorkerSignals,
     WorkerTerminal,
 )
+
+
+class _PlanMemberships:
+    def __init__(self, values: tuple[PaperMembership, ...]) -> None:
+        self._values = values
+
+    def active_memberships(self, snapshot_id):
+        return tuple(
+            value for value in self._values if value.snapshot_id == snapshot_id
+        )
 
 
 class CancellationFlag:
@@ -80,6 +100,34 @@ class OperationWorker:
                 result = ParseWorkerResult(
                     plan.operation_id, parser.parse(plan.request)
                 )
+            elif isinstance(plan, ReconciliationWorkPlan):
+                page = BoundedReconciler().scan_page(
+                    plan.plan,
+                    plan.known,
+                    cancel_requested=lambda: cancellation.cancelled,
+                )
+                if page.cancelled or cancellation.cancelled:
+                    return WorkerCancelled(plan.operation_id)
+                result = ReconciliationWorkerResult(
+                    plan.operation_id,
+                    plan.plan.reconciliation_run_id,
+                    page,
+                )
+            elif isinstance(plan, CandidateDetectionWorkPlan):
+                detected = []
+                total = len(plan.jobs)
+                for index, job in enumerate(plan.jobs):
+                    if cancellation.cancelled:
+                        return WorkerCancelled(plan.operation_id)
+                    candidate = detect_candidate(
+                        job.value, _PlanMemberships(job.memberships)
+                    )
+                    if candidate is not None:
+                        detected.append(DetectedCandidate(job.candidate_id, candidate))
+                    emit_progress(
+                        WorkerProgress(plan.operation_id, "detecting", index + 1, total)
+                    )
+                result = CandidateWorkerResult(plan.operation_id, tuple(detected))
             else:  # pragma: no cover - closed plan union
                 return WorkerFailed(plan.operation_id, "COMMAND_VALIDATION_FAILED")
         except SourceFailure as failure:

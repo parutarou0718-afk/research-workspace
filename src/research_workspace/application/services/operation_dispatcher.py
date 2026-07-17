@@ -27,8 +27,10 @@ from research_workspace.application.dto.parsing_dto import (
 )
 from research_workspace.application.ports.document_parser import DocumentParser
 from research_workspace.application.ports.operation_runner import (
+    CandidateDetectionWorkPlan,
     DocumentParseWorkPlan,
     OperationRunner,
+    ReconciliationWorkPlan,
     SnapshotImportWorkPlan,
 )
 from research_workspace.application.ports.write_coordinator import (
@@ -50,7 +52,9 @@ from research_workspace.domain.parsing import (
     validate_parsed_document_v2,
 )
 from research_workspace.infrastructure.workers.worker_signals import (
+    CandidateWorkerResult,
     ParseWorkerResult,
+    ReconciliationWorkerResult,
     SnapshotWorkerResult,
     WorkerCompleted,
 )
@@ -206,6 +210,104 @@ class ImportParseHandle:
     def shutdown(self, timeout: float | None = None) -> bool:
         self.cancel()
         return True if self._active is None else self._active.shutdown(timeout)
+
+
+class Gate2OperationPipeline:
+    """Validate immutable worker results before main-thread coordination."""
+
+    def __init__(self, coordinator: WriteCoordinator, runner: OperationRunner) -> None:
+        self._coordinator = coordinator
+        self._runner = runner
+
+    def start_reconciliation(
+        self, plan: ReconciliationWorkPlan, now: datetime
+    ) -> ImportParseHandle:
+        handle = ImportParseHandle(threading.get_ident())
+        worker_handle = self._runner.start(plan)
+        handle.bind(worker_handle)
+        worker_handle.on_completed(
+            lambda terminal: self._reconciliation_completed(
+                plan, now, handle, terminal
+            )
+        )
+        worker_handle.on_failed(lambda _terminal: handle.finish("failed"))
+        worker_handle.on_cancelled(lambda _terminal: handle.finish("cancelled"))
+        return handle
+
+    def start_candidate_detection(
+        self, plan: CandidateDetectionWorkPlan, now: datetime
+    ) -> ImportParseHandle:
+        handle = ImportParseHandle(threading.get_ident())
+        worker_handle = self._runner.start(plan)
+        handle.bind(worker_handle)
+        worker_handle.on_completed(
+            lambda terminal: self._candidate_completed(plan, now, handle, terminal)
+        )
+        worker_handle.on_failed(lambda _terminal: handle.finish("failed"))
+        worker_handle.on_cancelled(lambda _terminal: handle.finish("cancelled"))
+        return handle
+
+    def _reconciliation_completed(
+        self,
+        plan: ReconciliationWorkPlan,
+        now: datetime,
+        handle: ImportParseHandle,
+        terminal: WorkerCompleted,
+    ) -> None:
+        payload = terminal.result
+        if (
+            not isinstance(payload, ReconciliationWorkerResult)
+            or payload.operation_id != plan.operation_id
+            or payload.reconciliation_run_id
+            != plan.plan.reconciliation_run_id
+            or payload.page.cancelled
+        ):
+            handle.finish("failed")
+            return
+        try:
+            handle.record_persistence()
+            self._coordinator.record_reconciliation_page(
+                payload.reconciliation_run_id, payload.page, now
+            )
+        except Exception:
+            handle.finish("failed")
+            return
+        handle.finish("completed")
+
+    def _candidate_completed(
+        self,
+        plan: CandidateDetectionWorkPlan,
+        now: datetime,
+        handle: ImportParseHandle,
+        terminal: WorkerCompleted,
+    ) -> None:
+        payload = terminal.result
+        jobs = {job.candidate_id: job for job in plan.jobs}
+        if (
+            not isinstance(payload, CandidateWorkerResult)
+            or payload.operation_id != plan.operation_id
+            or len({item.candidate_id for item in payload.candidates})
+            != len(payload.candidates)
+            or any(item.candidate_id not in jobs for item in payload.candidates)
+        ):
+            handle.finish("failed")
+            return
+        try:
+            handle.record_persistence()
+            for item in payload.candidates:
+                job = jobs[item.candidate_id]
+                if {
+                    item.result.earlier_snapshot_id,
+                    item.result.later_snapshot_id,
+                } != {job.value.snapshot_a_id, job.value.snapshot_b_id}:
+                    raise ValueError("COMMAND_VALIDATION_FAILED")
+                self._coordinator.register_version_candidate(
+                    item.candidate_id, plan.operation_id, item.result, now
+                )
+        except Exception:
+            handle.finish("failed")
+            return
+        handle.finish("completed")
 
 
 @dataclass(slots=True)

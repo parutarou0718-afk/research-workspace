@@ -9,6 +9,10 @@ from uuid import UUID
 from PySide6.QtCore import QObject, Signal, Slot
 
 from research_workspace.application.dto.parsing_dto import ParseResult
+from research_workspace.application.dto.monitoring_dto import (
+    CandidateDetectionResult,
+    ReconciliationPage,
+)
 from research_workspace.infrastructure.filesystem.snapshots import MaterializedSnapshot
 
 
@@ -33,7 +37,34 @@ class ParseWorkerResult:
     parse_result: ParseResult
 
 
-WorkerResult: TypeAlias = SnapshotWorkerResult | ParseWorkerResult
+@dataclass(frozen=True, slots=True)
+class ReconciliationWorkerResult:
+    operation_id: UUID
+    reconciliation_run_id: UUID
+    page: ReconciliationPage
+
+
+@dataclass(frozen=True, slots=True)
+class DetectedCandidate:
+    candidate_id: UUID
+    result: CandidateDetectionResult
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateWorkerResult:
+    operation_id: UUID
+    candidates: tuple[DetectedCandidate, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "candidates", tuple(self.candidates))
+
+
+WorkerResult: TypeAlias = (
+    SnapshotWorkerResult
+    | ParseWorkerResult
+    | ReconciliationWorkerResult
+    | CandidateWorkerResult
+)
 
 
 @dataclass(frozen=True, slots=True)

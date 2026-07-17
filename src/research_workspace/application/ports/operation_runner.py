@@ -6,6 +6,14 @@ from typing import Callable, Protocol, TypeAlias
 from uuid import UUID
 
 from research_workspace.application.dto.parsing_dto import ParseRequest
+from research_workspace.application.dto.monitoring_dto import (
+    ReconciliationObservation,
+    ReconciliationPlan,
+)
+from research_workspace.application.services.candidate_detection import (
+    CandidateInput,
+    PaperMembership,
+)
 from research_workspace.domain.operations import OperationOutcome, OperationWorkPlan
 
 
@@ -28,7 +36,47 @@ class DocumentParseWorkPlan:
     request: ParseRequest
 
 
-FeatureWorkPlan: TypeAlias = SnapshotImportWorkPlan | DocumentParseWorkPlan
+@dataclass(frozen=True, slots=True)
+class ReconciliationWorkPlan:
+    operation_id: UUID
+    plan: ReconciliationPlan
+    known: tuple[ReconciliationObservation, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "known", tuple(self.known))
+        if self.operation_id != self.plan.operation_id:
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateDetectionJob:
+    candidate_id: UUID
+    value: CandidateInput
+    memberships: tuple[PaperMembership, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "memberships", tuple(self.memberships))
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateDetectionWorkPlan:
+    operation_id: UUID
+    jobs: tuple[CandidateDetectionJob, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "jobs", tuple(self.jobs))
+        if len(self.jobs) > 12:
+            raise ValueError("CANDIDATE_COMPARISON_LIMIT_EXCEEDED")
+        if len({job.candidate_id for job in self.jobs}) != len(self.jobs):
+            raise ValueError("COMMAND_VALIDATION_FAILED")
+
+
+FeatureWorkPlan: TypeAlias = (
+    SnapshotImportWorkPlan
+    | DocumentParseWorkPlan
+    | ReconciliationWorkPlan
+    | CandidateDetectionWorkPlan
+)
 
 
 class OperationHandle(Protocol):
