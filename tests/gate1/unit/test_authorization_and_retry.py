@@ -43,13 +43,14 @@ def test_disabled_actor_fails_before_permission_context_or_handler(actor: str) -
     assert calls == []
 
 
-def test_capability_registry_is_closed_and_gate1_only() -> None:
+def test_capability_registry_is_closed_through_gate2() -> None:
     assert CAPABILITY_REGISTRY.schema_version == "1.0"
     assert CAPABILITY_REGISTRY.capabilities == frozenset(
         {
             "source.observe.request",
             "source.snapshot_import.request",
             "document.parse.request",
+            "version_candidate.detect.request",
             "maintenance.verify.request",
         }
     )
@@ -78,7 +79,7 @@ def test_retry_policy_is_closed_and_attempt_bounded() -> None:
     with pytest.raises(TypeError):
         RETRY_POLICY_REGISTRY.policies["library.Exception"] = object()
     assert retry_decision("SOURCE_BUSY", attempt=1).retryable is True
-    assert retry_decision("SOURCE_UNSTABLE", attempt=3).retryable is False
+    assert retry_decision("SOURCE_UNSTABLE", attempt=5).retryable is False
     assert retry_decision("PDF_PASSWORD_REQUIRED", attempt=1).retryable is False
     assert retry_decision("COMMAND_PERMISSION_DENIED", attempt=1).retryable is False
     with pytest.raises(UnknownErrorCode):

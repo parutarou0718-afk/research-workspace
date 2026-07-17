@@ -12,6 +12,11 @@ from research_workspace.application.dto.parsing_dto import (
     ParseSuccessDTO,
     PreparedParseAttempt,
 )
+from research_workspace.application.dto.monitoring_dto import (
+    BaselineObservationDTO,
+    MonitoringRootSeed,
+)
+from research_workspace.domain.monitoring import MonitoringRootStatus
 
 
 @dataclass(frozen=True)
@@ -89,4 +94,19 @@ class WriteCoordinator(Protocol):
 
     def set_parse_preference(
         self, source_snapshot_id: UUID, parse_artifact_id: UUID, operation_id: UUID
+    ) -> int: ...
+
+    def register_monitoring_root(
+        self, seed: MonitoringRootSeed, baseline: tuple[BaselineObservationDTO, ...]
+    ) -> UUID: ...
+
+    def change_monitoring_root_status(
+        self,
+        monitoring_root_id: UUID,
+        expected_status: MonitoringRootStatus,
+        new_status: MonitoringRootStatus,
+    ) -> int: ...
+
+    def remove_monitoring_root(
+        self, monitoring_root_id: UUID, expected_status: MonitoringRootStatus
     ) -> int: ...

@@ -10,6 +10,7 @@ from research_workspace.application.dto.parsing_dto import (
     ParseSuccessDTO,
     PreparedParseAttempt,
 )
+from research_workspace.application.dto.monitoring_dto import MonitoringRootRecord
 from research_workspace.domain.parsing import ParseArtifactIdentity
 
 
@@ -29,6 +30,12 @@ class OverviewData:
 class OverviewRepository(Protocol):
     def get_overview(self) -> OverviewData:
         """Return the complete read-only overview projection."""
+
+
+class MonitoringRepository(Protocol):
+    def list_roots(self) -> tuple[MonitoringRootRecord, ...]: ...
+
+    def find_active_root_by_path(self, normalized_path: str) -> MonitoringRootRecord | None: ...
 
 
 class Gate1WriteRepository(Protocol):

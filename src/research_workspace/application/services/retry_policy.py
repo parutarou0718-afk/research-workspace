@@ -38,7 +38,10 @@ class RetryPolicyRegistry:
 
 RETRY_POLICY_REGISTRY = RetryPolicyRegistry("1.0", MappingProxyType({
     "SOURCE_BUSY": RetryPolicy(True, 3, (0.25, 1.0), True, "waiting", "failed"),
-    "SOURCE_UNSTABLE": RetryPolicy(True, 3, (1.0, 5.0), True, "waiting_for_stability", "unstable_source"),
+    "SOURCE_UNSTABLE": RetryPolicy(True, 5, (2.0, 5.0, 15.0, 30.0), True, "waiting_for_stability", "unstable_source"),
+    "MONITOR_ROOT_DISCONNECTED": RetryPolicy(
+        True, 5, (2.0, 5.0, 15.0, 30.0), True, "disconnected", "failed"
+    ),
     "SQLITE_BUSY": RetryPolicy(True, 3, (0.05, 0.2), False, "waiting", "failed"),
     "PDF_PASSWORD_REQUIRED": RetryPolicy(False, 1, (), False, "needs_password", "failed"),
     "COMMAND_PERMISSION_DENIED": RetryPolicy(False, 1, (), False, "permission_denied", "failed"),

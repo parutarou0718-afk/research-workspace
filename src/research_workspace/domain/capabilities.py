@@ -12,6 +12,10 @@ class UnknownCapability(ValueError):
     pass
 
 
+class UnknownExecutionRole(ValueError):
+    pass
+
+
 @dataclass(frozen=True)
 class CapabilityRegistry:
     schema_version: Literal["1.0"]
@@ -30,6 +34,7 @@ CAPABILITY_REGISTRY = CapabilityRegistry(
             "source.observe.request",
             "source.snapshot_import.request",
             "document.parse.request",
+            "version_candidate.detect.request",
             "maintenance.verify.request",
         }
     ),
@@ -37,15 +42,45 @@ CAPABILITY_REGISTRY = CapabilityRegistry(
 
 
 @dataclass(frozen=True)
+class ExecutionRoleRegistry:
+    schema_version: Literal["1.0"]
+    roles: frozenset[str]
+
+    def require(self, role: str) -> str:
+        if role not in self.roles:
+            raise UnknownExecutionRole(role)
+        return role
+
+
+EXECUTION_ROLE_REGISTRY = ExecutionRoleRegistry(
+    "1.0",
+    frozenset(
+        {
+            "source_observer",
+            "snapshot_importer",
+            "document_parser",
+            "candidate_detector",
+            "reconciler",
+            "verifier",
+        }
+    ),
+)
+
+
+@dataclass(frozen=True)
 class PathScope:
-    scope_type: Literal["import_source", "snapshot_read", "workspace_staging"]
+    scope_type: Literal[
+        "import_source", "snapshot_read", "workspace_staging", "monitoring_root"
+    ]
     normalized_path_hash: str
     root_id: UUID
     access_mode: Literal["read", "list", "copy", "create_only"]
     recursive: bool
 
     def __post_init__(self) -> None:
-        if self.scope_type not in {"import_source", "snapshot_read", "workspace_staging"}:
+        if self.scope_type not in {
+            "import_source", "snapshot_read", "workspace_staging", "monitoring_root"
+        }:
             raise ValueError("scope_type is not registered")
         if self.access_mode not in {"read", "list", "copy", "create_only"}:
             raise ValueError("access_mode is not registered")

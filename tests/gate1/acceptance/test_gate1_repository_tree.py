@@ -51,6 +51,16 @@ src/research_workspace/presentation/ui/import_batch_dialog.ui
 """.split()
 )
 
+CURRENT_GATE2_PATHS = frozenset(
+    {
+        "migrations/versions/0003_gate2_monitoring.py",
+        "src/research_workspace/application/dto/monitoring_dto.py",
+        "src/research_workspace/application/ports/file_observer.py",
+        "src/research_workspace/domain/monitoring.py",
+        "src/research_workspace/domain/versioning.py",
+    }
+)
+
 TASK2_CONTRACTS = frozenset(
     {
         "contracts/background_operation.schema.json",
@@ -76,10 +86,8 @@ src/research_workspace/application/commands/undo_command.py
 src/research_workspace/application/commands/create_backup.py
 src/research_workspace/application/commands/prepare_restore.py
 src/research_workspace/application/commands/create_export.py
-src/research_workspace/application/dto/monitoring_dto.py
 src/research_workspace/application/dto/recovery_dto.py
 src/research_workspace/application/dto/transfer_dto.py
-src/research_workspace/application/ports/file_observer.py
 src/research_workspace/application/ports/sqlite_backup.py
 src/research_workspace/application/queries/get_monitoring.py
 src/research_workspace/application/queries/get_version_candidates.py
@@ -91,8 +99,6 @@ src/research_workspace/application/services/candidate_detection.py
 src/research_workspace/application/services/command_dispatcher.py
 src/research_workspace/application/services/recovery_points.py
 src/research_workspace/application/services/relation_graph.py
-src/research_workspace/domain/monitoring.py
-src/research_workspace/domain/versioning.py
 src/research_workspace/domain/audit.py
 src/research_workspace/domain/transfer.py
 src/research_workspace/infrastructure/monitoring/__init__.py
@@ -159,7 +165,7 @@ def baseline_production_files() -> frozenset[str]:
 def assert_gate1_checkpoint_tree_complete() -> None:
     actual = production_files()
     assert GATE1_ADDITIONS <= actual
-    assert actual == baseline_production_files() | GATE1_ADDITIONS
+    assert actual == baseline_production_files() | GATE1_ADDITIONS | CURRENT_GATE2_PATHS
 
 
 def test_task2_contracts_exist_without_requiring_future_gate1_files() -> None:
@@ -168,7 +174,7 @@ def test_task2_contracts_exist_without_requiring_future_gate1_files() -> None:
     assert actual <= (
         baseline_production_files()
         | GATE1_ADDITIONS
-        | {"migrations/versions/0003_gate2_monitoring.py"}
+        | CURRENT_GATE2_PATHS
     )
 
 
